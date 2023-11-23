@@ -1,0 +1,1 @@
+{"pipeline_name": "tast", "action_log": [{"1_/get_planning_scene": {"service_client": "/get_planning_scene", "service_type": "moveit_msgs/srv/GetPlanningScene", "srv_start_time": "2023-11-20_19:54:35.196213", "srv_end_time": "2023-11-20_19:54:35.198360", "execution_time": 

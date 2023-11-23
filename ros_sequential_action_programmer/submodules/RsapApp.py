@@ -1,0 +1,650 @@
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QScrollArea, QDialog, QHBoxLayout, QInputDialog, QTreeWidget, QTreeWidgetItem, QApplication, QGridLayout, QFrame, QMainWindow, QListWidget, QListWidgetItem, QDoubleSpinBox, QWidget, QVBoxLayout, QPushButton, QCheckBox, QLineEdit, QComboBox, QTextEdit,QLabel,QSlider, QSpinBox, QFontDialog, QFileDialog
+from PyQt6.QtGui import QColor, QTextCursor, QFont
+import os
+from ament_index_python.packages import get_package_share_directory
+from PyQt6 import QtCore
+from PyQt6.QtGui import QAction
+from functools import partial
+import yaml
+from yaml.loader import SafeLoader
+from PyQt6.QtCore import pyqtSignal
+import sys
+from collections import OrderedDict
+from rclpy.node import Node
+from datetime import datetime
+from ros_sequential_action_programmer.submodules.RosSequentialActionProgrammer import RosSequentialActionProgrammer, SET_IMPLICIT_SRV_DICT
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.PopupRecWindow import PopupRecWindow
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionSelectionMenu import ActionSelectionMenu
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.AddServiceDialog import AddServiceDialog
+
+class RsapApp(QMainWindow):
+    def __init__(self, service_node:Node):
+        super().__init__()
+        self.function_parameter_widgets = []    # tis is a list of widgets that represent all the parameter of a vision function; it is used to display widgets when a vision function is klicked
+        #self.qt_list_of_active_services = []
+        self.service_node = service_node
+        
+        self.action_sequence_builder = RosSequentialActionProgrammer(service_node)
+        self.action_sequence_builder.append_service_to_action_list('/pm_robot_gonio_left_controller/get_parameter_types')
+        self.action_sequence_builder.append_service_to_action_list('/get_planning_scene')
+        self.action_sequence_builder.append_service_to_action_list('/compute_fk')
+        self.action_sequence_builder.append_service_to_action_list(service_client='/object_manager/create_ref_frame', service_type='spawn_object_interfaces/srv/CreateRefFrame')
+        #print(self.action_sequence_builder.get_possible_srv_res_fields_at_index(index=3, target_key='frame_name'))
+        self.initUI()
+        self.init_actions_list()
+        self.save_as = False 
+        self.stop_execution = False
+        #self.initialize_active_service_list()
+        
+
+    def initUI(self):
+        # Create the class for the action selection menu
+        self.action_menu = ActionSelectionMenu(self)
+        # Overriting the callbackfunction for the menu
+        self.action_menu.action_menu_clb = self.append_selected_action_from_menu
+        
+        self.setWindowTitle("Ros Sequential Action Programmer - RSAP")
+        
+        # Create main container widget
+        central_widget = QWidget(self)
+        self.setCentralWidget(central_widget)
+
+        # Create layout for the main container widget
+        layout = QGridLayout()
+
+        self.action_sequence_name_widget = QLabel()
+        font = QFont()
+        font.setPointSize(14)
+        self.action_sequence_name_widget.setFont(font)
+        self.set_widget_action_sequence_name('- No name given - ')
+        layout.addWidget(self.action_sequence_name_widget,0,1,1,2)
+
+        toolbar_layout = QVBoxLayout()
+        open_action_menu_button = QPushButton('Add \n Action')
+        open_action_menu_button.clicked.connect(self.show_action_menu)
+        open_action_menu_button.setFixedSize =(20,20)
+        #self.init_action_menu()
+        toolbar_layout.addWidget(open_action_menu_button,alignment=Qt.AlignmentFlag.AlignTop)
+
+        # add button for deleting selected vision function
+        delete_button = QPushButton("Delete \n Selected")
+        delete_button.clicked.connect(self.delete_action_from_sequence)
+        toolbar_layout.addWidget(delete_button,alignment=Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(toolbar_layout,1,0,alignment=Qt.AlignmentFlag.AlignTop)
+
+        # # Add vision functions combo box
+        # self.service_combo_box = QComboBox()
+        # self.service_combo_box.activated.connect(self.new_service_dialog)  # Connect the activated signal to addItem
+        # layout.addWidget(self.service_combo_box,1,0)
+
+        execute_layout = QHBoxLayout()
+        # Add combobox for vision pipline building
+        self.checkbox_list = ReorderableCheckBoxListWidget()
+        self.checkbox_list.itemClicked.connect(self.action_selected)
+        #self.checkbox_list.itemChanged.connect(self.set_function_states)
+        #self.checkbox_list.CustDragSig.connect(self.on_drop)
+        layout.addWidget(self.checkbox_list,1,1)
+
+        execute_step_button = QPushButton("Step")
+        execute_step_button.clicked.connect(self.execute_current_action)
+        execute_layout.addWidget(execute_step_button)
+
+        run_action_sequence_button = QPushButton("Run")
+        run_action_sequence_button.clicked.connect(self.run_action_sequence)
+        execute_layout.addWidget(run_action_sequence_button)
+        layout.addLayout(execute_layout,2,1)
+
+        stop_execution_button = QPushButton("Stop Execution")
+        stop_execution_button.clicked.connect(self.stop_execution)
+        layout.addWidget(stop_execution_button,3,1)
+
+        # update_service_button = QPushButton("Update Services")
+        # update_service_button.clicked.connect(self.initialize_active_service_list)
+        # layout.addWidget(update_service_button,6,0)
+        
+
+        # add textbox for string output
+        self.text_output = AppTextOutput()
+        layout.addWidget(self.text_output,4,1,1,3)
+
+        self.last_saved_label = QLabel('File not saved yet!')
+        layout.addWidget(self.last_saved_label,5,1,1,2)
+
+        # # create sub layout for the function parameter widgetd
+        self.sub_layout = QVBoxLayout()
+
+        #add a textlabel to the sublayout
+        action_parameters_label = QLabel('Action parameters:')
+        action_parameters_label.setFont(font)
+        self.sub_layout.addWidget(action_parameters_label)
+
+        # Create a menu bar
+        menubar = self.menuBar()
+        menubar.setStyleSheet("QMenuBar { font-size: 20px; }")
+        file_menu = menubar.addMenu("File")
+
+        # Create "New" action
+        new_action = QAction("New process", self)
+        new_action.triggered.connect(self.create_new_file)
+        file_menu.addAction(new_action)
+
+        open_action = QAction("Open process", self)
+        open_action.triggered.connect(self.open_process_file)
+        file_menu.addAction(open_action)
+
+        save_action = QAction("Save", self)
+        save_action.triggered.connect(self.save_process)
+        file_menu.addAction(save_action)
+
+        # Create 'save as' action
+        save_as_action = QAction("Save process as", self)
+        save_as_action.triggered.connect(self.save_process_as)
+        file_menu.addAction(save_as_action)
+       
+        self.log_layout = QVBoxLayout()
+        self.log_widget = QTreeWidget(self)
+        self.log_widget.setHeaderLabel("Log Viewer")
+        self.log_layout.addWidget(self.log_widget)
+
+        #add sublayout to app layout
+        layout.addLayout(self.sub_layout,1,2,Qt.AlignmentFlag.AlignTop)
+        
+        layout.addLayout(self.log_layout,1,3)
+        self.create_service_parameter_layout()
+        central_widget.setLayout(layout)
+        self.setGeometry(100, 100, 1800, 1200)
+
+    def show_action_menu(self):
+        self.action_sequence_builder.initialize_service_list()
+        self.action_sequence_builder.save_all_service_req_res_to_JSON()
+        self.action_menu.menu_dictionary= {
+            'Services': {
+                'Empty':  ['New'],
+                'Active Clients blk':  self.action_sequence_builder.list_of_active_clients,
+                'Active Clients':  self.action_sequence_builder.list_of_active_clients,
+                'Memorised Clients blk':  self.action_sequence_builder.list_of_active_clients,
+                'Memorised Clients ':  self.action_sequence_builder.list_of_active_clients,
+                'Available Service Types':  self.action_sequence_builder.list_of_active_clients,
+            },
+            'Skills': ['TBD1','TBD2','TBD3'],
+            'Logic': {
+                'Conditions': {
+                    'Options': ['Option7', 'Option8', 'Option9']
+                },
+                'User Input': {
+                    'Options': ['Option7', 'Option8', 'Option9']
+                }
+            }
+        }
+        self.action_menu.init_action_menu()
+        self.action_menu.showMenu()
+
+    # def initialize_active_service_list(self):
+    #     #self.service_combo_box.clear()
+    #     self.action_sequence_builder.initialize_service_list()
+    #     self.action_sequence_builder.save_all_service_req_res_to_JSON()
+    #     self.qt_list_of_active_services = self.action_sequence_builder.list_of_active_clients
+    #     #self.service_combo_box.addItems(self.qt_list_of_active_services)
+
+    def append_selected_action_from_menu(self, menu_output):
+        #print(menu_output)
+        if menu_output[0] == 'Services':
+            #print((menu_output[1]))
+            if 'Clients' in menu_output[1] and 'Active' in menu_output[1]:
+                self.append_service_dialog(service_client=menu_output[-1])
+            elif 'Clients' in menu_output[1] and 'Memorised' in menu_output[1]:
+                self.append_service_dialog(service_client=menu_output[-1])
+            elif 'Type' in menu_output[1]:
+                self.append_service_dialog(serivce_type=menu_output[-1])
+            elif menu_output[-1] == 'New':
+                self.append_service_dialog()
+        else:
+            self.text_output.append("This is not implemented yet!")
+            self.service_node.get_logger().warn("This is not implemented yet!")
+
+    def init_actions_list(self):
+        """
+        Updates the action list widget with the current actions from the action sequence.
+        """
+        self.checkbox_list.clear()
+        for index, action in enumerate(self.action_sequence_builder.action_list):
+            function_checkbox = ReorderableCheckBoxListItem(f"{index}. {action.name}")
+            self.checkbox_list.addItem(function_checkbox)
+
+    def execute_current_action(self) -> bool:
+        index = self.checkbox_list.currentRow()
+
+        # Return early if no function is selected
+        if index == -1:
+            return False
+        
+        success_set = self.action_sequence_builder.set_current_action(index)
+        success = False
+        if success_set:
+            success = self.action_sequence_builder.execute_current_action()
+        if success:
+            text_output = f"Action '{self.action_sequence_builder.get_current_action_name()}' executed successfully!"
+            self.text_output.append_green_text(text_output)
+            light_green = QColor(144, 238, 144)
+            self.checkbox_list.currentItem().setBackground(light_green)
+            if index < self.checkbox_list.count()-1:
+                self.checkbox_list.setCurrentRow(index+1)
+            else:
+                self.checkbox_list.setCurrentRow(0)
+            self.action_selected()
+        else:
+            self.text_output.append_red_text("An error occured in action execution!")
+            self.checkbox_list.currentItem().setBackground(QColor("red"))
+            self.action_selected()
+        return success
+
+    def run_action_sequence(self):
+        error = False
+
+        start_index = self.checkbox_list.currentRow()
+        end_index = self.checkbox_list.count()
+
+        # Return early if no function is selected
+        if start_index == -1:
+            return False
+
+        for start_index in range(start_index, end_index):
+            if not error or self.stop_execution:
+                error = not self.execute_current_action()
+            else:
+                break
+
+    def set_widget_action_sequence_name(self, text):
+        self.action_sequence_name_widget.setText("Process name: " + text)
+
+    def create_service_parameter_layout(self):
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.inner_widget = QWidget()
+        self.inner_layout = QVBoxLayout()
+
+        apply_botton = QPushButton("Apply Changes")
+        apply_botton.clicked.connect(self.apply_changes_to_service)
+
+        self.inner_widget.setLayout(self.inner_layout)
+        self.scroll_area.setWidget(self.inner_widget)
+        self.sub_layout.addWidget(apply_botton)
+        self.sub_layout.addWidget(self.scroll_area)
+    
+    def set_service_meta_info_widget(self):
+        row = self.checkbox_list.currentRow()
+
+        label_action_name = QLabel("Action Name:")
+        self.action_name_edit = QLineEdit(self.action_sequence_builder.get_action_at_index(row).name)
+        self.inner_layout.addWidget(label_action_name)
+        self.inner_layout.addWidget(self.action_name_edit)    
+
+        # Set info for service client
+        label_action_client_desc = QLabel(f"Service Client: ")
+        label_action_client = QLineEdit(f"{self.action_sequence_builder.get_action_at_index(row).client}")
+        label_action_client.setReadOnly(True)
+        self.inner_layout.addWidget(label_action_client_desc)
+        self.inner_layout.addWidget(label_action_client)
+
+        # Set info for service type
+        label_action_service_desc = QLabel(f"Service Type: ")
+        label_action_service_type = QLineEdit(f"{self.action_sequence_builder.get_action_at_index(row).service_type}")
+        label_action_service_type.setReadOnly(True)
+        self.inner_layout.addWidget(label_action_service_desc)
+        self.inner_layout.addWidget(label_action_service_type)
+
+        # Set info for service type
+        label_action_description_desc = QLabel(f"Description: ")
+        self.label_action_description = QTextEdit(f"{self.action_sequence_builder.get_action_at_index(row).description}")
+        self.inner_layout.addWidget(label_action_description_desc)
+        self.inner_layout.addWidget(self.label_action_description)
+
+        # Create a dropdown menu for selecting the error handling inputs
+        label_error_handling_box = QLabel(f"Execution identifier: ")
+        self.error_handling_box = QComboBox()
+
+        box_values = ['None'] + self.action_sequence_builder.get_action_at_index(row).get_service_bool_fields()
+        self.error_handling_box.addItems(box_values)
+        # Set the default value when creating the qcombobox
+        currently_set_error_handler = self.action_sequence_builder.get_action_at_index(row).get_service_bool_identifier()
+        if currently_set_error_handler is None:
+            currently_set_error_handler = "None"
+
+        self.error_handling_box.setCurrentIndex(box_values.index(currently_set_error_handler))
+        self.inner_layout.addWidget(label_error_handling_box)
+        self.inner_layout.addWidget(self.error_handling_box)
+
+    def action_selected(self):
+        row = self.checkbox_list.currentRow()
+        self.handle_dict = None
+        self.handle_dict = self.action_sequence_builder.get_copy_impl_srv_dict_at_index(row)
+        self.clear_action_parameter_layout()
+        self.clear_log_viewer()
+        self.set_service_meta_info_widget()
+        self.populateWidgets(self.handle_dict)
+        self.show_service_log(self.action_sequence_builder.get_action_at_index(row).log_entry)
+
+    def populateWidgets(self, data, parent_key=None):
+        # iterate through the dict
+        for key, value in data.items():
+            if parent_key is not None:
+                full_key = parent_key + '.' + key
+            else:
+                full_key = key
+
+            if isinstance(value, OrderedDict):
+                self.populateWidgets(value, full_key)
+            else:
+                widget_with_button = QLineButton(full_key=full_key, 
+                                                 initial_value=str(value), 
+                                                 on_text_changed=self.updateDictionary, 
+                                                 on_button_clicked=self.additionalButtonClicked)
+                
+                self.inner_layout.addWidget(widget_with_button)
+
+    def additionalButtonClicked(self, key, widget:QLineEdit):
+        index = self.checkbox_list.currentRow()
+        data = self.action_sequence_builder.get_recom_for_action_at_index_from_key(index=index, key=key)
+        popup = PopupRecWindow(data)
+        result = popup.exec()
+
+        if result == QDialog.DialogCode.Accepted:
+            selected_value = popup.get_selected_value()
+            widget.setText(selected_value)
+            print(f"Selected value: {selected_value}")
+
+    def apply_changes_to_service(self):
+        index = self.checkbox_list.currentRow()
+        # if no line selected index will be -1
+        if index != -1:
+            # Apply error handler message
+            error_identifier = self.error_handling_box.currentText()
+            if error_identifier == 'None':
+                error_identifier = None
+
+            # set the error identifier
+            set_error_identifier_success = self.action_sequence_builder.get_action_at_index(index).set_service_bool_identifier(error_identifier)
+            
+            # Set the action description text
+            self.action_sequence_builder.get_action_at_index(index).description = self.label_action_description.toPlainText()
+
+            # Apply values to service request dict
+            self.action_sequence_builder.get_action_at_index(index).name = self.action_name_edit.text()
+
+            set_success = self.action_sequence_builder.process_action_dict_at_index(index=index,mode=SET_IMPLICIT_SRV_DICT, input_impl_dict=self.handle_dict)
+
+            if set_success and set_error_identifier_success:
+                self.text_output.append("Success changing values!")
+            else:
+                self.text_output.append_red_text("Error occured changing changes!")
+
+            self.init_actions_list()
+            self.checkbox_list.setCurrentRow(index)
+            self.action_selected()
+
+    def clear_action_parameter_layout(self):
+        if self.inner_layout is not None:
+            while self.inner_layout.count():
+                item = self.inner_layout.takeAt(0)
+                widget = item.widget()
+                if widget:
+                    widget.deleteLater()
+                else:
+                    self.clear_action_parameter_layout(item.layout())
+
+    def updateDictionary(self, key, edit):
+        def handleTextChange(text):
+            try:
+                keys = key.split('.')
+                current_dict = self.handle_dict
+                for k in keys[:-1]:
+                    current_dict = current_dict[k]
+
+                # Convert the input text to the appropriate data type
+                value = text
+                if text.isdigit():
+                    value = int(text)
+                elif '.' in text and all(part.isdigit() for part in text.split('.')):
+                    value = float(text)
+                elif text == 'True' or text == 'False':
+                    value = bool(text)
+                elif text == 'None':
+                    value = None
+
+                current_dict[keys[-1]] = value
+            except ValueError:
+                pass
+
+        return handleTextChange
+
+    def open_process_file(self):
+        # if self.current_vision_pipeline.vision_pipeline_json_dir == None:
+        #     self.current_vision_pipeline.vision_pipeline_json_dir = self.default_process_libary_path
+        
+        file_filter = "JSON Files (*.json);;All Files (*)"
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open JSON File", 
+                                                   "", 
+                                                   file_filter)
+        if file_path:
+            self.text_output.clear()
+            self.text_output.append(f"Opening: {file_path}")
+            success = self.action_sequence_builder.load_from_JSON(file_path)
+            if success:
+                self.init_actions_list()
+                self.set_widget_action_sequence_name(self.action_sequence_builder.name)
+                self.text_output.append("File loaded!")
+            else:
+                self.text_output.append("Error Opening File!")
+                self.init_actions_list()
+                self.clear_action_parameter_layout()
+
+        # Set the first row as the current process
+        self.checkbox_list.setCurrentRow(0)
+        # Set the last saved timestap
+        self.update_last_saved()
+
+    def save_process_as(self):
+        self.save_as = True
+        self.create_new_file()
+
+    def save_process(self):
+        if self.action_sequence_builder.name is None:
+            self.create_new_file()
+        else:
+            success = self.action_sequence_builder.save_to_JSON()
+            self.text_output.append(f"Saved file: {success}")
+            self.update_last_saved()
+            
+    def create_new_file(self):
+        # if self.current_vision_pipeline.vision_pipeline_json_dir == None:
+        #     self.current_vision_pipeline.vision_pipeline_json_dir = self.default_process_libary_path
+
+        # Set the file filters to show only JSON files
+        file_filter = "JSON Files (*.json)"
+        file_name, _ = QFileDialog.getSaveFileName(self, "Save JSON File", "", file_filter)
+
+        # this is for the case the user entered .json to his filename 
+        file_name = os.path.splitext(file_name)[0]
+
+        # set action sequence file path
+        self.action_sequence_builder.folder_path = os.path.dirname(file_name)
+
+        if not self.save_as and self.action_sequence_builder.name is not None:
+            self.action_sequence_builder.action_list.clear()
+            self.init_actions_list()
+
+        if file_name:
+            # set action sequence name
+            self.action_sequence_builder.name  = os.path.basename(os.path.splitext(file_name)[0])
+            success = self.action_sequence_builder.save_to_JSON()
+            self.text_output.append(f"Saved file: {success}")
+            # set text in gui from action sequence name
+            self.set_widget_action_sequence_name(self.action_sequence_builder.name)
+            # update the last saved timestamp
+            self.update_last_saved()
+            
+        self.clear_action_parameter_layout()
+        self.save_as = False                
+
+    # def new_service_dialog(self) -> None:
+    #     text_output, ok_pressed = QInputDialog.getText(self, 'Input Dialog', 'Enter your string:')
+
+    #     if ok_pressed:
+    #         if not text_output:
+    #             text_output = None
+            
+    #         self.add_service_to_action_list(service_name = text_output)
+
+    def append_service_dialog(self, service_name: str = None, service_client:str= None, serivce_type:str = None)->None:
+        add_service_dialog = AddServiceDialog(service_name, service_client, serivce_type)
+        
+        if add_service_dialog.exec():
+            service_name, service_client, service_type = add_service_dialog.get_values()
+            self.add_service_to_action_list(service_name=service_name,
+                                            service_client=service_client,
+                                            service_type=service_type)
+        else:
+            pass
+
+    def stop_execution(self) -> None:
+        self.stop_execution = True
+
+    def add_service_to_action_list(self, service_name: str, service_client:str, service_type:str = None) -> None:
+        #selected_client = self.service_combo_box.currentText()
+        pos_to_insert = self.checkbox_list.currentRow() + 1
+
+        if service_client:
+                success = self.action_sequence_builder.append_service_to_action_list_at_index(service_client=service_client, 
+                                                                                       index = pos_to_insert, 
+                                                                                       service_name = service_name)
+                # Get the name of the service from the currently acive action, which is the newly added one
+                if success:
+                    service_name =  self.action_sequence_builder.get_current_action_name()
+                    function_checkbox = ReorderableCheckBoxListItem(service_name)
+                    self.checkbox_list.insertItem(pos_to_insert,function_checkbox)
+                    self.checkbox_list.setCurrentRow(pos_to_insert)
+                    self.text_output.append(f"Inserted action: {service_name}")
+                    self.action_selected()
+                else:
+                    self.text_output.append_red_text(f"Invalid input arguments")
+
+    def delete_action_from_sequence(self):
+        selected_function = self.checkbox_list.currentItem()
+        current_row = self.checkbox_list.currentRow()
+        if selected_function:
+            # Remove the function from the action list and the list
+            del_success = self.action_sequence_builder.delete_action_at_index(current_row)
+
+            if del_success:
+                self.text_output.append(f"Deleted action '{selected_function.text()}'")
+                self.init_actions_list()
+                self.checkbox_list.setCurrentRow(0)
+            else:
+                self.text_output.append(f"Error trying to delete action '{selected_function.text()}'")
+        else:
+            self.text_output.append("No action selected to delete!")
+
+    def update_last_saved(self):
+        self.last_saved_label.setText("Saved at: " + datetime.now().strftime("%H:%M:%S"))
+
+    def show_service_log(self, dictionary):
+        if not dictionary:
+            return     
+
+        self.populate_log_widget(dictionary)
+
+    def populate_log_widget(self, data, parent=None):
+        if parent is None:
+            parent = self.log_widget
+
+        if isinstance(data, dict):
+            for key, value in data.items():
+                item = QTreeWidgetItem(parent, [str(key)])
+                self.populate_log_widget(value, item)
+        elif isinstance(data, list):
+            for index, item_data in enumerate(data):
+                item = QTreeWidgetItem(parent, [f"[{index}]"])
+                self.populate_log_widget(item_data, item)
+        else:
+
+            item = QTreeWidgetItem(parent, [str(data)])   
+
+    def clear_log_viewer(self):
+        self.log_widget.clear()
+
+class AppTextOutput(QTextEdit):
+    def __init__(self):
+        super().__init__()
+        self.setReadOnly(True)
+
+    def append_red_text(self, text:str) -> None:
+        self.setTextColor(QColor("red"))
+        self.append(text)
+        self.setTextColor(QColor("black"))
+
+    def append_green_text(self, text:str) -> None:
+        self.setTextColor(QColor("green"))
+        self.append(text)
+        self.setTextColor(QColor("black"))
+
+class QLineButton(QWidget):
+    def __init__(self, full_key, initial_value, on_text_changed, on_button_clicked):
+        super().__init__()
+
+        label = QLabel(full_key)
+        edit = QLineEdit(initial_value)
+        edit.textChanged.connect(on_text_changed(full_key, edit))
+
+        button = QPushButton("+")
+        button.clicked.connect(partial(on_button_clicked,full_key,edit))
+
+        label_layout = QHBoxLayout()
+        edit_button_layout = QHBoxLayout()
+
+        edit_button_layout.addWidget(edit)
+        edit_button_layout.addWidget(button)
+        
+        label_layout.addWidget(label)
+
+        main_layout = QVBoxLayout()
+        main_layout.addLayout(label_layout)
+        main_layout.addLayout(edit_button_layout)
+        self.setLayout(main_layout)
+
+class ReorderableCheckBoxListWidget(QListWidget):
+    CustDragSig = QtCore.pyqtSignal()
+    def __init__(self):
+        super(ReorderableCheckBoxListWidget,self).__init__()
+        self.setAcceptDrops(True)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QListWidget.DragDropMode.InternalMove)
+
+    def get_widget_list_names(self):
+        name_list=[]
+        for index in range(self.count()):
+            item = self.item(index)
+            if item:
+                name_list.append(item.text())
+        return name_list
+    
+    def dropEvent(self, event):
+        super(ReorderableCheckBoxListWidget,self).dropEvent(event)
+        event.accept()
+        self.CustDragSig.emit()
+
+class ReorderableCheckBoxListItem(QListWidgetItem):
+    def __init__(self, function_name):
+        super().__init__(function_name)
+        self.setFlags(self.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        font = self.font()
+        font.setPointSize(14)
+        self.setFont(font)
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = RsapApp()
+    window.show()
+    sys.exit(app.exec())

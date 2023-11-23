@@ -1,0 +1,34 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/niklas/ros2_ws/install/object_spawner_manager/local/lib/python3.10/dist-packages",
+        "/home/niklas/ros2_ws/install/livecycle_example/local/lib/python3.10/dist-packages",
+        "/home/niklas/ros2_ws/install/spawn_object_interfaces/local/lib/python3.10/dist-packages",
+        "/home/niklas/ros2_ws/install/spawn_object/local/lib/python3.10/dist-packages",
+        "/home/niklas/ros2_ws/install/pm_vision_manager/lib/python3.10/site-packages",
+        "/home/niklas/ros2_ws/install/pm_vision_interfaces/local/lib/python3.10/dist-packages",
+        "/home/niklas/ros2_ws/install/pm_vision/lib/python3.10/site-packages",
+        "/home/niklas/ros2_ws/install/pm_robot_control_test/lib/python3.10/site-packages",
+        "/home/niklas/ros2_ws/install/pm_robot_interfaces/local/lib/python3.10/dist-packages",
+        "/home/niklas/ros2_ws/install/pm_msgs/local/lib/python3.10/dist-packages",
+        "/home/niklas/ros2_ws/install/pm_moveit_interfaces/local/lib/python3.10/dist-packages",
+        "/home/niklas/ros2_ws/install/influxDB_ros_logger/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/niklas/ros2_ws/install/object_spawner_manager/local/lib/python3.10/dist-packages",
+        "/home/niklas/ros2_ws/install/livecycle_example/local/lib/python3.10/dist-packages",
+        "/home/niklas/ros2_ws/install/spawn_object_interfaces/local/lib/python3.10/dist-packages",
+        "/home/niklas/ros2_ws/install/spawn_object/local/lib/python3.10/dist-packages",
+        "/home/niklas/ros2_ws/install/pm_vision_manager/lib/python3.10/site-packages",
+        "/home/niklas/ros2_ws/install/pm_vision_interfaces/local/lib/python3.10/dist-packages",
+        "/home/niklas/ros2_ws/install/pm_vision/lib/python3.10/site-packages",
+        "/home/niklas/ros2_ws/install/pm_robot_control_test/lib/python3.10/site-packages",
+        "/home/niklas/ros2_ws/install/pm_robot_interfaces/local/lib/python3.10/dist-packages",
+        "/home/niklas/ros2_ws/install/pm_msgs/local/lib/python3.10/dist-packages",
+        "/home/niklas/ros2_ws/install/pm_moveit_interfaces/local/lib/python3.10/dist-packages",
+        "/home/niklas/ros2_ws/install/influxDB_ros_logger/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ]
+}
