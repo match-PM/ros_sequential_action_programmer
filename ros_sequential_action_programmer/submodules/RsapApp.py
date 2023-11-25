@@ -17,6 +17,7 @@ from ros_sequential_action_programmer.submodules.RosSequentialActionProgrammer i
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.PopupRecWindow import PopupRecWindow
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionSelectionMenu import ActionSelectionMenu
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AddServiceDialog import AddServiceDialog
+from rosidl_runtime_py.get_interfaces import get_service_interfaces
 
 class RsapApp(QMainWindow):
     def __init__(self, service_node:Node):
@@ -161,11 +162,11 @@ class RsapApp(QMainWindow):
         self.action_menu.menu_dictionary= {
             'Services': {
                 'Empty':  ['New'],
-                'Active Clients blk':  self.action_sequence_builder.list_of_active_clients,
+                'Active Clients blk':  self.action_sequence_builder.get_active_client_blklist(),
                 'Active Clients':  self.action_sequence_builder.list_of_active_clients,
-                'Memorised Clients blk':  self.action_sequence_builder.list_of_active_clients,
-                'Memorised Clients ':  self.action_sequence_builder.list_of_active_clients,
-                'Available Service Types':  self.action_sequence_builder.list_of_active_clients,
+                'Memorised Clients blk':  self.action_sequence_builder.get_memorized_client_blklist(),
+                'Memorised Clients ':  self.action_sequence_builder.get_list_memorized_service_clients(),
+                'Available Service Types':  get_service_interfaces(),
             },
             'Skills': ['TBD1','TBD2','TBD3'],
             'Logic': {
@@ -521,8 +522,9 @@ class RsapApp(QMainWindow):
                 # Get the name of the service from the currently acive action, which is the newly added one
                 if success:
                     service_name =  self.action_sequence_builder.get_current_action_name()
-                    function_checkbox = ReorderableCheckBoxListItem(service_name)
+                    function_checkbox = ReorderableCheckBoxListItem(f"{pos_to_insert}. {service_name}")
                     self.checkbox_list.insertItem(pos_to_insert,function_checkbox)
+                    self.init_actions_list()
                     self.checkbox_list.setCurrentRow(pos_to_insert)
                     self.text_output.append(f"Inserted action: {service_name}")
                     self.action_selected()

@@ -18,6 +18,8 @@ import copy
 import collections
 from collections import OrderedDict
 from typing import Tuple
+import yaml
+from yaml.loader import SafeLoader
 
 CHECK = 0
 SET = 1
@@ -394,6 +396,42 @@ class RosSequentialActionProgrammer:
 
         return service_response_dict_list
 
+    def get_active_client_blklist(self)-> list:
+        self.initialize_service_list()
+        client_list = [t[0] for t in self.list_of_active_services]
+        service_type_list = [t[1][0] for t in self.list_of_active_services]
+        return self.get_client_blacklist(clients_list = client_list, service_list = service_type_list)
+
+    def get_memorized_client_blklist(self)-> list:
+        self.save_all_service_req_res_to_JSON()
+        client_list = [t[0] for t in self.list_of_memorized_services]
+        service_type_list = [t[1] for t in self.list_of_memorized_services]
+        return self.get_client_blacklist(clients_list = client_list, service_list = service_type_list)
+    
+    def get_client_blacklist(self, clients_list: list, service_list: list)->list:
+        client_blacklisted = []
+        try:
+            package_share_directory = get_package_share_directory('ros_sequential_action_programmer')
+            blacklist_path = package_share_directory + '/blacklist.yaml'
+            with open(blacklist_path, 'r') as file:
+                FileData = yaml.safe_load(file)
+                list_of_blk_clients = FileData['clients_by_name']
+                list_of_blk_types = FileData['clients_by_type']
+
+            # If list in yaml empty list will be None -> set to empty
+            if not list_of_blk_clients:
+                list_of_blk_clients = []
+            if not list_of_blk_types:
+                list_of_blk_types= []
+            
+            for index, client in enumerate(clients_list):
+                if not client in list_of_blk_clients and not service_list[index] in list_of_blk_types:
+                    client_blacklisted.append(client)
+            return client_blacklisted
+        except Exception as e:
+            self.node.get_logger().error(e)
+            self.node.get_logger().error(f"Error opening blacklist. Check formatting of '{blacklist_path}'!")
+
     def get_all_service_req_res_dict(self):
         """
         This function returns all dict of service request and responses.
@@ -428,7 +466,7 @@ class RosSequentialActionProgrammer:
         If the file exists, it appends it.
         """
 
-        def merge_dicts(dict1: dict, dict2: dict):
+        def merge_dicts(dict1: dict, dict2: dict)->dict:
             result_dict = dict1.copy()
             for key, value in dict2.items():
                 if key not in result_dict:
@@ -446,16 +484,18 @@ class RosSequentialActionProgrammer:
 
             merged_dict = merge_dicts(data, file_data)
         except Exception:
-            self.node.get_logger().warn(
-                "No history of service clients found! Creating a new one!"
-            )
+            self.node.get_logger().warn("No history of service clients found! Creating a new one!")
             pass
         try:
             with open(file_path, "w") as json_file:
                 json.dump(merged_dict, json_file)
-            self.node.get_logger().info(
-                "Json with all service requests and responses exported!"
-            )
+            self.node.get_logger().debug("Json with all service requests and responses exported!")
+
+            self.list_of_memorized_services =[]
+            for key, value in merged_dict.items():
+                tuple_val=(key,value['service_type'])
+                self.list_of_memorized_services.append(tuple_val)
+
             return True
         except FileNotFoundError as e:
             print(e)
@@ -466,6 +506,10 @@ class RosSequentialActionProgrammer:
             self.node.get_logger().error("Saving file failed!")
             return False
 
+    def get_list_memorized_service_clients(self)->list:
+        self.save_all_service_req_res_to_JSON()
+        return [t[0] for t in self.list_of_memorized_services]
+    
     def get_recom_for_action_at_index_from_key(self, index: int, key: str) -> list:
         possible_list = self.get_possible_srv_res_fields_at_index(
             index=index, target_key=key

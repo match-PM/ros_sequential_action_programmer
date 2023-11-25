@@ -3,6 +3,7 @@ from rclpy.node import Node
 from rosidl_runtime_py.convert import message_to_ordereddict, get_message_slot_types
 from rosidl_runtime_py.set_message import set_message_fields
 from rosidl_runtime_py.utilities import get_message, get_service, get_interface
+from rosidl_runtime_py.get_interfaces import get_service_interfaces
 from rqt_py_common import message_helpers
 import collections
 import copy
@@ -118,8 +119,8 @@ class ServiceAction:
 
             # TO-DO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
 
-            if not isinstance(new_value, type(value_to_set)):
-                return False
+            # if not isinstance(new_value, type(value_to_set)):
+            #     return False
 
             # If the path does not lead to an existing value
             if value_to_set is None:

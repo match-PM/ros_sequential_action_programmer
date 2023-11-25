@@ -1,4 +1,12 @@
+# hide service clients with the following names
 clients_by_name:
+#  - '/StartVisionAssistant'
 
-
+# Be careful with this. All service clients with this service type will be hidden in the blacklist
 clients_by_type:
+  - 'rcl_interfaces/srv/GetParameters'
+  - 'rcl_interfaces/srv/SetParameters'
+  - 'rcl_interfaces/srv/ListParameters'
+  - 'rcl_interfaces/srv/SetParametersAtomically'
+  - 'rcl_interfaces/srv/GetParameterTypes'
+  - 'rcl_interfaces/srv/DescribeParameters'
