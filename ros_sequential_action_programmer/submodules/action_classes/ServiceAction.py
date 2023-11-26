@@ -9,10 +9,11 @@ import collections
 import copy
 import json
 from datetime import datetime
+from rosidl_runtime_py.get_interfaces import get_service_interfaces
 
 
 class ServiceAction:
-    def __init__(self, client: str, service_type: str, node: Node, name=None) -> None:
+    def __init__(self, node: Node, client: str, service_type: str = None, name=None) -> None:
         self.client = client
         self.service_type = service_type
         self.node = node
@@ -30,23 +31,69 @@ class ServiceAction:
 
         self.service_req_dict_implicit = None
         self.log_entry = {}
-        self.init_service()
-        self.init_service_res_bool_messages()
 
         self.description = ""
-
         if name is None:
             self.name = self.client
         else:
             self.name = name
 
+        self.valid = self.check_for_valid_inputs()
+
+        if not self.valid:
+            return None
+        
+        self.init_service()
+        self.init_service_res_bool_messages()
+
+    def get_init_success(self)-> bool:
+        return self.valid
+    
+    def check_for_valid_inputs(self) -> bool:
+        list_of_active_services = self.node.get_service_names_and_types()
+        list_of_active_clients = [item[0] for item in list_of_active_services]
+        list_of_service_types = [item[1][0] for item in list_of_active_services]
+        service_interfaces = ServiceAction.flatten_dict_to_list(get_service_interfaces())
+
+        if self.service_type is not None:
+            if not self.service_type in service_interfaces:
+                self.node.get_logger().fatal(f"Service Action could not be instantiated. Serivce type '{self.service_type}' does not exist!")
+                return False
+            else:
+                return True
+        else:
+            for index, client in enumerate(list_of_active_clients):
+                if client == self.client:
+                    self.service_type = list_of_service_types[index]
+                    return True
+            return False
+        
+    @staticmethod
+    def flatten_dict_to_list(input_dict):
+        result_list = []
+        for key, values in input_dict.items():
+            for value in values:
+                result_list.append(f"{key}/{value}")
+        return result_list
+    
+    @staticmethod
+    def is_string_in_dict(my_dict, target_string):
+        for key, value in my_dict.items():
+            if isinstance(value, list):
+                # Check if the target string is in the list
+                if target_string in value:
+                    return True
+            elif isinstance(value, dict):
+                # Recursively check in nested dictionaries
+                if ServiceAction.is_string_in_dict(value, target_string):
+                    return True
+        return False
+
     def init_service(self):
         try:
             self.service_request = self.get_service_request(self.service_type)
             self.empty_service_response = self.get_empthy_service_response()
-            self.default_service_res_dict = message_to_ordereddict(
-                self.empty_service_response
-            )
+            self.default_service_res_dict = message_to_ordereddict(self.empty_service_response)
             self.service_req_dict = message_to_ordereddict(self.service_request)
             self.service_metaclass = self.get_service_metaclass()
             self.service_req_dict_implicit = copy.deepcopy(self.service_req_dict)
@@ -64,7 +111,7 @@ class ServiceAction:
             client = self.node.create_client(self.service_metaclass, self.client)
 
             if not client.wait_for_service(timeout_sec=2.0):
-                self.node.get_logger().error("Service not available, aborting...")
+                self.node.get_logger().error(f"Client {self.client} not available, aborting...")
                 srv_call_success = False
                 return srv_call_success
 
@@ -73,7 +120,11 @@ class ServiceAction:
             # Call the service
             self.future = client.call_async(self.service_request)
             # spin until complete
-            rclpy.spin_until_future_complete(self.node, self.future)
+
+            while not self.future.done() and self.client_executer_watchdog(self.client):
+                rclpy.spin_once(self.node)
+            #rclpy.spin_until_future_complete(self.node, self.future)
+
             self.service_response = self.future.result()
             srv_end_time = datetime.now()
             # update srv response dict
@@ -91,9 +142,16 @@ class ServiceAction:
             self.update_log_entry(srv_call_success, srv_start_time, srv_end_time)
             return srv_call_success
 
-    def set_srv_req_dict_value_from_key(
-        self, path_key: str, new_value: any, override_to_implicit=False
-    ) -> bool:
+    def client_executer_watchdog(self, client)-> bool:
+        list_of_active_services = self.node.get_service_names_and_types()
+        list_of_active_clients = [item[0] for item in list_of_active_services]
+        if client in list_of_active_clients:
+            return True
+        else:
+            self.node.get_logger().warn(f"Client '{client} is not longer active. Aborting execution!")
+            return False
+        
+    def set_srv_req_dict_value_from_key(self, path_key: str, new_value: any, override_to_implicit=False) -> bool:
         """
         This function tries to set the value of the service request given the path_key to the value and a new value.
         Retuns false if key or value are incopatible with the service request.

@@ -1,14 +1,12 @@
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread
 from PyQt6.QtWidgets import QScrollArea, QDialog, QHBoxLayout, QInputDialog, QTreeWidget, QTreeWidgetItem, QApplication, QGridLayout, QFrame, QMainWindow, QListWidget, QListWidgetItem, QDoubleSpinBox, QWidget, QVBoxLayout, QPushButton, QCheckBox, QLineEdit, QComboBox, QTextEdit,QLabel,QSlider, QSpinBox, QFontDialog, QFileDialog
-from PyQt6.QtGui import QColor, QTextCursor, QFont
+from PyQt6.QtGui import QColor, QTextCursor, QFont, QAction
 import os
 from ament_index_python.packages import get_package_share_directory
 from PyQt6 import QtCore
-from PyQt6.QtGui import QAction
 from functools import partial
 import yaml
 from yaml.loader import SafeLoader
-from PyQt6.QtCore import pyqtSignal
 import sys
 from collections import OrderedDict
 from rclpy.node import Node
@@ -37,7 +35,10 @@ class RsapApp(QMainWindow):
         self.save_as = False 
         self.stop_execution = False
         #self.initialize_active_service_list()
-        
+        self.execution_running = False
+        #self.action_exectuion_thread = QThread(parent=service_node.executor)
+        #self.action_exectuion_thread.run = self.execute_current_action
+        #self.action_exectuion_thread.finished.connect(self.end_current_action_execution)
 
     def initUI(self):
         # Create the class for the action selection menu
@@ -87,13 +88,14 @@ class RsapApp(QMainWindow):
         #self.checkbox_list.CustDragSig.connect(self.on_drop)
         layout.addWidget(self.checkbox_list,1,1)
 
-        execute_step_button = QPushButton("Step")
-        execute_step_button.clicked.connect(self.execute_current_action)
-        execute_layout.addWidget(execute_step_button)
+        self.execute_step_button = QPushButton("Step")
+        self.execute_step_button.clicked.connect(self.execute_current_action)
+        #self.execute_step_button.clicked.connect(self.initiate_current_action_execution)
+        execute_layout.addWidget(self.execute_step_button)
 
-        run_action_sequence_button = QPushButton("Run")
-        run_action_sequence_button.clicked.connect(self.run_action_sequence)
-        execute_layout.addWidget(run_action_sequence_button)
+        self.run_action_sequence_button = QPushButton("Run")
+        self.run_action_sequence_button.clicked.connect(self.run_action_sequence)
+        execute_layout.addWidget(self.run_action_sequence_button)
         layout.addLayout(execute_layout,2,1)
 
         stop_execution_button = QPushButton("Stop Execution")
@@ -155,6 +157,7 @@ class RsapApp(QMainWindow):
         self.create_service_parameter_layout()
         central_widget.setLayout(layout)
         self.setGeometry(100, 100, 1800, 1200)
+        self.execute_step_button.setEnabled(True)
 
     def show_action_menu(self):
         self.action_sequence_builder.initialize_service_list()
@@ -181,13 +184,6 @@ class RsapApp(QMainWindow):
         self.action_menu.init_action_menu()
         self.action_menu.showMenu()
 
-    # def initialize_active_service_list(self):
-    #     #self.service_combo_box.clear()
-    #     self.action_sequence_builder.initialize_service_list()
-    #     self.action_sequence_builder.save_all_service_req_res_to_JSON()
-    #     self.qt_list_of_active_services = self.action_sequence_builder.list_of_active_clients
-    #     #self.service_combo_box.addItems(self.qt_list_of_active_services)
-
     def append_selected_action_from_menu(self, menu_output):
         #print(menu_output)
         if menu_output[0] == 'Services':
@@ -195,9 +191,10 @@ class RsapApp(QMainWindow):
             if 'Clients' in menu_output[1] and 'Active' in menu_output[1]:
                 self.append_service_dialog(service_client=menu_output[-1])
             elif 'Clients' in menu_output[1] and 'Memorised' in menu_output[1]:
-                self.append_service_dialog(service_client=menu_output[-1])
+                self.append_service_dialog(service_client = menu_output[-1],
+                                           serivce_type=self.action_sequence_builder.get_srv_type_from_memorized_client(menu_output[-1]))
             elif 'Type' in menu_output[1]:
-                self.append_service_dialog(serivce_type=menu_output[-1])
+                self.append_service_dialog(serivce_type = f"{menu_output[-2]}/{menu_output[-1]}")
             elif menu_output[-1] == 'New':
                 self.append_service_dialog()
         else:
@@ -213,9 +210,17 @@ class RsapApp(QMainWindow):
             function_checkbox = ReorderableCheckBoxListItem(f"{index}. {action.name}")
             self.checkbox_list.addItem(function_checkbox)
 
+    # def initiate_current_action_execution(self):
+    #     #self.set_gui_interactionable(False)
+    #     self.action_exectuion_thread.start()
+    
+    # def end_current_action_execution(self):
+    #     #self.set_gui_interactionable(True)
+    #     pass
+    
     def execute_current_action(self) -> bool:
+        
         index = self.checkbox_list.currentRow()
-
         # Return early if no function is selected
         if index == -1:
             return False
@@ -488,15 +493,6 @@ class RsapApp(QMainWindow):
         self.clear_action_parameter_layout()
         self.save_as = False                
 
-    # def new_service_dialog(self) -> None:
-    #     text_output, ok_pressed = QInputDialog.getText(self, 'Input Dialog', 'Enter your string:')
-
-    #     if ok_pressed:
-    #         if not text_output:
-    #             text_output = None
-            
-    #         self.add_service_to_action_list(service_name = text_output)
-
     def append_service_dialog(self, service_name: str = None, service_client:str= None, serivce_type:str = None)->None:
         add_service_dialog = AddServiceDialog(service_name, service_client, serivce_type)
         
@@ -518,6 +514,7 @@ class RsapApp(QMainWindow):
         if service_client:
                 success = self.action_sequence_builder.append_service_to_action_list_at_index(service_client=service_client, 
                                                                                        index = pos_to_insert, 
+                                                                                       service_type=service_type,
                                                                                        service_name = service_name)
                 # Get the name of the service from the currently acive action, which is the newly added one
                 if success:
@@ -530,6 +527,14 @@ class RsapApp(QMainWindow):
                     self.action_selected()
                 else:
                     self.text_output.append_red_text(f"Invalid input arguments")
+                    
+    def set_gui_interactionable(self,set_to:bool)->None:
+        """
+        With this method gui interactions can be set to true/false. 
+        This is used when e.a. a action is running to prevent that the user can start parallel processes.
+        """
+        self.execute_step_button.setEnabled(set_to)
+        self.run_action_sequence_button.setEnabled(set_to)
 
     def delete_action_from_sequence(self):
         selected_function = self.checkbox_list.currentItem()

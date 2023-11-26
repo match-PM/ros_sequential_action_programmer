@@ -28,6 +28,8 @@ CHECK_COMPATIBILITY_ONLY = 0
 SET_IMPLICIT_SRV_DICT = 1
 SET_SRV_DICT = 2
 
+LOG_NEVER = 0
+LOG_AT_END = 1
 
 class RosSequentialActionProgrammer:
     def __init__(self, node: Node) -> None:
@@ -68,63 +70,40 @@ class RosSequentialActionProgrammer:
         return None
 
     def append_service_to_action_list(
-        self, service_client: str, service_type: str = None, service_name=None
-    ) -> bool:
-        if not service_type:
-            service_type = self.get_service_type_for_client(service_client)
-        else:
-            test_obj = ServiceAction.get_service_request(service_type)
-            if not test_obj:
-                self.node.get_logger().error(
-                    f"Service type '{service_type}' is unknown to the system!"
-                )
-                return False
-
-        if service_type:
-            self.action_list.append(
-                ServiceAction(
-                    client=service_client,
-                    service_type=service_type,
-                    node=self.node,
-                    name=service_name,
-                )
-            )
-            self.node.get_logger().info(
-                f"Inserted Service for {service_client} at {len(self.action_list)-1}"
-            )
-            return True
-        else:
-            self.node.get_logger().error(
-                f"Service for client '{service_client}' could not be appended because service type does not exist or is unknown!"
-            )
-            return False
+        self, service_client: str, service_type: str = None, service_name=None) -> bool:
+        index = len(self.action_list)-1
+        if index < 0:
+            index = 0
+        return self.append_service_to_action_list_at_index(service_client=service_client,
+                                                        service_type=service_type,
+                                                        service_name=service_name,
+                                                        index=index)
 
     def append_service_to_action_list_at_index(
         self,
         service_client: str,
         index: int,
         service_type: str = None,
-        service_name=None,
-    ) -> bool:
+        service_name=None) -> bool:
+
         if not service_type:
             service_type = self.get_service_type_for_client(service_client)
 
         if not index > len(self.action_list):
-            self.action_list.insert(
-                index,
-                ServiceAction(
+            new_action = ServiceAction(
+                    node=self.node,
                     client=service_client,
                     service_type=service_type,
-                    node=self.node,
-                    name=service_name,
-                ),
-            )
+                    name=service_name)
+            if new_action.get_init_success():
+                self.action_list.insert(index, new_action)
 
-            self.current_action_index = index
-            self.node.get_logger().info(
-                f"Inserted Service for {service_client} at {index}"
-            )
-            return True
+                self.current_action_index = index
+                self.node.get_logger().info(f"Inserted Service for {service_client} at {index}")
+                return True
+            else:
+                self.node.get_logger().error(f"Service client: '{service_client}' with srv_type '{service_type}' could not be appended!")
+                return False
         else:
             return False
 
@@ -181,27 +160,29 @@ class RosSequentialActionProgrammer:
             for index, item in enumerate(file_data["action_list"]):
                 service_client = item["service_client"]
 
-                action_from_item = ServiceAction(
-                    service_client, item["service_type"], self.node, item["name"]
-                )
+                action_from_item = ServiceAction(node=self.node,
+                                                 client=service_client,
+                                                 service_type=item["service_type"],
+                                                 name=item["name"])
+                if action_from_item.get_init_success():
+                    set_success = action_from_item.set_service_bool_identifier(
+                        item["error_identifier"]
+                    )
+                    action_from_item.description = item["description"]
+                    if not set_success:
+                        return False
 
-                set_success = action_from_item.set_service_bool_identifier(
-                    item["error_identifier"]
-                )
-                action_from_item.description = item["description"]
-                if not set_success:
+                    self.action_list.append(action_from_item)
+                    set_success = self.process_action_dict_at_index(
+                        index=index,
+                        mode=SET_IMPLICIT_SRV_DICT,
+                        input_impl_dict=item["service_request"],
+                    )
+                    if not set_success:
+                        self.action_list.clear()
+                        return False
+                else:
                     return False
-
-                self.action_list.append(action_from_item)
-                set_success = self.process_action_dict_at_index(
-                    index=index,
-                    mode=SET_IMPLICIT_SRV_DICT,
-                    input_impl_dict=item["service_request"],
-                )
-                if not set_success:
-                    self.action_list.clear()
-                    return False
-
             return True
         else:
             return False
@@ -258,19 +239,10 @@ class RosSequentialActionProgrammer:
         else:
             return False
 
-    def check_if_name_exists(self, name: str) -> bool:
-        """
-        Checks if a service with the given name exixts in the action_list.
-        """
-        for action in self.action_list:
-            if action.name == name:
-                return True
-        return False
-
     def get_current_action_name(self) -> str:
         return self.action_list[self.current_action_index].name
 
-    def execute_current_action(self) -> bool:
+    def execute_current_action(self, log_mode:int = LOG_NEVER) -> bool:
         try:
             # Set values from earlier service respones to this service request, might fail, if earlier call has not been executed
             set_success = self.process_action_dict_at_index(
@@ -288,7 +260,7 @@ class RosSequentialActionProgrammer:
                 action_log=self.get_current_action_log(),
             )
 
-            if self.get_current_action_index() == len(self.action_list) - 1:
+            if (self.get_current_action_index() == len(self.action_list) - 1) and log_mode == LOG_AT_END:
                 self.save_action_sequence_log()
 
             if success_exec:
@@ -432,6 +404,7 @@ class RosSequentialActionProgrammer:
             self.node.get_logger().error(e)
             self.node.get_logger().error(f"Error opening blacklist. Check formatting of '{blacklist_path}'!")
 
+
     def get_all_service_req_res_dict(self):
         """
         This function returns all dict of service request and responses.
@@ -510,6 +483,12 @@ class RosSequentialActionProgrammer:
         self.save_all_service_req_res_to_JSON()
         return [t[0] for t in self.list_of_memorized_services]
     
+    def get_srv_type_from_memorized_client(self, client:str)->str:
+        for clt, service_type in self.list_of_memorized_services:
+            if client == clt:
+                return service_type
+        return None
+
     def get_recom_for_action_at_index_from_key(self, index: int, key: str) -> list:
         possible_list = self.get_possible_srv_res_fields_at_index(
             index=index, target_key=key
