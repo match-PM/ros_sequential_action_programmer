@@ -10,6 +10,8 @@ import copy
 import json
 from datetime import datetime
 from rosidl_runtime_py.get_interfaces import get_service_interfaces
+import array
+import numpy as np
 
 
 class ServiceAction:
@@ -168,17 +170,24 @@ class ServiceAction:
             test_request = self.get_service_request(self.service_type)
             # Set test request with dict
             value_to_set = self.get_obj_value_from_key(test_request, path_key)
-            self.node.get_logger().warn(f"Path key {str(path_key)}")
-            self.node.get_logger().warn(f"New value {str(new_value)}")
-            self.node.get_logger().warn(f"Value to set {str(value_to_set)}")
+            self.node.get_logger().debug(f"Path key {str(path_key)}")
+            self.node.get_logger().debug(f"New value {str(new_value)}")
+            self.node.get_logger().debug(f"Value to set {str(value_to_set)}")
 
-            self.node.get_logger().warn(f"New value type {str(type(new_value))}")
-            self.node.get_logger().warn(f"Value to set type {str(type(value_to_set))}")
+            self.node.get_logger().debug(f"New value type {str(type(new_value))}")
+            self.node.get_logger().debug(f"Value to set type {str(type(value_to_set))}")
 
             # TO-DO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
 
-            # if not isinstance(new_value, type(value_to_set)):
-            #     return False
+            if isinstance(value_to_set, np.ndarray) and isinstance(new_value, list):
+                new_value = np.array(new_value)
+
+            if isinstance(value_to_set, array.array) and isinstance(new_value, list):
+                new_value = array.array("i", new_value)
+
+            if not isinstance(new_value, type(value_to_set)):
+                self.node.get_logger().debug(f"Given value '{new_value}' of type '{type(new_value)}' is incompatible for '{path_key}' of type '{type(value_to_set)}'!")
+                return False
 
             # If the path does not lead to an existing value
             if value_to_set is None:
@@ -188,25 +197,19 @@ class ServiceAction:
                 set_success = self.set_obj_value_from_key(
                     self.service_req_dict, path_key, new_value
                 )
-                self.node.get_logger().error(f"Set success {str((set_success))}")
+                self.node.get_logger().debug(f"Set success {str((set_success))}")
                 self.update_srv_req_obj_from_dict()
             else:
-                self.node.get_logger().error(
-                    f"Set success {str((self.service_req_dict_implicit))}"
-                )
+                self.node.get_logger().debug(f"Set success {str((self.service_req_dict_implicit))}")
                 set_success = self.set_obj_value_from_key(
                     self.service_req_dict_implicit, path_key, new_value
                 )
-                self.node.get_logger().error(
-                    f"Set success {str((self.service_req_dict_implicit))}"
-                )
-                self.node.get_logger().error(f"Set success {str((set_success))}")
+                self.node.get_logger().debug(f"Set success {str((self.service_req_dict_implicit))}")
+                self.node.get_logger().debug(f"Set success {str((set_success))}")
 
             return set_success
         except:
-            self.node.get_logger().debug(
-                "Error occured in set_srv_req_dict_value_from_key!"
-            )
+            self.node.get_logger().debug("Error occured in set_srv_req_dict_value_from_key!")
             return False
 
     def set_req_message_from_dict(self, dict: collections.OrderedDict) -> bool:

@@ -490,6 +490,7 @@ class RosSequentialActionProgrammer:
         return None
 
     def get_recom_for_action_at_index_from_key(self, index: int, key: str) -> list:
+        # this may be doubled with the loop a bit further down
         possible_list = self.get_possible_srv_res_fields_at_index(
             index=index, target_key=key
         )
@@ -511,6 +512,9 @@ class RosSequentialActionProgrammer:
         return custom_recom_list
 
     def get_possible_srv_res_fields_at_index(self, index: int, target_key: str) -> list:
+        """
+        Returns a list of valid keys from the service at the index index that are compatible with an given value described by a targed key.
+        """
         compatible_list = []
         for ind in range(0, index):
             key_value_list: list = ServiceAction.get_key_value_pairs_from_dict(
@@ -544,6 +548,7 @@ class RosSequentialActionProgrammer:
     def process_action_dict_at_index(
         self, index: int, mode: int, input_impl_dict=None
     ) -> bool:
+        
         """
         This function provides functionality to check/set input_dict for the dict of a action at index specified by the key.
         Use constants CHECK_COMPATIBILITY_ONLY (=0) or SET_IMPLICIT_SRV_DICT (=1) SET_SRV_DICT (=2).
@@ -556,17 +561,18 @@ class RosSequentialActionProgrammer:
         # because it is the implicit, there might be references to earlier service responses.
         if input_impl_dict is None:
             key_value_list: list = ServiceAction.get_key_value_pairs_from_dict(
-                self.action_list[index].service_req_dict_implicit
-            )
+                self.action_list[index].service_req_dict_implicit)
         else:
             if not isinstance(input_impl_dict, OrderedDict):
                 input_impl_dict = self.convert_to_ordered_dict(input_impl_dict)
-            key_value_list: list = ServiceAction.get_key_value_pairs_from_dict(
-                input_impl_dict
-            )
+            key_value_list: list = ServiceAction.get_key_value_pairs_from_dict(input_impl_dict)
 
         # By default True, only if an setting or checking fails False is returned
         process_success = False
+
+        # if list is empty we can return early
+        if not key_value_list:
+            return True
         try:
             # iterate through the list of key value pairs. Look for references to earlier respones.
             for item in key_value_list:
@@ -601,6 +607,7 @@ class RosSequentialActionProgrammer:
                 ref_key,
             ) = self.check_for_reference(value)
             if error_in_reference:
+                self.node.get_logger().warn(f"Error in reference '{value}'")
                 return False
 
             check_value = value
@@ -658,7 +665,7 @@ class RosSequentialActionProgrammer:
         except:
             return False
 
-    def check_for_reference(self, input_value: any) -> (bool, int, str):
+    def check_for_reference(self, input_value: any) -> (bool, bool, int, str):
         """
         This function takes an input value as input. The function checks if the value conatins an reference to another action value.
         If yes, it returns 1. True/False for if it contains a reference, 2. if a given refence contains erros,
@@ -671,17 +678,13 @@ class RosSequentialActionProgrammer:
             return False, error_in_reference, ref_index, ref_key
 
         identifier = input_value.split(".")
+        #self.node.get_logger().warn(str(identifier))
         if identifier[0] == "service_response":
             ref_index = int(identifier[1].split("-")[0])
             ref_action_name = str(identifier[1].split("-")[1])
-            # print(ref_index)
-            # print(ref_action_name)
-            if (
-                ref_action_name != self.get_action_at_index(ref_index).name
-                or not ref_index
-            ):
+            if (ref_action_name != self.get_action_at_index(ref_index).name):
                 error_in_reference = True
-                self.node.get_logger().error("Action name or index does not match!")
+                self.node.get_logger().error(f"Action name {ref_action_name} or index {ref_index} does not match!")
                 return False, error_in_reference, ref_index, ref_key
 
             ref_key = ".".join(identifier[2:])
@@ -735,6 +738,18 @@ class RosSequentialActionProgrammer:
         else:
             return False
 
+    def move_action_at_index_to_index(self, old_index: int,new_index:int) -> bool:
+        if ((old_index >= 0) and 
+        (old_index <= len(self.action_list)) and 
+        (old_index != new_index) and
+        (new_index >= 0) and 
+        (new_index <= len(self.action_list))):
+            element_to_move = self.action_list.pop(old_index)
+            self.action_list.insert(new_index,element_to_move)
+            return True
+        else:
+            self.node.get_logger().error("Invalid indicies given. Out of bounds")
+            return False
 
 if __name__ == "__main__":
     pass

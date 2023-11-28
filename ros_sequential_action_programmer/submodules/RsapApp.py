@@ -16,6 +16,7 @@ from ros_sequential_action_programmer.submodules.RsapApp_submodules.PopupRecWind
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionSelectionMenu import ActionSelectionMenu
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AddServiceDialog import AddServiceDialog
 from rosidl_runtime_py.get_interfaces import get_service_interfaces
+import ast
 
 class RsapApp(QMainWindow):
     def __init__(self, service_node:Node):
@@ -85,7 +86,7 @@ class RsapApp(QMainWindow):
         self.checkbox_list = ReorderableCheckBoxListWidget()
         self.checkbox_list.itemClicked.connect(self.action_selected)
         #self.checkbox_list.itemChanged.connect(self.set_function_states)
-        #self.checkbox_list.CustDragSig.connect(self.on_drop)
+        self.checkbox_list.CustDragSig.connect(self.on_action_drag_drop)
         layout.addWidget(self.checkbox_list,1,1)
 
         self.execute_step_button = QPushButton("Step")
@@ -321,6 +322,12 @@ class RsapApp(QMainWindow):
         self.inner_layout.addWidget(label_error_handling_box)
         self.inner_layout.addWidget(self.error_handling_box)
 
+    def on_action_drag_drop(self):
+        self.action_sequence_builder.move_action_at_index_to_index(old_index=self.checkbox_list.drag_source_position,
+                                                            new_index=self.checkbox_list.currentRow())
+        self.init_actions_list()
+        self.action_selected()
+
     def action_selected(self):
         row = self.checkbox_list.currentRow()
         self.handle_dict = None
@@ -413,8 +420,12 @@ class RsapApp(QMainWindow):
                     value = int(text)
                 elif '.' in text and all(part.isdigit() for part in text.split('.')):
                     value = float(text)
-                elif text == 'True' or text == 'False':
-                    value = bool(text)
+                elif text == 'True':
+                    value = True
+                elif text == 'False':
+                    value = False
+                elif text[0] == '[' and text[-1] == ']':
+                    value = ast.literal_eval(text)
                 elif text == 'None':
                     value = None
 
@@ -638,9 +649,13 @@ class ReorderableCheckBoxListWidget(QListWidget):
         return name_list
     
     def dropEvent(self, event):
-        super(ReorderableCheckBoxListWidget,self).dropEvent(event)
+        super(ReorderableCheckBoxListWidget, self).dropEvent(event)
         event.accept()
         self.CustDragSig.emit()
+
+    def dragEnterEvent(self, event):
+        self.drag_source_position = self.currentRow()  # Capture the source position
+        super(ReorderableCheckBoxListWidget, self).dragEnterEvent(event)
 
 class ReorderableCheckBoxListItem(QListWidgetItem):
     def __init__(self, function_name):
