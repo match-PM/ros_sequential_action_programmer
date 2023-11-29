@@ -105,16 +105,20 @@ class ServiceAction:
                 f"Error occured! Given service type does not exist (service_type: {self.service_type})!"
             )
 
-    def execute_service(self) -> bool:
+    def execute(self) -> bool:
         if self.service_request and self.service_metaclass and self.service_type:
             # update srv request from dictionary
             self.update_srv_req_obj_from_dict()
 
             client = self.node.create_client(self.service_metaclass, self.client)
-
+            
+            srv_start_time = datetime.now()
+            
             if not client.wait_for_service(timeout_sec=2.0):
                 self.node.get_logger().error(f"Client {self.client} not available, aborting...")
                 srv_call_success = False
+                srv_end_time = datetime.now()
+                self.update_log_entry(srv_call_success, srv_start_time, srv_end_time,additional_text='Client not available! Exited with error!')
                 return srv_call_success
 
             self.node.get_logger().info(f"Executing '{self.name}'...")
@@ -302,7 +306,7 @@ class ServiceAction:
             obj=self.default_service_res_dict, path_key=key
         )
 
-    def update_log_entry(self, success: bool, start_time: datetime, end_time: datetime):
+    def update_log_entry(self, success: bool, start_time: datetime, end_time: datetime,additional_text:str = ""):
         self.log_entry["service_client"] = self.client
         self.log_entry["service_type"] = self.service_type
         self.log_entry["srv_start_time"] = str(
@@ -312,9 +316,11 @@ class ServiceAction:
         self.log_entry["execution_time"] = str(end_time - start_time)
         self.log_entry["srv_request"] = json.loads(json.dumps(self.service_req_dict))
         self.log_entry["srv_response"] = json.loads(json.dumps(self.service_res_dict))
+        if not additional_text == '':
+            self.log_entry["message"] = str(additional_text)
         self.log_entry["success"] = success
 
-    def get_srv_log_entry(self) -> dict:
+    def get_log_entry(self) -> dict:
         return self.log_entry
 
     def __deepcopy__(self, memo):

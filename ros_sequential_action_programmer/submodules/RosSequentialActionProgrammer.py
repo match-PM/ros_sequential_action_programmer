@@ -5,12 +5,11 @@ from rosidl_runtime_py.set_message import set_message_fields
 from rosidl_runtime_py.utilities import get_message, get_service, get_interface
 from ament_index_python.packages import get_package_share_directory
 from rqt_py_common import message_helpers
-from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import (
-    ServiceAction,
-)
-from ros_sequential_action_programmer.submodules.action_classes.RecomGenerator import (
-    RecomGenerator,
-)
+from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
+from ros_sequential_action_programmer.submodules.action_classes.RecomGenerator import RecomGenerator
+
+from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI, TERMINAL
+
 import json
 from datetime import datetime
 import os
@@ -34,7 +33,7 @@ LOG_AT_END = 1
 class RosSequentialActionProgrammer:
     def __init__(self, node: Node) -> None:
         self.name = None
-        self.action_list: list[ServiceAction] = []
+        self.action_list: list[ServiceAction,UserInteractionAction] = []
         self.node = node
         self.folder_path = None
         self.current_action_index = 0
@@ -107,6 +106,28 @@ class RosSequentialActionProgrammer:
         else:
             return False
 
+    def append_user_interaction_to_action_list_at_index(
+        self,
+        index: int,
+        action_name: str,
+        action_description: str,
+        mode = TERMINAL) -> bool:
+
+        if not index > len(self.action_list):
+            new_action = UserInteractionAction(
+                    node=self.node,
+                    name=action_name,
+                    action_text=action_description,
+                    mode=mode)
+            
+            self.action_list.insert(index, new_action)
+            self.current_action_index = index
+            
+            self.node.get_logger().info(f"Inserted Service for {action_name} at {index}")
+            return True
+        else:
+            return False
+        
     def get_action_at_index(self, index: int) -> ServiceAction:
         if not index > len(self.action_list):
             return self.action_list[index]
@@ -242,17 +263,16 @@ class RosSequentialActionProgrammer:
     def get_current_action_name(self) -> str:
         return self.action_list[self.current_action_index].name
 
-    def execute_current_action(self, log_mode:int = LOG_NEVER) -> bool:
+    def execute_current_action(self, log_mode: int = LOG_NEVER) -> bool:
         try:
             # Set values from earlier service respones to this service request, might fail, if earlier call has not been executed
-            set_success = self.process_action_dict_at_index(
-                self.current_action_index, SET_SRV_DICT
-            )
+            
+            if isinstance(self.get_action_at_index(self.current_action_index),ServiceAction):
+                set_success = self.process_action_dict_at_index(self.current_action_index, SET_SRV_DICT)
+                if not set_success:
+                    raise Exception
 
-            if not set_success:
-                raise Exception
-
-            success_exec = self.action_list[self.current_action_index].execute_service()
+            success_exec = self.get_action_at_index(self.current_action_index).execute()
             # append action log to history
             self.append_action_log(
                 index=self.current_action_index,
@@ -272,13 +292,12 @@ class RosSequentialActionProgrammer:
 
             return success_exec
 
-        except Exception:
-            self.node.get_logger().error(
-                f"Error executing {self.get_current_action_name()}!"
-            )
+        except Exception as e:
+            #self.node.get_logger().debug(f"Error {e}!")           
+            self.node.get_logger().error(f"Error executing {self.get_current_action_name()}!")
             return False
 
-    def execute_action_list(self, index_start) -> Tuple[bool, int]:
+    def execute_action_list(self, index_start: int, log_mode:int = LOG_NEVER) -> Tuple[bool, int]:
         """
         This function executes the action_list successifly starting at the start_index.
         It returns bool value for success indication and also the index of the action when the method terminates.
@@ -286,7 +305,7 @@ class RosSequentialActionProgrammer:
         if index_start < len(self.action_list):
             for index in range(len(self.action_list)):
                 self.current_action_index = index
-                success = self.execute_current_action()
+                success = self.execute_current_action(log_mode=log_mode)
                 if not success:
                     return False, self.current_action_index
 
@@ -489,7 +508,7 @@ class RosSequentialActionProgrammer:
                 return service_type
         return None
 
-    def get_recom_for_action_at_index_from_key(self, index: int, key: str) -> list:
+    def get_recom_for_action_at_index_for_key(self, index: int, key: str) -> list:
         # this may be doubled with the loop a bit further down
         possible_list = self.get_possible_srv_res_fields_at_index(
             index=index, target_key=key
@@ -693,7 +712,7 @@ class RosSequentialActionProgrammer:
             return False, error_in_reference, ref_index, ref_key
 
     def get_current_action_log(self) -> dict:
-        return self.action_list[self.current_action_index].get_srv_log_entry()
+        return self.get_action_at_index(self.current_action_index).get_log_entry()
 
     def get_current_action_index(self) -> int:
         return self.current_action_index
@@ -726,6 +745,7 @@ class RosSequentialActionProgrammer:
                 ) as json_file:
                     json.dump(self.action_sequence_log, json_file)
                 self.node.get_logger().info("Action sequence log saved!")
+                self.action_log.clear()
                 return True
             except FileNotFoundError as e:
                 print(e)

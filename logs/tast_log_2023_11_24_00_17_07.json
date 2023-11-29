@@ -1,1 +1,0 @@
-{"action_sequence_name": "tast", "action_log": [{"3_/compute_ik": {"service_client": "/compute_ik", "service_type": "moveit_msgs/srv/GetPositionIK", "srv_start_time": "2023-11-24_00:17:07.672650", "srv_end_time": "2023-11-24_00:17:07.673243", "execution_time": 

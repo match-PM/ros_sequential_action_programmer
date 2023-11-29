@@ -11,12 +11,16 @@ import sys
 from collections import OrderedDict
 from rclpy.node import Node
 from datetime import datetime
-from ros_sequential_action_programmer.submodules.RosSequentialActionProgrammer import RosSequentialActionProgrammer, SET_IMPLICIT_SRV_DICT
+from ros_sequential_action_programmer.submodules.RosSequentialActionProgrammer import RosSequentialActionProgrammer, SET_IMPLICIT_SRV_DICT, LOG_AT_END, LOG_NEVER
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.PopupRecWindow import PopupRecWindow
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionSelectionMenu import ActionSelectionMenu
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AddServiceDialog import AddServiceDialog
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.AddUserInteractionDialog import AddUserInteractionDialog
+from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
 from rosidl_runtime_py.get_interfaces import get_service_interfaces
 import ast
+
+from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI
 
 class RsapApp(QMainWindow):
     def __init__(self, service_node:Node):
@@ -40,6 +44,7 @@ class RsapApp(QMainWindow):
         #self.action_exectuion_thread = QThread(parent=service_node.executor)
         #self.action_exectuion_thread.run = self.execute_current_action
         #self.action_exectuion_thread.finished.connect(self.end_current_action_execution)
+
 
     def initUI(self):
         # Create the class for the action selection menu
@@ -173,13 +178,11 @@ class RsapApp(QMainWindow):
                 'Available Service Types':  get_service_interfaces(),
             },
             'Skills': ['TBD1','TBD2','TBD3'],
-            'Logic': {
+            'Other': {
                 'Conditions': {
                     'Options': ['Option7', 'Option8', 'Option9']
                 },
-                'User Input': {
-                    'Options': ['Option7', 'Option8', 'Option9']
-                }
+                'Operation': ['User Interaction']
             }
         }
         self.action_menu.init_action_menu()
@@ -198,9 +201,41 @@ class RsapApp(QMainWindow):
                 self.append_service_dialog(serivce_type = f"{menu_output[-2]}/{menu_output[-1]}")
             elif menu_output[-1] == 'New':
                 self.append_service_dialog()
+        elif menu_output[0]=='Other':
+            if menu_output[-1] == 'User Interaction':
+                self.append_user_interaction_dialog()
         else:
             self.text_output.append("This is not implemented yet!")
             self.service_node.get_logger().warn("This is not implemented yet!")
+
+    def append_user_interaction_dialog(self):
+        add_user_interaction_dialog = AddUserInteractionDialog()
+        
+        if add_user_interaction_dialog.exec():
+            action_name, action_description, = add_user_interaction_dialog.get_values()
+            self.add_user_interaction_to_action_list(action_name=action_name,
+                                                     description=action_description)
+        else:
+            pass
+
+    def add_user_interaction_to_action_list(self,action_name:str, description:str):
+        pos_to_insert = self.checkbox_list.currentRow() + 1
+
+        success = self.action_sequence_builder.append_user_interaction_to_action_list_at_index(index=pos_to_insert,
+                                                                                                action_name=action_name,
+                                                                                                action_description=description,
+                                                                                                mode=GUI)
+        # Get the name of the service from the currently acive action, which is the newly added one
+        if success:
+            service_name =  self.action_sequence_builder.get_current_action_name()
+            function_checkbox = ReorderableCheckBoxListItem(f"{pos_to_insert}. {service_name}")
+            self.checkbox_list.insertItem(pos_to_insert,function_checkbox)
+            self.init_actions_list()
+            self.checkbox_list.setCurrentRow(pos_to_insert)
+            self.text_output.append(f"Inserted action: {service_name}")
+            self.action_selected()
+        else:
+            self.text_output.append_red_text(f"Invalid input arguments")
 
     def init_actions_list(self):
         """
@@ -229,7 +264,7 @@ class RsapApp(QMainWindow):
         success_set = self.action_sequence_builder.set_current_action(index)
         success = False
         if success_set:
-            success = self.action_sequence_builder.execute_current_action()
+            success = self.action_sequence_builder.execute_current_action(log_mode=LOG_AT_END)
         if success:
             text_output = f"Action '{self.action_sequence_builder.get_current_action_name()}' executed successfully!"
             self.text_output.append_green_text(text_output)
@@ -330,12 +365,17 @@ class RsapApp(QMainWindow):
 
     def action_selected(self):
         row = self.checkbox_list.currentRow()
-        self.handle_dict = None
-        self.handle_dict = self.action_sequence_builder.get_copy_impl_srv_dict_at_index(row)
         self.clear_action_parameter_layout()
         self.clear_log_viewer()
-        self.set_service_meta_info_widget()
-        self.populateWidgets(self.handle_dict)
+
+        if isinstance(self.action_sequence_builder.get_action_at_index(row), ServiceAction):
+            self.handle_dict = None
+            self.handle_dict = self.action_sequence_builder.get_copy_impl_srv_dict_at_index(row)
+            self.clear_action_parameter_layout()
+            self.clear_log_viewer()
+            self.set_service_meta_info_widget()
+            self.populateWidgets(self.handle_dict)
+
         self.show_service_log(self.action_sequence_builder.get_action_at_index(row).log_entry)
 
     def populateWidgets(self, data, parent_key=None):
@@ -358,7 +398,7 @@ class RsapApp(QMainWindow):
 
     def additionalButtonClicked(self, key, widget:QLineEdit):
         index = self.checkbox_list.currentRow()
-        data = self.action_sequence_builder.get_recom_for_action_at_index_from_key(index=index, key=key)
+        data = self.action_sequence_builder.get_recom_for_action_at_index_for_key(index=index, key=key)
         popup = PopupRecWindow(data)
         result = popup.exec()
 
@@ -523,21 +563,21 @@ class RsapApp(QMainWindow):
         pos_to_insert = self.checkbox_list.currentRow() + 1
 
         if service_client:
-                success = self.action_sequence_builder.append_service_to_action_list_at_index(service_client=service_client, 
-                                                                                       index = pos_to_insert, 
-                                                                                       service_type=service_type,
-                                                                                       service_name = service_name)
-                # Get the name of the service from the currently acive action, which is the newly added one
-                if success:
-                    service_name =  self.action_sequence_builder.get_current_action_name()
-                    function_checkbox = ReorderableCheckBoxListItem(f"{pos_to_insert}. {service_name}")
-                    self.checkbox_list.insertItem(pos_to_insert,function_checkbox)
-                    self.init_actions_list()
-                    self.checkbox_list.setCurrentRow(pos_to_insert)
-                    self.text_output.append(f"Inserted action: {service_name}")
-                    self.action_selected()
-                else:
-                    self.text_output.append_red_text(f"Invalid input arguments")
+            success = self.action_sequence_builder.append_service_to_action_list_at_index(service_client=service_client, 
+                                                                                    index = pos_to_insert, 
+                                                                                    service_type=service_type,
+                                                                                    service_name = service_name)
+            # Get the name of the service from the currently acive action, which is the newly added one
+            if success:
+                service_name =  self.action_sequence_builder.get_current_action_name()
+                function_checkbox = ReorderableCheckBoxListItem(f"{pos_to_insert}. {service_name}")
+                self.checkbox_list.insertItem(pos_to_insert,function_checkbox)
+                self.init_actions_list()
+                self.checkbox_list.setCurrentRow(pos_to_insert)
+                self.text_output.append(f"Inserted action: {service_name}")
+                self.action_selected()
+            else:
+                self.text_output.append_red_text(f"Invalid input arguments")
                     
     def set_gui_interactionable(self,set_to:bool)->None:
         """
