@@ -13,11 +13,11 @@ TERMINAL = 1
 GUI = 2
 
 class UserInteractionAction():
-    def __init__(self, node: Node, mode: int, name:str ='UserInteraction', action_text:str = "") -> None:
+    def __init__(self, node: Node, interaction_mode: int, name:str ='UserInteraction', action_text:str = "") -> None:
         self.node = node
         self.name = name
         self.action_text = action_text
-        self.mode = mode
+        self.interaction_mode = interaction_mode
         if name == "":
             self.name = 'UserInteraction'
         self.log_entry={}
@@ -28,14 +28,14 @@ class UserInteractionAction():
 
         start_time = datetime.now()
 
-        if self.mode == TERMINAL:
+        if self.interaction_mode == TERMINAL:
             self.node.get_logger().info(self.action_text)
             self.node.get_logger().info("Enter y/n and press enter to proceed! Waiting for user interaction...")
             user_input = input("Enter something: ")
             if user_input == 'y':
                 exec_success = True
 
-        elif self.mode == GUI:
+        elif self.interaction_mode == GUI:
             user_dialog = UserInteractionActionDialog(self.action_text)
             result = user_dialog.exec()
 
@@ -58,3 +58,14 @@ class UserInteractionAction():
 
     def get_log_entry(self) -> dict:
         return self.log_entry
+    
+    def get_action_name(self)-> str:
+        return self.name
+    
+    def set_action_name(self, new_name:str) -> bool:
+        try:
+            self.name = new_name
+            return True
+        except Exception as e:
+            self.node.get_logger().error(str(e))
+            return False

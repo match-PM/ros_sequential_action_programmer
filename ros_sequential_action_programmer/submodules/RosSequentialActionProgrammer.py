@@ -19,6 +19,7 @@ from collections import OrderedDict
 from typing import Tuple
 import yaml
 from yaml.loader import SafeLoader
+from ros_sequential_action_programmer.submodules.obj_dict_modules.dict_functions import convert_to_ordered_dict, get_key_value_pairs_from_dict
 
 CHECK = 0
 SET = 1
@@ -111,14 +112,14 @@ class RosSequentialActionProgrammer:
         index: int,
         action_name: str,
         action_description: str,
-        mode = TERMINAL) -> bool:
+        interaction_mode = TERMINAL) -> bool:
 
         if not index > len(self.action_list):
             new_action = UserInteractionAction(
                     node=self.node,
                     name=action_name,
                     action_text=action_description,
-                    mode=mode)
+                    interaction_mode=interaction_mode)
             
             self.action_list.insert(index, new_action)
             self.current_action_index = index
@@ -141,24 +142,24 @@ class RosSequentialActionProgrammer:
         else:
             return False
 
-    def get_service_req_from_dict(
-        self, client: str, dict: dict, service_type=None
-    ) -> any:
-        """
-        This function returns a service request object given the client and a dict.
-        If the client is not spinning when calling this function, you also have to specify the service_type.
-        The dict has to have the appropriate structure or the function will return 'None'.
-        """
-        if service_type is None:
-            service_type = self.get_service_type_for_client(client)
-        try:
-            service_request = ServiceAction.get_service_request(service_type)
-            service_ordered_dict = collections.OrderedDict(dict)
-            set_message_fields(service_request, service_ordered_dict)
-            return service_request
-        except Exception as e:
-            print(e)
-            return None
+    # def get_service_req_from_dict(
+    #     self, client: str, dict: dict, service_type=None
+    # ) -> any:
+    #     """
+    #     This function returns a service request object given the client and a dict.
+    #     If the client is not spinning when calling this function, you also have to specify the service_type.
+    #     The dict has to have the appropriate structure or the function will return 'None'.
+    #     """
+    #     if service_type is None:
+    #         service_type = self.get_service_type_for_client(client)
+    #     try:
+    #         service_request = ServiceAction.get_service_request(service_type)
+    #         service_ordered_dict = collections.OrderedDict(dict)
+    #         set_message_fields(service_request, service_ordered_dict)
+    #         return service_request
+    #     except Exception as e:
+    #         print(e)
+    #         return None
 
     def load_from_JSON(self, file_path) -> bool:
         """
@@ -178,30 +179,37 @@ class RosSequentialActionProgrammer:
             self.folder_path = os.path.dirname(file_path)
             self.name = file_data["name"]
 
-            for index, item in enumerate(file_data["action_list"]):
-                service_client = item["service_client"]
+            for index, action in enumerate(file_data["action_list"]):
+                if action['action_type'] == 'ServiceAction':
+                    service_client = action["service_client"]
 
-                action_from_item = ServiceAction(node=self.node,
-                                                 client=service_client,
-                                                 service_type=item["service_type"],
-                                                 name=item["name"])
-                if action_from_item.get_init_success():
-                    set_success = action_from_item.set_service_bool_identifier(
-                        item["error_identifier"]
-                    )
-                    action_from_item.description = item["description"]
-                    if not set_success:
-                        return False
+                    action_from_item = ServiceAction(node=self.node,
+                                                    client=service_client,
+                                                    service_type=action["service_type"],
+                                                    name=action["name"])
+                    if action_from_item.get_init_success():
+                        set_success = action_from_item.set_service_bool_identifier(
+                            action["error_identifier"]
+                        )
+                        action_from_item.description = action["description"]
+                        if not set_success:
+                            return False
 
+                        self.action_list.append(action_from_item)
+                        set_success = self.process_action_dict_at_index(
+                            index=index,
+                            mode=SET_IMPLICIT_SRV_DICT,
+                            input_impl_dict=action["service_request"],
+                        )
+                        if not set_success:
+                            self.action_list.clear()
+                            return False
+                elif action['action_type'] == 'UserInteractionAction':
+                    action_from_item = UserInteractionAction(node=self.node,
+                                                             interaction_mode = action['interaction_mode'],
+                                                             name=action['name'],
+                                                             action_text=action['action_text'])
                     self.action_list.append(action_from_item)
-                    set_success = self.process_action_dict_at_index(
-                        index=index,
-                        mode=SET_IMPLICIT_SRV_DICT,
-                        input_impl_dict=item["service_request"],
-                    )
-                    if not set_success:
-                        self.action_list.clear()
-                        return False
                 else:
                     return False
             return True
@@ -221,17 +229,29 @@ class RosSequentialActionProgrammer:
 
             action_list = []
             for index, action in enumerate(self.action_list):
-                service_dict = {}
-                service_dict["action_position"] = index
-                service_dict["name"] = action.name
-                service_dict["service_client"] = action.client
-                service_dict["service_type"] = action.service_type
-                service_dict["error_identifier"] = action.service_success_key
-                service_dict["description"] = action.description
-                service_dict["service_request"] = json.loads(
-                    json.dumps(action.service_req_dict_implicit)
-                )
-                action_list.append(service_dict)
+                action_dict = {}
+                if isinstance(action, ServiceAction):
+                    action_dict["action_position"] = index
+                    action_dict["action_type"] = 'ServiceAction'
+                    action_dict["name"] = action.get_action_name()
+                    action_dict["service_client"] = action.client
+                    action_dict["service_type"] = action.service_type
+                    action_dict["error_identifier"] = action.service_success_key
+                    action_dict["description"] = action.description
+                    
+                    action_dict["service_request"] = json.loads(
+                        json.dumps(action.service_req_dict_implicit)
+                    )
+                elif isinstance(action, UserInteractionAction):
+                    action: UserInteractionAction
+                    action_dict["action_position"] = index
+                    action_dict["action_type"] = 'UserInteractionAction'
+                    action_dict["name"] = action.get_action_name()
+                    action_dict["action_text"] = action.action_text
+                    action_dict["interaction_mode"] = action.interaction_mode
+
+                if action_dict:
+                    action_list.append(action_dict)
 
             process_dict["action_list"] = action_list
             try:
@@ -261,7 +281,7 @@ class RosSequentialActionProgrammer:
             return False
 
     def get_current_action_name(self) -> str:
-        return self.action_list[self.current_action_index].name
+        return self.get_action_at_index(self.current_action_index).get_action_name()
 
     def execute_current_action(self, log_mode: int = LOG_NEVER) -> bool:
         try:
@@ -331,7 +351,7 @@ class RosSequentialActionProgrammer:
         """
         try:
             return_value = copy.deepcopy(
-                self.action_list[index].service_req_dict_implicit
+                self.get_action_at_index(index).service_req_dict_implicit
             )
             return return_value
         except Exception as e:
@@ -395,6 +415,7 @@ class RosSequentialActionProgrammer:
 
     def get_memorized_client_blklist(self)-> list:
         self.save_all_service_req_res_to_JSON()
+
         client_list = [t[0] for t in self.list_of_memorized_services]
         service_type_list = [t[1] for t in self.list_of_memorized_services]
         return self.get_client_blacklist(clients_list = client_list, service_list = service_type_list)
@@ -536,9 +557,14 @@ class RosSequentialActionProgrammer:
         """
         compatible_list = []
         for ind in range(0, index):
-            key_value_list: list = ServiceAction.get_key_value_pairs_from_dict(
-                self.action_list[ind].default_service_res_dict
-            )
+
+            if self.get_action_at_index(ind).service_res_dict is None:
+                dict_to_process = self.get_action_at_index(ind).default_service_res_dict
+            else:
+                dict_to_process = self.get_action_at_index(ind).service_res_dict
+            
+            key_value_list: list = get_key_value_pairs_from_dict(dict_to_process)
+
             for item in key_value_list:
                 # unfold key value pairs
                 for key, value in item.items():
@@ -553,16 +579,6 @@ class RosSequentialActionProgrammer:
                             f"service_response.{ind}-{self.get_action_at_index(ind).name}.{key}"
                         )
         return compatible_list
-
-    def convert_to_ordered_dict(self, d):
-        if isinstance(d, dict):
-            return OrderedDict(
-                (key, self.convert_to_ordered_dict(value)) for key, value in d.items()
-            )
-        elif isinstance(d, list):
-            return [self.convert_to_ordered_dict(item) for item in d]
-        else:
-            return d
 
     def process_action_dict_at_index(
         self, index: int, mode: int, input_impl_dict=None
@@ -579,12 +595,15 @@ class RosSequentialActionProgrammer:
         # get a key value list that contains the key to the values of the service request.
         # because it is the implicit, there might be references to earlier service responses.
         if input_impl_dict is None:
-            key_value_list: list = ServiceAction.get_key_value_pairs_from_dict(
-                self.action_list[index].service_req_dict_implicit)
+            # key_value_list: list = ServiceAction.get_key_value_pairs_from_dict(
+            #     self.action_list[index].service_req_dict_implicit)
+            key_value_list: list = get_key_value_pairs_from_dict(self.action_list[index].service_req_dict_implicit)
+            
         else:
             if not isinstance(input_impl_dict, OrderedDict):
-                input_impl_dict = self.convert_to_ordered_dict(input_impl_dict)
-            key_value_list: list = ServiceAction.get_key_value_pairs_from_dict(input_impl_dict)
+                input_impl_dict = convert_to_ordered_dict(input_impl_dict)
+            #key_value_list: list = ServiceAction.get_key_value_pairs_from_dict(input_impl_dict)
+            key_value_list: list = get_key_value_pairs_from_dict(input_impl_dict)
 
         # By default True, only if an setting or checking fails False is returned
         process_success = False
@@ -657,11 +676,7 @@ class RosSequentialActionProgrammer:
                     )
                     del test_action
                     if set_success:
-                        set_success = self.get_action_at_index(
-                            index
-                        ).set_srv_req_dict_value_from_key(
-                            path_key=key, new_value=value, override_to_implicit=True
-                        )
+                        set_success = self.get_action_at_index(index).set_srv_req_dict_value_from_key(path_key=key, new_value=value, override_to_implicit=True)
 
             if mode == SET_SRV_DICT:
                 if isinstance(self.get_action_at_index(index), ServiceAction):
@@ -682,6 +697,7 @@ class RosSequentialActionProgrammer:
 
             return set_success
         except:
+            self.node.get_logger().error("Failed here")
             return False
 
     def check_for_reference(self, input_value: any) -> (bool, bool, int, str):

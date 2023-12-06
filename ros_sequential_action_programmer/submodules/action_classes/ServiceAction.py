@@ -9,10 +9,10 @@ import collections
 import copy
 import json
 from datetime import datetime
-from rosidl_runtime_py.get_interfaces import get_service_interfaces
 import array
 import numpy as np
-
+from functools import partial
+from ros_sequential_action_programmer.submodules.obj_dict_modules.dict_functions import flatten_dict_to_list, is_string_in_dict
 
 class ServiceAction:
     def __init__(self, node: Node, client: str, service_type: str = None, name=None) -> None:
@@ -51,11 +51,22 @@ class ServiceAction:
     def get_init_success(self)-> bool:
         return self.valid
     
+    def get_action_name(self)-> str:
+        return self.name
+    
+    def set_action_name(self, new_name:str) -> bool:
+        try:
+            self.name = new_name
+            return True
+        except Exception as e:
+            self.node.get_logger().error(str(e))
+            return False
+    
     def check_for_valid_inputs(self) -> bool:
         list_of_active_services = self.node.get_service_names_and_types()
         list_of_active_clients = [item[0] for item in list_of_active_services]
         list_of_service_types = [item[1][0] for item in list_of_active_services]
-        service_interfaces = ServiceAction.flatten_dict_to_list(get_service_interfaces())
+        service_interfaces = flatten_dict_to_list(get_service_interfaces())
 
         if self.service_type is not None:
             if not self.service_type in service_interfaces:
@@ -70,27 +81,6 @@ class ServiceAction:
                     return True
             return False
         
-    @staticmethod
-    def flatten_dict_to_list(input_dict):
-        result_list = []
-        for key, values in input_dict.items():
-            for value in values:
-                result_list.append(f"{key}/{value}")
-        return result_list
-    
-    @staticmethod
-    def is_string_in_dict(my_dict, target_string):
-        for key, value in my_dict.items():
-            if isinstance(value, list):
-                # Check if the target string is in the list
-                if target_string in value:
-                    return True
-            elif isinstance(value, dict):
-                # Recursively check in nested dictionaries
-                if ServiceAction.is_string_in_dict(value, target_string):
-                    return True
-        return False
-
     def init_service(self):
         try:
             self.service_request = self.get_service_request(self.service_type)
@@ -125,37 +115,57 @@ class ServiceAction:
             srv_start_time = datetime.now()
             # Call the service
             self.future = client.call_async(self.service_request)
-            # spin until complete
 
-            while not self.future.done() and self.client_executer_watchdog(self.client):
-                rclpy.spin_once(self.node)
-            #rclpy.spin_until_future_complete(self.node, self.future)
-
-            self.service_response = self.future.result()
-            srv_end_time = datetime.now()
-            # update srv response dict
-            self.service_res_dict = message_to_ordereddict(self.service_response)
-            # get service success value if it is set
-            success_val_from_srv_res = self.get_obj_value_from_key(
-                self.service_response, self.service_success_key
-            )
-            if success_val_from_srv_res is not None:
-                srv_call_success = success_val_from_srv_res
+            node_name = self.get_node_name_from_client(client.srv_name)
+            timer = None
+            if node_name is not None:
+                timer = self.node.create_timer(timer_period_sec=1,callback=partial(self.client_executer_watchdog, node_name, self.future))
             else:
-                srv_call_success = True
+                self.node.get_logger().warn(f"Service execution watchdog for '{client.srv_name}' not available. Service client name does not adhere to the naming convention starting with the node name.")
+
+            while not self.future.done() and not self.future.cancelled():
+                rclpy.spin_once(self.node)
+
+            success_val_from_srv_res = None
+
+            if not self.future.cancelled():
+                self.service_response = self.future.result()
+                # update srv response dict
+                self.service_res_dict = message_to_ordereddict(self.service_response)
+                # get service success value if it is set
+                success_val_from_srv_res = self.get_obj_value_from_key(self.service_response, self.service_success_key)
+
+                if success_val_from_srv_res is not None:
+                    srv_call_success = success_val_from_srv_res
+                else:
+                    srv_call_success = True
+            else:
+                srv_call_success = False
+
+            srv_end_time = datetime.now()
 
             client.destroy()
+            if timer is not None:
+                timer.destroy()
             self.update_log_entry(srv_call_success, srv_start_time, srv_end_time)
             return srv_call_success
 
-    def client_executer_watchdog(self, client)-> bool:
-        list_of_active_services = self.node.get_service_names_and_types()
-        list_of_active_clients = [item[0] for item in list_of_active_services]
-        if client in list_of_active_clients:
-            return True
+    def client_executer_watchdog(self, node_name, future_obj):
+        node_names = self.node.get_node_names()
+
+        if node_name in node_names:
+            self.node.get_logger().info(f"Service Watchdog - node '{node_name}' is still active!")
         else:
-            self.node.get_logger().warn(f"Client '{client} is not longer active. Aborting execution!")
-            return False
+            self.node.get_logger().info(f"Service Watchdog - node '{node_name}' is no longer active! Aboarting execution...")
+            future_obj.cancel()
+    
+    def get_node_name_from_client(self, client: str)-> str:
+        names = self.node.get_node_names()
+        str_from_client_str = client.split('/')[1]
+        if str_from_client_str in names:
+            return str_from_client_str
+        else:
+            return  None
         
     def set_srv_req_dict_value_from_key(self, path_key: str, new_value: any, override_to_implicit=False) -> bool:
         """
@@ -181,15 +191,13 @@ class ServiceAction:
             self.node.get_logger().debug(f"New value type {str(type(new_value))}")
             self.node.get_logger().debug(f"Value to set type {str(type(value_to_set))}")
 
-            # TO-DO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
-
             if isinstance(value_to_set, np.ndarray) and isinstance(new_value, list):
                 new_value = np.array(new_value)
 
             if isinstance(value_to_set, array.array) and isinstance(new_value, list):
                 new_value = array.array("i", new_value)
 
-            if not isinstance(new_value, type(value_to_set)):
+            if not isinstance(new_value, type(value_to_set)) and not override_to_implicit:
                 self.node.get_logger().debug(f"Given value '{new_value}' of type '{type(new_value)}' is incompatible for '{path_key}' of type '{type(value_to_set)}'!")
                 return False
 
@@ -345,7 +353,7 @@ class ServiceAction:
         )
 
         return new_instance
-
+    
     @staticmethod
     def get_service_request(service_type):
         try:
@@ -425,28 +433,3 @@ class ServiceAction:
             return None
 
         return current_value
-
-    @staticmethod
-    def get_key_value_pairs_from_dict(
-        dictionary: collections.OrderedDict,
-    ) -> list[dict]:
-        """
-        Returns a list of all keys and values of a given dictionary.
-        """
-
-        def get_key_values(dic, k_v_list: list, parent_key=None):
-            # iterate through the dict
-            for key, value in dic.items():
-                if parent_key is not None:
-                    full_key = parent_key + "." + key
-                else:
-                    full_key = key
-
-                if isinstance(value, collections.OrderedDict):
-                    get_key_values(value, k_v_list, full_key)
-                else:
-                    k_v_list.append({full_key: value})
-
-        key_value_list = []
-        get_key_values(dictionary, key_value_list)
-        return key_value_list

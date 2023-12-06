@@ -224,7 +224,7 @@ class RsapApp(QMainWindow):
         success = self.action_sequence_builder.append_user_interaction_to_action_list_at_index(index=pos_to_insert,
                                                                                                 action_name=action_name,
                                                                                                 action_description=description,
-                                                                                                mode=GUI)
+                                                                                                interaction_mode=GUI)
         # Get the name of the service from the currently acive action, which is the newly added one
         if success:
             service_name =  self.action_sequence_builder.get_current_action_name()

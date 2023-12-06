@@ -3,6 +3,7 @@ from setuptools import find_packages, setup
 package_name = 'ros_sequential_action_programmer'
 submodules = 'ros_sequential_action_programmer/submodules'
 submodules_action_classes = 'ros_sequential_action_programmer/submodules/action_classes'
+submodules_obj_dict_classes = 'ros_sequential_action_programmer/submodules/obj_dict_modules'
 submodules_app = 'ros_sequential_action_programmer/submodules/RsapApp_submodules'
 
 setup(
@@ -10,7 +11,7 @@ setup(
     version='0.0.0',
     #packages=find_packages(exclude=['test']),
     #packages=find_packages(package_name,submodules),   
-    packages=(package_name,submodules, submodules_action_classes, submodules_app),   
+    packages=(package_name,submodules, submodules_action_classes, submodules_app, submodules_obj_dict_classes),   
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),

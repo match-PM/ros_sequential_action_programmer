@@ -1,145 +1,58 @@
-import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QMenu,  QPushButton, QVBoxLayout, QWidget
-from PyQt6.QtGui import QAction
-from functools import partial
-from copy import copy
+def get_value_by_key(obj, key):
+    """
+    Retrieves the value from a nested object based on the key.
 
-class NestedDictMenu(QMainWindow):
-    def __init__(self):
-        super(NestedDictMenu, self).__init__()
+    Args:
+    - obj: The nested object to search for the value.
+    - key: The key in the format 'key2.subkey2[1].nested_key1'.
 
-        self.initUI()
+    Returns:
+    - The value corresponding to the provided key, or None if the key is not found.
+    """
+    keys = key.split('.')
+    current_obj = obj
 
-    def initUI(self):
-        central_widget = QWidget(self)
-        self.setCentralWidget(central_widget)
+    for key_part in keys:
+        if '[' in key_part:
+            key_name, index_str = key_part.split('[')
+            index = int(index_str[:-1])  # Remove the trailing ']'
+            try:
+                current_obj = current_obj[key_name][index]
+            except (KeyError, IndexError, TypeError):
+                return None
+        else:
+            try:
+                current_obj = current_obj[key_part]
+            except (KeyError, TypeError):
+                return None
 
-        # Sample nested dictionary with three levels of depth and a list at the last level
-        nested_dict = {
-            'Servicesa': {
-                'Services_plain':  ['Option1', 'Option2', 'Option3']
-            },
-            'Servicesb': {
-                'Services_plain': {
-                    'Options': ['Option4', 'Option5', 'Option6']
-                }
-            },
-            'Servicesc': {
-                'Services_plain': {
-                    'Options': ['Option7', 'Option8', 'Option9']
-                }
-            }
-        }
+    return current_obj
 
-        self.createMenu(central_widget, nested_dict)
+# Example usage with a nested dictionary
+nested_dict_example = {
+    'key1': 'value1',
+    'key2': {
+        'subkey1': 'subvalue1',
+        'subkey2': [
+            {'nested_key1': 'nested_value1'},
+            {'nested_key2': 'nested_value2'}
+        ]
+    },
+    'key3': [1, 2, 3]
+}
 
-        self.setGeometry(300, 300, 300, 200)
-        self.setWindowTitle('Nested Dict Menu')
-        self.show()
+# Using the key to get a value
+key_to_retrieve = 'key2.subkey2[1].nested_key2'
+value = get_value_by_key(nested_dict_example, key_to_retrieve)
+print(value)
 
-    def createMenu(self, central_widget, nested_dict):
-        vbox = QVBoxLayout(central_widget)
+# Example usage with a nested list
+nested_list_example = [
+    {'key1': 'value1'},
+    {'key2': ['subvalue1', {'nested_key1': 'nested_value1'}]}
+]
 
-        button = QPushButton('Show Menu', self)
-        button.clicked.connect(self.showMenu)
-        vbox.addWidget(button)
-
-        self.contextMenu = QMenu(self)
-        self.addActionMenu(self.contextMenu, nested_dict)
-
-    def addActionMenu(self, menu, menu_dict, parents = None):
-        if not parents:
-            parents = []
-        for menu_title, menu_content in menu_dict.items():
-            if isinstance(menu_content, dict):  # Submenu
-                submenu = menu.addMenu(menu_title)
-                parents.append(menu_title)
-                self.addActionMenu(submenu, menu_content, parents)
-            elif isinstance(menu_content, list):  # List of options
-                submenu = menu.addMenu(menu_title)
-                for option in menu_content:
-                    action = QAction(option, self)
-                    local = copy(parents)
-                    local.extend([menu_title, option])
-                    action.triggered.connect(partial(self.optionSelected, local))
-                    submenu.addAction(action)
-                parents.clear()
-            else:  # Action
-                action = QAction(menu_title, self)
-                action.triggered.connect(menu_content)
-                menu.addAction(action)
-
-    def showMenu(self):
-        # Display the menu at the cursor position
-        self.contextMenu.exec(self.mapToGlobal(self.sender().pos()))
-
-    def optionSelected(self, tree_list):
-        print(tree_list)
-
-class ActionSelectionMenu():
-    def __init__(self):
-        self.menu_dictionary = {}
-
-        # Sample nested dictionary with three levels of depth and a list at the last level
-        nested_dict = {
-            'Servicesa': {
-                'Services_plain':  ['Option1', 'Option2', 'Option3']
-            },
-            'Servicesb': {
-                'Services_plain': {
-                    'Options': ['Option4', 'Option5', 'Option6']
-                }
-            },
-            'Servicesc': {
-                'Services_plain': {
-                    'Options': ['Option7', 'Option8', 'Option9']
-                }
-            }
-        }
-        self.menu_dictionary = nested_dict
-        
-        self.open_action_menu_button = QPushButton('Add Action')
-        self.open_action_menu_button.clicked.connect(self.showMenu)
-
-        self.contextMenu = QMenu(self)
-        self.addActionMenu(self.contextMenu, self.menu_dictionary)
-
-    def addActionMenu(self, menu, menu_dict, parents = None):
-        if not parents:
-            parents = []
-        for menu_title, menu_content in menu_dict.items():
-            if isinstance(menu_content, dict):  # Submenu
-                submenu = menu.addMenu(menu_title)
-                parents.append(menu_title)
-                self.addActionMenu(submenu, menu_content, parents)
-            elif isinstance(menu_content, list):  # List of options
-                submenu = menu.addMenu(menu_title)
-                for option in menu_content:
-                    action = QAction(option, self)
-                    local = copy(parents)
-                    local.extend([menu_title, option])
-                    action.triggered.connect(partial(self.optionSelected, local))
-                    submenu.addAction(action)
-                parents.clear()
-            else:  # Action
-                action = QAction(menu_title, self)
-                action.triggered.connect(menu_content)
-                menu.addAction(action)
-
-    def showMenu(self):
-        # Display the menu at the cursor position
-        self.contextMenu.exec(self.mapToGlobal(self.sender().pos()))
-
-    def optionSelected(self, tree_list):
-        print(tree_list)
-
-    def add_dict_to_menu(self, new_entry:dict) -> None:
-        self.menu_dictionary.update(new_entry)
-
-def main():
-    app = QApplication(sys.argv)
-    ex = NestedDictMenu()
-    sys.exit(app.exec())
-
-if __name__ == '__main__':
-    main()
+# Using the key to get a value
+key_to_retrieve = '1.key2[1].nested_key1'
+value = get_value_by_key(nested_list_example, key_to_retrieve)
+print(value)
