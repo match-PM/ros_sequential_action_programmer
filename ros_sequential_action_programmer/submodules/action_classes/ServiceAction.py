@@ -13,6 +13,9 @@ import array
 import numpy as np
 from functools import partial
 from ros_sequential_action_programmer.submodules.obj_dict_modules.dict_functions import flatten_dict_to_list, is_string_in_dict
+from typing import Union
+import re
+
 
 class ServiceAction:
     def __init__(self, node: Node, client: str, service_type: str = None, name=None) -> None:
@@ -180,22 +183,56 @@ class ServiceAction:
             return False
 
         try:
-            # Create a new service request object
             test_request = self.get_service_request(self.service_type)
-            # Set test request with dict
             value_to_set = self.get_obj_value_from_key(test_request, path_key)
+
+            # if given key leads to an array entry
+            if '[' in path_key and ']' in path_key:
+                value_is_list_entry = True
+                list_path_key = re.sub(r'\[.*?\]', '', path_key)
+                self.node.get_logger().debug(f"New path {list_path_key}")
+                index = self.get_last_index_value(path_key)
+                self.node.get_logger().debug(f"index is {index}")
+            else:
+                value_is_list_entry = False
+
+            # in case the value leads to an list entry we will process
+            if value_is_list_entry:
+                test_dict = copy.deepcopy(self.service_req_dict_implicit)
+                list_to_set = self.get_obj_value_from_key(test_dict, list_path_key)
+                self.node.get_logger().debug(f"List old '{str(list_to_set)}'")
+                self.node.get_logger().debug(f"test_dict old '{str(test_dict)}'")
+
+                if list_to_set is None:
+                    self.node.get_logger().error(f"Error occured accessing list element '{list_path_key}' in dict!")
+                    return False
+                
+                list_to_set[index] = new_value
+                
+                if not override_to_implicit:
+                    set_success = self.set_obj_value_from_key(self.service_req_dict, list_path_key, list_to_set)
+                    self.update_srv_req_obj_from_dict()
+                else:
+                    set_success = self.set_obj_value_from_key(self.service_req_dict_implicit, list_path_key, list_to_set)
+                return set_success
+            
+            # Create a new service request object
+            # Set test request with dict
             self.node.get_logger().debug(f"Path key {str(path_key)}")
             self.node.get_logger().debug(f"New value {str(new_value)}")
             self.node.get_logger().debug(f"Value to set {str(value_to_set)}")
 
             self.node.get_logger().debug(f"New value type {str(type(new_value))}")
             self.node.get_logger().debug(f"Value to set type {str(type(value_to_set))}")
+            self.node.get_logger().debug(f"{str(type(value_to_set))}")
 
             if isinstance(value_to_set, np.ndarray) and isinstance(new_value, list):
                 new_value = np.array(new_value)
 
             if isinstance(value_to_set, array.array) and isinstance(new_value, list):
                 new_value = array.array("i", new_value)
+
+            self.node.get_logger().debug(f"New value type {str(type(new_value))}")
 
             if not isinstance(new_value, type(value_to_set)) and not override_to_implicit:
                 self.node.get_logger().debug(f"Given value '{new_value}' of type '{type(new_value)}' is incompatible for '{path_key}' of type '{type(value_to_set)}'!")
@@ -204,20 +241,16 @@ class ServiceAction:
             # If the path does not lead to an existing value
             if value_to_set is None:
                 return False
-
+            
             if not override_to_implicit:
-                set_success = self.set_obj_value_from_key(
-                    self.service_req_dict, path_key, new_value
-                )
-                self.node.get_logger().debug(f"Set success {str((set_success))}")
+                set_success = self.set_obj_value_from_key(self.service_req_dict, path_key, new_value)
+                #self.node.get_logger().debug(f"Set success {str((set_success))}")
                 self.update_srv_req_obj_from_dict()
             else:
-                self.node.get_logger().debug(f"Set success {str((self.service_req_dict_implicit))}")
-                set_success = self.set_obj_value_from_key(
-                    self.service_req_dict_implicit, path_key, new_value
-                )
-                self.node.get_logger().debug(f"Set success {str((self.service_req_dict_implicit))}")
-                self.node.get_logger().debug(f"Set success {str((set_success))}")
+                #self.node.get_logger().debug(f"Set success {str((self.service_req_dict_implicit))}")
+                set_success = self.set_obj_value_from_key(self.service_req_dict_implicit, path_key, new_value)
+                #self.node.get_logger().debug(f"Set success {str((self.service_req_dict_implicit))}")
+                #self.node.get_logger().debug(f"Set success {str((set_success))}")
 
             return set_success
         except:
@@ -270,9 +303,10 @@ class ServiceAction:
                     if isinstance(value, bool):
                         bool_list.append(full_key)
 
-        check_for_bool_values(
-            self.default_service_res_dict, self.service_res_bool_messages
-        )
+        if self.default_service_res_dict is not None:
+            check_for_bool_values(self.default_service_res_dict, self.service_res_bool_messages)
+        else:
+            self.node.get_logger().warn("Init of default service response not possible")
 
     def get_service_bool_fields(self):
         """
@@ -406,11 +440,48 @@ class ServiceAction:
         except (KeyError, IndexError, AttributeError, ValueError):
             return False
 
-    @staticmethod
-    def get_obj_value_from_key(obj: any, path_key: str) -> any:
+
+    def get_last_index_value(self, input_string:str)->int:
+        # Use regular expression to find all occurrences of '[x]' and extract 'x' from the last one
+        matches = re.findall(r'\[(\d+)\]', input_string)
+        
+        if matches:
+            return int(matches[-1])
+        else:
+            return None
+    
+    #@staticmethod
+    # def get_obj_value_from_key(obj: any, path_key: str) -> any:
+    #     """
+    #     This function iterates through an object (any object, list, dict) and returns the value given in the path.
+    #     E.a. path_key = 'Foo.Fuu.Faa'
+    #     """
+    #     if path_key is None or obj is None:
+    #         return None
+
+    #     keys = path_key.split(".")
+    #     current_value = obj
+
+    #     try:
+    #         for key in keys:
+    #             if isinstance(current_value, dict) and key in current_value:
+    #                 current_value = current_value[key]
+    #             elif isinstance(current_value, list):
+    #                 key = int(key)
+    #                 current_value = current_value[key]
+    #             elif hasattr(current_value, key):
+    #                 current_value = getattr(current_value, key)
+    #             else:
+    #                 return None
+    #     except (KeyError, IndexError, AttributeError, ValueError):
+    #         return None
+
+    #     return current_valu
+    @staticmethod   
+    def get_obj_value_from_key(obj: Union[dict, list, any], path_key: str) -> any:
         """
         This function iterates through an object (any object, list, dict) and returns the value given in the path.
-        E.a. path_key = 'Foo.Fuu.Faa'
+        E.g. path_key = 'Foo.Fuu.Faa'
         """
         if path_key is None or obj is None:
             return None
@@ -423,13 +494,16 @@ class ServiceAction:
                 if isinstance(current_value, dict) and key in current_value:
                     current_value = current_value[key]
                 elif isinstance(current_value, list):
-                    key = int(key)
-                    current_value = current_value[key]
+                    try:
+                        key = int(key)
+                        current_value = current_value[key]
+                    except (ValueError, IndexError):
+                        return None
                 elif hasattr(current_value, key):
                     current_value = getattr(current_value, key)
                 else:
                     return None
-        except (KeyError, IndexError, AttributeError, ValueError):
+        except (KeyError, AttributeError):
             return None
 
         return current_value

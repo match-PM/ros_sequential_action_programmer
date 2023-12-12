@@ -1,7 +1,8 @@
 
 from collections import OrderedDict
+import json
 
-def convert_to_ordered_dict(dictionary):
+def convert_to_ordered_dict(dictionary:dict)-> OrderedDict:
     if isinstance(dictionary, dict):
         return OrderedDict(
             (key, convert_to_ordered_dict(value)) for key, value in dictionary.items()
@@ -11,6 +12,9 @@ def convert_to_ordered_dict(dictionary):
     else:
         return dictionary
         
+def convert_ordered_dict_to_ordered_dict(dictionary:OrderedDict)->dict:
+    conv_dictionary = json.loads(json.dumps(dictionary))
+    return conv_dictionary
 
 def get_key_value_pairs_from_dict_OLD(
         dictionary: OrderedDict,

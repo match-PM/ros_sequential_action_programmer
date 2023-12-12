@@ -30,10 +30,12 @@ class RsapApp(QMainWindow):
         self.service_node = service_node
         
         self.action_sequence_builder = RosSequentialActionProgrammer(service_node)
-        self.action_sequence_builder.append_service_to_action_list('/pm_robot_gonio_left_controller/get_parameter_types')
-        self.action_sequence_builder.append_service_to_action_list('/get_planning_scene')
-        self.action_sequence_builder.append_service_to_action_list('/compute_fk')
-        self.action_sequence_builder.append_service_to_action_list(service_client='/object_manager/create_ref_frame', service_type='spawn_object_interfaces/srv/CreateRefFrame')
+        # self.action_sequence_builder.append_service_to_action_list('/pm_robot_gonio_left_controller/get_parameter_types')
+        # self.action_sequence_builder.append_service_to_action_list('/get_planning_scene')
+        # self.action_sequence_builder.append_service_to_action_list('/compute_fk')
+        # self.action_sequence_builder.append_service_to_action_list(service_client='/object_manager/create_ref_frame', service_type='spawn_object_interfaces/srv/CreateRefFrame')
+        self.action_sequence_builder.load_from_JSON('/home/mll/Desktop/object_spawner_tests.json')
+        
         #print(self.action_sequence_builder.get_possible_srv_res_fields_at_index(index=3, target_key='frame_name'))
         self.initUI()
         self.init_actions_list()
@@ -424,7 +426,6 @@ class RsapApp(QMainWindow):
 
             # Apply values to service request dict
             self.action_sequence_builder.get_action_at_index(index).name = self.action_name_edit.text()
-
             set_success = self.action_sequence_builder.process_action_dict_at_index(index=index,mode=SET_IMPLICIT_SRV_DICT, input_impl_dict=self.handle_dict)
 
             if set_success and set_error_identifier_success:
@@ -456,10 +457,11 @@ class RsapApp(QMainWindow):
 
                 # Convert the input text to the appropriate data type
                 value = text
-                if text.isdigit():
-                    value = int(text)
-                elif '.' in text and all(part.isdigit() for part in text.split('.')):
+                if '.' in text and all(part.replace('.', '').lstrip('-').isdigit() for part in text.split('.', 1)):
+                    # Modified condition to allow negative floats
                     value = float(text)
+                elif text.lstrip('-').isdigit():
+                    value = int(text)
                 elif text == 'True':
                     value = True
                 elif text == 'False':

@@ -687,7 +687,7 @@ class RosSequentialActionProgrammer:
             if not set_success:
                 if not mode == CHECK_COMPATIBILITY_ONLY:
                     self.node.get_logger().error(
-                        f"In {self.get_action_at_index(index).name}, failed at setting key '{str(key)}' to value: '{str(value)}'"
+                        f"In {self.get_action_at_index(index).name}, failed at setting key '{str(key)}' to value: '{str(value)}' of type '{str(type(value))}'."
                     )
                     if is_reference:
                         self.node.get_logger().error(

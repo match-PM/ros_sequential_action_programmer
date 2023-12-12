@@ -1,58 +1,44 @@
-def get_value_by_key(obj, key):
+from collections import OrderedDict
+from typing import Union
+import json
+
+def get_obj_value_from_key(obj: Union[dict, list, any], path_key: str) -> any:
     """
-    Retrieves the value from a nested object based on the key.
-
-    Args:
-    - obj: The nested object to search for the value.
-    - key: The key in the format 'key2.subkey2[1].nested_key1'.
-
-    Returns:
-    - The value corresponding to the provided key, or None if the key is not found.
+    This function iterates through an object (any object, list, dict) and returns the value given in the path.
+    E.g. path_key = 'Foo.Fuu.Faa'
     """
-    keys = key.split('.')
-    current_obj = obj
+    if path_key is None or obj is None:
+        return None
 
-    for key_part in keys:
-        if '[' in key_part:
-            key_name, index_str = key_part.split('[')
-            index = int(index_str[:-1])  # Remove the trailing ']'
-            try:
-                current_obj = current_obj[key_name][index]
-            except (KeyError, IndexError, TypeError):
+    keys = path_key.split(".")
+    current_value = obj
+
+    try:
+        for key in keys:
+            if isinstance(current_value, dict) and key in current_value:
+                current_value = current_value[key]
+            elif isinstance(current_value, list):
+                try:
+                    key = int(key)
+                    current_value = current_value[key]
+                except (ValueError, IndexError):
+                    return None
+            elif hasattr(current_value, key):
+                current_value = getattr(current_value, key)
+            else:
                 return None
-        else:
-            try:
-                current_obj = current_obj[key_part]
-            except (KeyError, TypeError):
-                return None
+    except (KeyError, AttributeError):
+        return None
 
-    return current_obj
+    return current_value
 
-# Example usage with a nested dictionary
-nested_dict_example = {
-    'key1': 'value1',
-    'key2': {
-        'subkey1': 'subvalue1',
-        'subkey2': [
-            {'nested_key1': 'nested_value1'},
-            {'nested_key2': 'nested_value2'}
-        ]
-    },
-    'key3': [1, 2, 3]
-}
 
-# Using the key to get a value
-key_to_retrieve = 'key2.subkey2[1].nested_key2'
-value = get_value_by_key(nested_dict_example, key_to_retrieve)
-print(value)
 
-# Example usage with a nested list
-nested_list_example = [
-    {'key1': 'value1'},
-    {'key2': ['subvalue1', {'nested_key1': 'nested_value1'}]}
-]
+test = OrderedDict([('ref_plane', OrderedDict([('ref_plane_name', ''), ('point_names', ['', '', ''])]))])
+#test = convert_ordered_dict_to_ordered_dict(test)
+print(test)
+test_key = 'ref_plane.point_names'
 
-# Using the key to get a value
-key_to_retrieve = '1.key2[1].nested_key1'
-value = get_value_by_key(nested_list_example, key_to_retrieve)
-print(value)
+test2 = get_obj_value_from_key((test), test_key)
+test2[0] = 'test'
+print(test2)
