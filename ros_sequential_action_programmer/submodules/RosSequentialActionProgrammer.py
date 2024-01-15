@@ -37,6 +37,7 @@ class RosSequentialActionProgrammer:
         self.action_list: list[ServiceAction,UserInteractionAction] = []
         self.node = node
         self.folder_path = None
+        self.action_file_path = None
         self.current_action_index = 0
         self.current_action = None
 
@@ -173,9 +174,10 @@ class RosSequentialActionProgrammer:
             # clear action_list to be empty
             self.action_list.clear()
         except Exception as e:
-            self.node.get_logger().error("Error opening file")
+            self.node.get_logger().error(f"Error opening file '{file_path}'!")
 
         if file_data:
+            self.action_file_path = file_path
             self.folder_path = os.path.dirname(file_path)
             self.name = file_data["name"]
 
@@ -223,6 +225,7 @@ class RosSequentialActionProgrammer:
         """
 
         if (self.folder_path is not None) and (self.name is not None):
+            self.action_file_path = f"{self.folder_path}/{self.name}.json"
             process_dict = {}
             process_dict["name"] = self.name
             process_dict["saved_at"] = str(datetime.now())  # Add a timestamp

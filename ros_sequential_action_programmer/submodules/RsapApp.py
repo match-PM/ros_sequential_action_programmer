@@ -25,8 +25,6 @@ from ros_sequential_action_programmer.submodules.action_classes.UserInteractionA
 class RsapApp(QMainWindow):
     def __init__(self, service_node:Node):
         super().__init__()
-        self.function_parameter_widgets = []    # tis is a list of widgets that represent all the parameter of a vision function; it is used to display widgets when a vision function is klicked
-        #self.qt_list_of_active_services = []
         self.service_node = service_node
         
         self.action_sequence_builder = RosSequentialActionProgrammer(service_node)
@@ -34,8 +32,8 @@ class RsapApp(QMainWindow):
         # self.action_sequence_builder.append_service_to_action_list('/get_planning_scene')
         # self.action_sequence_builder.append_service_to_action_list('/compute_fk')
         # self.action_sequence_builder.append_service_to_action_list(service_client='/object_manager/create_ref_frame', service_type='spawn_object_interfaces/srv/CreateRefFrame')
-        self.action_sequence_builder.load_from_JSON('/home/mll/Desktop/object_spawner_tests.json')
-        
+        # load the recent file (last opened file)
+        self.load_recent_file()
         #print(self.action_sequence_builder.get_possible_srv_res_fields_at_index(index=3, target_key='frame_name'))
         self.initUI()
         self.init_actions_list()
@@ -67,7 +65,10 @@ class RsapApp(QMainWindow):
         font = QFont()
         font.setPointSize(14)
         self.action_sequence_name_widget.setFont(font)
-        self.set_widget_action_sequence_name('- No name given - ')
+        if self.action_sequence_builder.name is None:
+            self.set_widget_action_sequence_name('- No name given - ')
+        else:
+            self.set_widget_action_sequence_name(self.action_sequence_builder.name)
         layout.addWidget(self.action_sequence_name_widget,0,1,1,2)
 
         toolbar_layout = QVBoxLayout()
@@ -489,6 +490,7 @@ class RsapApp(QMainWindow):
             self.text_output.clear()
             self.text_output.append(f"Opening: {file_path}")
             success = self.action_sequence_builder.load_from_JSON(file_path)
+            self.set_recent_file()
             if success:
                 self.init_actions_list()
                 self.set_widget_action_sequence_name(self.action_sequence_builder.name)
@@ -542,6 +544,7 @@ class RsapApp(QMainWindow):
             self.set_widget_action_sequence_name(self.action_sequence_builder.name)
             # update the last saved timestamp
             self.update_last_saved()
+            self.set_recent_file()
             
         self.clear_action_parameter_layout()
         self.save_as = False                
@@ -556,6 +559,36 @@ class RsapApp(QMainWindow):
                                             service_type=service_type)
         else:
             pass
+
+    def load_recent_file(self):
+        """
+        Loads the last opened file from the yaml file.
+        """
+        path = get_package_share_directory('ros_sequential_action_programmer')
+
+        # Specify the path to your YAML file
+        yaml_file_path = f"{path}/recent_file.yaml"
+        try:
+            # Read the content of the YAML file
+            with open(yaml_file_path, 'r') as file:
+                yaml_content = yaml.safe_load(file)
+
+            process_file_path = yaml_content['recent_file'] 
+            self.action_sequence_builder.load_from_JSON(process_file_path)
+        except:
+            self.service_node.get_logger().warn("No recent file found! Skipping loading of recent file!")
+
+    def set_recent_file(self):
+        """
+        Saves the last opened file to the yaml file.
+        """
+        recent_file_dict = {}
+        recent_file_dict['recent_file'] = self.action_sequence_builder.action_file_path
+        path = get_package_share_directory('ros_sequential_action_programmer')
+        # Specify the path to your YAML file
+        yaml_file_path = f"{path}/recent_file.yaml"
+        with open(yaml_file_path, 'w') as file:
+            yaml.dump(recent_file_dict, file, default_flow_style=False)
 
     def stop_execution(self) -> None:
         self.stop_execution = True
