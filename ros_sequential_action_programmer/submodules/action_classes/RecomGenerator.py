@@ -6,6 +6,7 @@ from tf2_msgs.msg import TFMessage
 from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
+import rclpy
 
 class RecomGenerator():
     def __init__(self,ros_node:Node) -> None:
@@ -21,8 +22,8 @@ class RecomGenerator():
                                                         '/tf_static',
                                                         self.tf_static_callback,
                                                         10)
-        #self.tf_buffer = Buffer()
-        #self.tf_listener = TransformListener(self.tf_buffer, self)
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self.ros_node, spin_thread=True)
 
         #self.timer = self.ros_node.create_timer(1.0, self.on_timer)
 
@@ -73,12 +74,33 @@ class RecomGenerator():
                 #self.vision_assistant_config=config["vision_assistant_config"]
             vision_processes = self.get_files_in_dir(directory=process_library_path,file_end='.json', exclude_str=['results'])
             vision_cameras = self.get_files_in_dir(directory=camera_config_path,file_end='.yaml', exclude_str=['vision_assistant'])
-            self.recommendations.append({'Vision-Processes': vision_processes})
-            self.recommendations.append({'Vision-Cameras': vision_cameras})
+            self.append_to_recommendation({'Vision-Processes': vision_processes})
+            self.append_to_recommendation({'Vision-Cameras': vision_cameras})
         except:
             print("Opening package failed! Package 'pm_vision_manager' not found!")
     
-    def get_files_in_dir(self, directory: str, file_end: str, exclude_str:list = []):
+    def update_frame_list(self):
+        frames = []
+        frame_dict = yaml.safe_load(self.tf_buffer.all_frames_as_yaml())
+        # extract frames from dict
+        if frame_dict == []:
+            frames = []
+        else:
+            frames = list(frame_dict.keys())
+        self.append_to_recommendation({'TF_frames':frames})
+
+    def update_recommendations(self):
+        self.update_frame_list()
+        self.vision_init()
+
+    def get_files_in_dir(self, directory: str, file_end: str, exclude_str:list[str] = []):
+        """
+        This function returns a list of files in the directory with the given file_end.
+        Parameters:
+        directory: str
+        file_end: str
+        exclude_str: list[str]
+        """
         files = []
         for foldername, subfolders, filenames in os.walk(directory):
             for filename in filenames:
@@ -92,6 +114,7 @@ class RecomGenerator():
         return files
     
     def get_recommendations(self)->list:
+        self.update_recommendations()
         return self.recommendations
     
     def append_to_recommendation(self,input_recom_dict:dict):

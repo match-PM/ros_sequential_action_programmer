@@ -748,6 +748,48 @@ class RosSequentialActionProgrammer:
         self.action_sequence_log["action_sequence_name"] = self.name
         self.action_sequence_log["action_log"] = self.action_log
 
+    def copy_action_at_index_and_insert(self, index: int = None) -> bool:
+        """
+        This function copies the action at index and inserts it behind the action at the index.
+        """
+        if index is None:
+            index = self.current_action_index
+
+        if index < len(self.action_list):
+            new_action = copy.deepcopy(self.action_list[index])
+            self.action_list.insert(index + 1, new_action)
+            return True
+        else:
+            return False
+        
+    def copy_actions_from_index_list_and_insert(self, index_list: list[int] = None) -> bool:
+        """
+        This function copies the actions at indexes specified in the list and inserts it behind the last action of the indexes.
+        If no list is given, the current action index will be used.
+        """
+
+        if index_list is None:
+            index = self.current_action_index
+
+        insert_index = max(index_list)
+
+        for index in index_list:
+            if index < len(self.action_list):
+                new_action = copy.deepcopy(self.action_list[index])
+                self.action_list.insert(insert_index + 1, new_action)
+                insert_index += 1
+            else:
+                return False
+            
+        return True
+    
+        # if index < len(self.action_list):
+        #     new_action = copy.deepcopy(self.action_list[index])
+        #     self.action_list.insert(index + 1, new_action)
+        #     return True
+        # else:
+        #     return False
+        
     def save_action_sequence_log(self) -> bool:
         """
         Saves the action sequence log to the folder.

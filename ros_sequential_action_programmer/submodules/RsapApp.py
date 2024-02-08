@@ -2,7 +2,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread
 from PyQt6.QtWidgets import QScrollArea, QDialog, QHBoxLayout, QInputDialog, QTreeWidget, QTreeWidgetItem, QApplication, QGridLayout, QFrame, QMainWindow, QListWidget, QListWidgetItem, QDoubleSpinBox, QWidget, QVBoxLayout, QPushButton, QCheckBox, QLineEdit, QComboBox, QTextEdit,QLabel,QSlider, QSpinBox, QFontDialog, QFileDialog
 from PyQt6.QtGui import QColor, QTextCursor, QFont, QAction
 import os
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import get_package_share_directory, PackageNotFoundError
 from PyQt6 import QtCore
 from functools import partial
 import yaml
@@ -20,6 +20,8 @@ from ros_sequential_action_programmer.submodules.action_classes.ServiceAction im
 from rosidl_runtime_py.get_interfaces import get_service_interfaces
 import ast
 
+from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_config import PmRobotConfigWidget
+from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import PmDashboardApp
 from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI
 
 class RsapApp(QMainWindow):
@@ -44,6 +46,7 @@ class RsapApp(QMainWindow):
         #self.action_exectuion_thread = QThread(parent=service_node.executor)
         #self.action_exectuion_thread.run = self.execute_current_action
         #self.action_exectuion_thread.finished.connect(self.end_current_action_execution)
+        self.sub_window_list = []
 
 
     def initUI(self):
@@ -82,12 +85,12 @@ class RsapApp(QMainWindow):
         delete_button = QPushButton("Delete \n Selected")
         delete_button.clicked.connect(self.delete_action_from_sequence)
         toolbar_layout.addWidget(delete_button,alignment=Qt.AlignmentFlag.AlignTop)
-        layout.addLayout(toolbar_layout,1,0,alignment=Qt.AlignmentFlag.AlignTop)
 
-        # # Add vision functions combo box
-        # self.service_combo_box = QComboBox()
-        # self.service_combo_box.activated.connect(self.new_service_dialog)  # Connect the activated signal to addItem
-        # layout.addWidget(self.service_combo_box,1,0)
+        copy_and_insert_button = QPushButton("Copy and \n Insert")
+        copy_and_insert_button.clicked.connect(self.copy_and_insert_actions)
+        toolbar_layout.addWidget(copy_and_insert_button,alignment=Qt.AlignmentFlag.AlignTop)
+
+        layout.addLayout(toolbar_layout,1,0,alignment=Qt.AlignmentFlag.AlignTop)
 
         execute_layout = QHBoxLayout()
         # Add combobox for vision pipline building
@@ -114,7 +117,6 @@ class RsapApp(QMainWindow):
         # update_service_button = QPushButton("Update Services")
         # update_service_button.clicked.connect(self.initialize_active_service_list)
         # layout.addWidget(update_service_button,6,0)
-        
 
         # add textbox for string output
         self.text_output = AppTextOutput()
@@ -133,8 +135,10 @@ class RsapApp(QMainWindow):
 
         # Create a menu bar
         menubar = self.menuBar()
-        menubar.setStyleSheet("QMenuBar { font-size: 20px; }")
+        menubar.setStyleSheet("QMenuBar { font-size: 18px; }")
         file_menu = menubar.addMenu("File")
+        app_config_menu = menubar.addMenu("App Config")
+        pm_robot_tools_menu = menubar.addMenu("PM Robot Tools")
 
         # Create "New" action
         new_action = QAction("New process", self)
@@ -154,6 +158,14 @@ class RsapApp(QMainWindow):
         save_as_action.triggered.connect(self.save_process_as)
         file_menu.addAction(save_as_action)
        
+        open_pm_robot_config = QAction("PM Robot Config", self)
+        open_pm_robot_config.triggered.connect(partial(self.open_sub_window, PmRobotConfigWidget))
+        pm_robot_tools_menu.addAction(open_pm_robot_config)
+
+        open_pm_robot_tools = QAction("PM Robot Jog Panel", self)
+        open_pm_robot_tools.triggered.connect(partial(self.open_sub_window, PmDashboardApp))
+        pm_robot_tools_menu.addAction(open_pm_robot_tools)
+
         self.log_layout = QVBoxLayout()
         self.log_widget = QTreeWidget(self)
         self.log_widget.setHeaderLabel("Log Viewer")
@@ -191,7 +203,7 @@ class RsapApp(QMainWindow):
         self.action_menu.init_action_menu()
         self.action_menu.showMenu()
 
-    def append_selected_action_from_menu(self, menu_output):
+    def append_selected_action_from_menu(self, menu_output:list[str]):
         #print(menu_output)
         if menu_output[0] == 'Services':
             #print((menu_output[1]))
@@ -666,6 +678,29 @@ class RsapApp(QMainWindow):
     def clear_log_viewer(self):
         self.log_widget.clear()
 
+    def copy_and_insert_actions(self):
+        #index = self.checkbox_list.currentRow()
+        selected_indexes = self.checkbox_list.selectedIndexes()
+        selected_rows_indexes = [index.row() for index in selected_indexes]
+        self.action_sequence_builder.copy_actions_from_index_list_and_insert(selected_rows_indexes)
+        #self.action_sequence_builder.copy_action_at_index_and_insert(index)
+        self.init_actions_list()
+        self.checkbox_list.setCurrentRow(max(selected_rows_indexes)+1)
+        self.action_selected()
+
+    def open_sub_window(self, window_class):
+        # this cbk can only be used for classes inhereting from QWidget. 
+        # The classes should have one optional argument, which is the a rclpy.node.Node
+        try:
+            self.new_window = window_class(self.service_node)
+            self.new_window.show()
+        except ModuleNotFoundError as e:
+            self.service_node.get_logger().error(f"Error opening sub window: {e}")
+        except PackageNotFoundError as e:
+            self.service_node.get_logger().error(f"Error opening sub window: {e}")
+        except Exception as e:
+            self.service_node.get_logger().error(f"Error opening sub window: {e}")
+
 class AppTextOutput(QTextEdit):
     def __init__(self):
         super().__init__()
@@ -714,6 +749,7 @@ class ReorderableCheckBoxListWidget(QListWidget):
         self.setAcceptDrops(True)
         self.setDropIndicatorShown(True)
         self.setDragDropMode(QListWidget.DragDropMode.InternalMove)
+        self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
 
     def get_widget_list_names(self):
         name_list=[]
