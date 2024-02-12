@@ -410,6 +410,13 @@ class RosSequentialActionProgrammer:
 
         return service_response_dict_list
 
+    def get_active_client_whtlist(self)-> list:
+        self.initialize_service_list()
+        client_list = [t[0] for t in self.list_of_active_services]
+        service_type_list = [t[1][0] for t in self.list_of_active_services]
+
+        return self.get_client_whitelist(clients_list = client_list, service_list = service_type_list)
+
     def get_active_client_blklist(self)-> list:
         self.initialize_service_list()
         client_list = [t[0] for t in self.list_of_active_services]
@@ -423,6 +430,32 @@ class RosSequentialActionProgrammer:
         service_type_list = [t[1] for t in self.list_of_memorized_services]
         return self.get_client_blacklist(clients_list = client_list, service_list = service_type_list)
     
+    def get_client_whitelist(self, clients_list: list, service_list: list)->list:
+        """
+        This function returns only clients, that are listed in the whitelist.yaml
+        """
+        client_whitelisted = []
+        try:
+            package_share_directory = get_package_share_directory('ros_sequential_action_programmer')
+            whitelist_path = package_share_directory + '/whitelist.yaml'
+            with open(whitelist_path, 'r') as file:
+                FileData = yaml.safe_load(file)
+                list_of_wht_clients = FileData['clients_by_name']
+                list_of_wht_types = FileData['clients_by_type']
+
+            # If list in yaml empty list will be None -> set to empty
+            if not list_of_wht_clients:
+                list_of_wht_clients = []
+            if not list_of_wht_types:
+                list_of_wht_types= []
+            
+            client_whitelisted = [s for s in clients_list if any(client in s for client in list_of_wht_clients)]
+
+            return client_whitelisted
+        except Exception as e:
+            self.node.get_logger().error(e)
+            self.node.get_logger().error(f"Error opening whitelist. Check formatting of '{whitelist_path}'!")
+
     def get_client_blacklist(self, clients_list: list, service_list: list)->list:
         client_blacklisted = []
         try:
@@ -448,13 +481,14 @@ class RosSequentialActionProgrammer:
             self.node.get_logger().error(f"Error opening blacklist. Check formatting of '{blacklist_path}'!")
 
 
-    def get_all_service_req_res_dict(self):
+    def get_all_service_req_res_dict(self, list_of_clients):
         """
-        This function returns all dict of service request and responses.
+        This function returns all dict of service request and responses. 
+        !!Changes!!: list_of_client as input
         """
         self.initialize_service_list()
         service_dict = {}
-        for client in self.list_of_active_clients:
+        for client in list_of_clients:
             try:
                 request = ServiceAction.get_service_request(
                     self.get_service_type_for_client(client)
@@ -490,7 +524,7 @@ class RosSequentialActionProgrammer:
             return result_dict
 
         merged_dict = {}
-        data = self.get_all_service_req_res_dict()
+        data = self.get_all_service_req_res_dict(self.list_of_active_clients)
         path = get_package_share_directory("ros_sequential_action_programmer")
         file_name = "all_service_req_res_dicts.json"
         file_path = f"{path}/{file_name}"

@@ -22,6 +22,7 @@ import ast
 
 from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_config import PmRobotConfigWidget
 from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import PmDashboardApp
+from ros_sequential_action_programmer.submodules.co_pilot.PmCoPilotApp import PmCoPilotApp
 from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI
 
 class RsapApp(QMainWindow):
@@ -166,6 +167,11 @@ class RsapApp(QMainWindow):
         open_pm_robot_tools.triggered.connect(partial(self.open_sub_window, PmDashboardApp))
         pm_robot_tools_menu.addAction(open_pm_robot_tools)
 
+        open_pm_robot_co_pilot = QAction("PM Co-Pilot", self)
+        # open_pm_robot_co_pilot.triggered.connect(self.openCoPilot)
+        open_pm_robot_co_pilot.triggered.connect(partial(self.open_sub_window, PmCoPilotApp))
+        pm_robot_tools_menu.addAction(open_pm_robot_co_pilot)
+
         self.log_layout = QVBoxLayout()
         self.log_widget = QTreeWidget(self)
         self.log_widget.setHeaderLabel("Log Viewer")
@@ -179,6 +185,10 @@ class RsapApp(QMainWindow):
         central_widget.setLayout(layout)
         self.setGeometry(100, 100, 1800, 1200)
         self.execute_step_button.setEnabled(True)
+
+    def openCoPilot(self):
+        self.co_pilot_window = PmCoPilotApp(self.service_node, self.action_sequence_builder)
+        self.co_pilot_window.show()
 
     def show_action_menu(self):
         self.action_sequence_builder.initialize_service_list()
