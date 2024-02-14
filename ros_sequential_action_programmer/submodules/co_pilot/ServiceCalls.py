@@ -43,10 +43,10 @@ class ServiceCalls:
             print(self.service_action.service_req_dict)
             print(success_set_values)
 
-            success_execute = self.service_action.execute()
+            success_execute, service_response = self.service_action.execute()
             print(success_execute)    
 
-            return success_execute
+            return service_response
         else:
             return False
 

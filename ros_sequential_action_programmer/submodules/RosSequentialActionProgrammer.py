@@ -295,7 +295,7 @@ class RosSequentialActionProgrammer:
                 if not set_success:
                     raise Exception
 
-            success_exec = self.get_action_at_index(self.current_action_index).execute()
+            success_exec, service_response = self.get_action_at_index(self.current_action_index).execute()
             # append action log to history
             self.append_action_log(
                 index=self.current_action_index,

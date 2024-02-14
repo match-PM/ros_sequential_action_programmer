@@ -16,57 +16,14 @@ class AssistantAPI:
         self.action_sequence_node = RosSequentialActionProgrammer(service_node)
         self.service_builder = ServiceCalls(service_node)
         
-        path = get_package_share_directory("ros_sequential_action_programmer")
-        file_name = "services_and_frames.json"
-        file_path = f"{path}/{file_name}"
-
-        # Get current tf_static frames
-        tf_data = []
-        try:
-            tf_data = self.action_sequence_node.recommendations.get_recommendations()
-
-            tf_data = tf_data[1]['TF_static']
-        except Exception:
-            self.service_node.get_logger().warn("tf_static topic not active!")
-
-
-        # Get all services that are included in the whitelist.yaml
-        data = self.action_sequence_node.get_all_service_req_res_dict(self.action_sequence_node.get_active_client_whtlist())
+        self.path = get_package_share_directory("ros_sequential_action_programmer")
         
-        if data == {}:
-            self.service_node.get_logger().warn("No active services!")
-
-        data['Frames'] = tf_data
-
-        try:
-            with open(file_path, 'w') as file:
-                json.dump(data, file)
-
-            self.service_node.get_logger().info(f"List saved to {file_path}")
-
-        except IOError as e:
-            self.service_node.get_logger().error(f"An error occurred while writing the file: {e}")
-
-        except Exception as e:
-            self.service_node.get_logger().error(f"An unexpected error occurred: {e}")
-        
+        # Init client
         self.client = OpenAI()
         self.client.api_key = os.environ["OPENAI_API_KEY"]
         
 
-
-        file = self.client.files.create(
-            file=open(file_path, "rb"),
-            purpose='assistants'
-        )
-
-        #Call this to get the list of all uploaded files
-        file_list = self.client.files.list()
-
-        #Grab the ID of the uploaded earlier
-        self.file_id = file_list.data[0].id
-
-        config_path = path + '/OpenAI_config.yaml'        
+        config_path = self.path + '/OpenAI_config.yaml'        
         with open(config_path, 'r') as file:
             config_data = yaml.safe_load(file)
             gpt_model = config_data['gpt_model'][0]
@@ -89,18 +46,21 @@ class AssistantAPI:
             self.my_assistant = self.client.beta.assistants.retrieve(self.assistant_id)
             # self.client.beta.assistants.delete(self.file_id)
             self.assistant = self.client.beta.assistants.update(
-                assistant_id=self.assistant_id,
-                file_ids=[self.file_id]
+                assistant_id=self.assistant_id
             )
 
         else:
             self.service_node.get_logger().warn(f"No Assistant defined! A new one is created!")
 
+            # Upload file
+            self.update_and_upload_file()
+
+            self.file_id = self.get_file_id()
+
             #call this once to create the assistant
             self.assistant = self.client.beta.assistants.create(
                 name="PM Co Pilot",
                 instructions=instruction_prompt,
-                # model = "gpt-3.5-turbo-1106",
                 model = gpt_model,
                 tools = tool,
                 file_ids=[self.file_id]
@@ -118,6 +78,58 @@ class AssistantAPI:
         self.service_node.get_logger().info("Co-Pilot AssistantAPI initialized!")
 
 
+    def get_file_id(self):
+        #Call this to get the list of all uploaded files
+        file_list = self.client.files.list()
+
+        #Grab the ID of the uploaded earlier
+        file_id = file_list.data[0].id
+        return file_id
+    
+    
+    def update_and_upload_file(self):
+
+        file_name = "services_and_frames.json"
+        file_path = f"{self.path}/{file_name}"
+
+        # # Get current tf_static frames
+        # tf_data = []
+        # try:
+        #     tf_data = self.action_sequence_node.recommendations.get_recommendations()
+
+        #     tf_data = tf_data[1]['TF_static']
+        # except Exception:
+        #     self.service_node.get_logger().warn("tf_static topic not active!")
+
+
+        # # Get all services that are included in the whitelist.yaml
+        # data = self.action_sequence_node.get_all_service_req_res_dict(self.action_sequence_node.get_active_client_whtlist())
+        
+        # if data == {}:
+        #     self.service_node.get_logger().warn("No active services!")
+
+        # data['Frames'] = tf_data
+
+        # # Save json-file
+        # try:
+        #     with open(file_path, 'w') as file:
+        #         json.dump(data, file)
+
+        #     self.service_node.get_logger().info(f"List saved to {file_path}")
+
+        # except IOError as e:
+        #     self.service_node.get_logger().error(f"An error occurred while writing the file: {e}")
+
+        # except Exception as e:
+        #     self.service_node.get_logger().error(f"An unexpected error occurred: {e}")
+
+        # upload file to openAI API
+        file = self.client.files.create(
+            file=open(file_path, "rb"),
+            purpose='assistants'
+        )
+
+    
     def add_message(self,message:str):
         #add a user massage to the thread
         assistant_message = self.client.beta.threads.messages.create(
@@ -170,9 +182,10 @@ class AssistantAPI:
             #     print(f"Error parsing JSON for tool {tool_call_id}: {function_call_args['error']}")
             #     output = "Function parameters not formatted as a json!"
             if (function_name == 'ServiceCall'):
-                output=self.service_builder.execute_service_call(srv_values=function_arg)
-            elif (function_name == 'Move_To_Frame'):
-                output=True
+                response=self.service_builder.execute_service_call(srv_values=function_arg)
+
+            output = json.dumps(response)
+            self.service_node.get_logger().info(f"output {output}")
 
             self.tools_output_array.append({"tool_call_id": tool_call_id, "output": output})
 

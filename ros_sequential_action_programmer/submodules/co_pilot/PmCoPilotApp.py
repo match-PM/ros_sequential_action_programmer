@@ -1,12 +1,21 @@
 import sys
 import time
-import json
+import os
 from rclpy.node import Node
+
+import speech_recognition as sr
+import pyttsx3
+# import whisper
+from pydub import AudioSegment
+from pydub.playback import play
+import io
+
+from openai import OpenAI
 
 from PyQt6.QtGui import QIcon, QFont, QPalette, QColor, QTextCursor, QTextBlockFormat, QTextCharFormat
 from PyQt6.QtWidgets import QLabel, QDialog, QApplication, QMainWindow, QWidget, QVBoxLayout, QTextEdit, QPushButton, QStyleFactory
 from PyQt6.QtCore import QEvent, QObject, pyqtSignal, QThread, QSize, QRect, QPoint
-from openai import OpenAI
+
 from ros_sequential_action_programmer.submodules.co_pilot.AssistantAPI import AssistantAPI
 
 class InitializationWorker(QObject):
@@ -22,14 +31,75 @@ class InitializationWorker(QObject):
         # Emit signal once initialization is complete
         self.initializationComplete.emit(assistantAPI)
 
+class SpeechWorker(QObject):
+    
+    # textReceived = pyqtSignal(str)
+    errorOccurred = pyqtSignal(str)
+    finished = pyqtSignal(str)
+
+    def __init__(self, service_node: Node):
+        super().__init__()
+        self.service_node = service_node
+        
+        self.client = OpenAI()
+        self.client.api_key = os.environ["OPENAI_API_KEY"]
+
+    def run(self):
+        # Initialize the recognizer
+        r = sr.Recognizer()
+        with sr.Microphone() as source:
+            self.service_node.get_logger().info("Speech Recognition initialized!")
+            try:
+                audio = r.listen(source,timeout=2,phrase_time_limit=2)
+                
+                # Convert the audio data to an audio file format (e.g., WAV)
+                audio_data = audio.get_wav_data()
+                # Use io.BytesIO to create a file-like object from the byte data
+                wav_audio = io.BytesIO(audio_data)
+
+                # Load the audio file using pydub (interprets the BytesIO object as a WAV file)
+                sound = AudioSegment.from_file(wav_audio, format="wav")
+
+                # Convert the audio to MP3 and save to an in-memory file
+                mp3_audio = io.BytesIO()
+                sound.export(mp3_audio, format="mp3")
+                mp3_audio.seek(0) 
+
+                with open("output.mp3", "wb") as mp3_file:
+                    mp3_file.write(mp3_audio.getvalue())
+
+                audio_file = open("output.mp3", "rb")
+
+                transcript = self.client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file
+                )
+
+                # Use pydub to play back the audio file
+                # sound = AudioSegment.from_file(audio_file, format="wav")
+                # play(sound)  # This plays the sound to the user
+
+                self.service_node.get_logger().info(f"Audio recorded {transcript}")
+
+                # text = r.recognize_whisper(audio)
+                # self.textReceived.emit(transcript.text)
+
+            except sr.UnknownValueError:
+                self.errorOccurred.emit("Speech Recognition could not understand audio")
+            except sr.RequestError as e:
+                self.errorOccurred.emit(f"Could not request results from Speech Recognition service; {e}")
+
+        self.finished.emit(transcript.text)
+        
 class MessageWorker(QObject):
     finished = pyqtSignal(str)  # Signal to emit the response
     update_status = pyqtSignal(str)  # Signal to emit status updates
 
-    def __init__(self, assistantAPI, message):
+    def __init__(self, assistantAPI, message, service_node):
         super().__init__()
         self.assistantAPI = assistantAPI
         self.message = message
+        self.service_node = service_node
 
     def run(self):
         # Process the message
@@ -38,6 +108,7 @@ class MessageWorker(QObject):
 
         while self.assistantAPI.retrieve_status() not in ["completed", "failed", "requires_action"]:
             status = self.assistantAPI.retrieve_status()
+            self.service_node.get_logger().info(f"Status {status}")
             self.update_status.emit(status)
             time.sleep(1)
 
@@ -81,17 +152,17 @@ class ChatDisplay(QTextEdit):
         self.setTextCursor(cursor)
 
 class ConfirmationDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, question, parent=None):
         super().__init__(parent)
 
-        self.setWindowTitle("Delete Assistant")
+        self.setWindowTitle("User Confirmation")
         self.setFixedSize(200, 100) 
 
         # Layout
         layout = QVBoxLayout(self)
 
         # Add a label
-        label = QLabel("Do you want to delete the current assistant?")
+        label = QLabel(question)
         layout.addWidget(label)
 
         # Yes and No buttons
@@ -112,6 +183,8 @@ class PmCoPilotApp(QMainWindow):
         self.apply_style()
 
         self.update_status_display("Initialization of Assisstant")
+
+        self.speech_engine = pyttsx3.init()
 
         self.service_node = service_node
 
@@ -177,6 +250,12 @@ class PmCoPilotApp(QMainWindow):
         self.send_button.clicked.connect(self.on_send_clicked)
         self.layout.addWidget(self.send_button)
 
+        # Add a listen button
+        self.listen_button = QPushButton("Listen")
+        self.listen_button.setFont(QFont("Helvetica", 12))
+        self.listen_button.clicked.connect(self.startSpeechRecognition)
+        self.layout.addWidget(self.listen_button)
+
         # Set the minimum size for the window
         self.setMinimumSize(QSize(800, 600))
 
@@ -205,6 +284,39 @@ class PmCoPilotApp(QMainWindow):
         """
         self.setStyleSheet(style_sheet)
 
+    def startSpeechRecognition(self):
+        self.thread = QThread()
+        self.worker = SpeechWorker(self.service_node)
+        self.worker.moveToThread(self.thread)
+
+        # Connect signals
+        self.thread.started.connect(self.worker.run)
+
+        # self.worker.textReceived.connect(self.handleSpeechInput)
+        self.worker.errorOccurred.connect(self.handleError)
+        self.worker.finished.connect(self.thread.quit)  # Ensure worker emits a finished signal when done
+        self.worker.finished.connect(self.worker.deleteLater)  # Cleanup worker after finishing
+        self.thread.finished.connect(self.thread.deleteLater)  # Cleanup thread after it finishes
+
+        self.worker.finished.connect(self.handleSpeechInput)
+
+        self.thread.start()
+
+    def handleSpeechInput(self, message):
+        # Process the recognized text as input
+        self.service_node.get_logger().info(f"Recognized text: {message}")
+        self.chat_history.append_question("User: ", message)
+        self.start_message_processing_thread(message)
+        self.message_input.clear()
+
+    def handleError(self, error_message):
+        # Handle errors here
+        self.service_node.get_logger().info(f"Error: {error_message}")
+
+    def onProcessedMessage(self, response):
+        # Use pyttsx3 to speak out the response
+        self.speech_engine.say(response)
+        self.speech_engine.runAndWait()
 
     def on_send_clicked(self):
         message = self.message_input.toPlainText()
@@ -215,7 +327,7 @@ class PmCoPilotApp(QMainWindow):
 
     def start_message_processing_thread(self, message):
         self.thread = QThread()
-        self.worker = MessageWorker(self.assistantAPI, message)
+        self.worker = MessageWorker(self.assistantAPI, message, self.service_node)
         self.worker.moveToThread(self.thread)
 
         # Connect signals and slots
@@ -245,19 +357,22 @@ class PmCoPilotApp(QMainWindow):
     def closeEvent(self, event: QEvent):
         # Custom actions to perform when the window is closing
         self.cleanup()
+        if self.thread is not None and self.thread.isRunning():
+            self.thread.quit()  # Request the thread to quit
+            self.thread.wait()  # Wait for the thread to finish
         event.accept()  # Proceed with the window closing
 
     def cleanup(self):
-        dialog = ConfirmationDialog(self)
+        dialog = ConfirmationDialog(question="Do you want to delete the current assistant?")
         result = dialog.exec()
 
-        self.service_node.get_logger().info(f"Deleting File: {self.assistantAPI.delete_files()}")
+        #self.service_node.get_logger().info(f"Deleting File: {self.assistantAPI.delete_files()}")
         
         if result == QDialog.DialogCode.Accepted:
             self.assistantAPI.delete_assistant()
             self.service_node.get_logger().info("Deleting Assistant before closing the application.")
 
-
+        self.service_node.get_logger().info("Application closed.")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

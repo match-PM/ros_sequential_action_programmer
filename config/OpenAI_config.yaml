@@ -4,7 +4,7 @@ gpt_model:
 
 # instruction prompt
 instruction_prompt: >
-  You are an assistant to program robots.
+  You are an assistant to program robots. The unit of the robot movements is meter. Convert the user input if necessary.
   If the user asks you to move the robot, do the following:
   1: Search for a service in the provided file. 
   2: Get the structure of the service from the file. 

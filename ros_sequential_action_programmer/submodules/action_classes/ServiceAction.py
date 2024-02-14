@@ -15,6 +15,7 @@ from functools import partial
 from ros_sequential_action_programmer.submodules.obj_dict_modules.dict_functions import flatten_dict_to_list, is_string_in_dict
 from typing import Union
 import re
+from typing import Tuple, Any
 
 
 class ServiceAction:
@@ -98,7 +99,7 @@ class ServiceAction:
                 f"Error occured! Given service type does not exist (service_type: {self.service_type})!"
             )
 
-    def execute(self) -> bool:
+    def execute(self) -> Tuple[bool, Any]:
         if self.service_request and self.service_metaclass and self.service_type:
             # update srv request from dictionary
             self.update_srv_req_obj_from_dict()
@@ -151,7 +152,8 @@ class ServiceAction:
             if timer is not None:
                 timer.destroy()
             self.update_log_entry(srv_call_success, srv_start_time, srv_end_time)
-            return srv_call_success
+            self.node.get_logger().info(f"Service return: {self.service_res_dict}")
+            return srv_call_success, self.service_res_dict
 
     def client_executer_watchdog(self, node_name, future_obj):
         node_names = self.node.get_node_names()
