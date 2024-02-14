@@ -11,20 +11,21 @@ import rclpy
 class RecomGenerator():
     def __init__(self,ros_node:Node) -> None:
         self.recommendations=[]
-        self.vision_init()
-        self.ros_node = ros_node
-        self.tf_subscription = self.ros_node.create_subscription(TFMessage,
-                                                                 '/tf',
-                                                                 self.tf_callback,
-                                                                 10)
         
-        self.tf_subscription_2 = self.ros_node.create_subscription(TFMessage,
-                                                        '/tf_static',
-                                                        self.tf_static_callback,
-                                                        10)
+        self.ros_node = ros_node
+        #self.tf_subscription = self.ros_node.create_subscription(TFMessage,
+        #                                                         '/tf',
+        #                                                         self.tf_callback,
+        #                                                         10)
+        
+        #self.tf_subscription_2 = self.ros_node.create_subscription(TFMessage,
+        #                                                '/tf_static',
+        #                                                self.tf_static_callback,
+        #                                                10)
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self.ros_node, spin_thread=True)
-
+        
+        self.update_recommendations()
         #self.timer = self.ros_node.create_timer(1.0, self.on_timer)
 
     def on_timer(self):

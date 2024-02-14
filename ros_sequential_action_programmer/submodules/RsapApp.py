@@ -22,7 +22,13 @@ import ast
 
 from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_config import PmRobotConfigWidget
 from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import PmDashboardApp
-from ros_sequential_action_programmer.submodules.co_pilot.PmCoPilotApp import PmCoPilotApp
+
+# Change this later to be cleaner
+try:
+    from ros_sequential_action_programmer.submodules.co_pilot.PmCoPilotApp import PmCoPilotApp
+except ModuleNotFoundError as e:
+    print(f"Error importing PmCoPilotApp: {e}")
+
 from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI
 
 class RsapApp(QMainWindow):
@@ -79,7 +85,7 @@ class RsapApp(QMainWindow):
         open_action_menu_button = QPushButton('Add \n Action')
         open_action_menu_button.clicked.connect(self.show_action_menu)
         open_action_menu_button.setFixedSize =(20,20)
-        #self.init_action_menu()
+
         toolbar_layout.addWidget(open_action_menu_button,alignment=Qt.AlignmentFlag.AlignTop)
 
         # add button for deleting selected vision function
@@ -114,10 +120,6 @@ class RsapApp(QMainWindow):
         stop_execution_button = QPushButton("Stop Execution")
         stop_execution_button.clicked.connect(self.stop_execution)
         layout.addWidget(stop_execution_button,3,1)
-
-        # update_service_button = QPushButton("Update Services")
-        # update_service_button.clicked.connect(self.initialize_active_service_list)
-        # layout.addWidget(update_service_button,6,0)
 
         # add textbox for string output
         self.text_output = AppTextOutput()
@@ -167,10 +169,15 @@ class RsapApp(QMainWindow):
         open_pm_robot_tools.triggered.connect(partial(self.open_sub_window, PmDashboardApp))
         pm_robot_tools_menu.addAction(open_pm_robot_tools)
 
-        open_pm_robot_co_pilot = QAction("PM Co-Pilot", self)
-        # open_pm_robot_co_pilot.triggered.connect(self.openCoPilot)
-        open_pm_robot_co_pilot.triggered.connect(partial(self.open_sub_window, PmCoPilotApp))
-        pm_robot_tools_menu.addAction(open_pm_robot_co_pilot)
+        try:
+            open_pm_robot_co_pilot = QAction("PM Co-Pilot", self)
+            # open_pm_robot_co_pilot.triggered.connect(self.openCoPilot)
+            open_pm_robot_co_pilot.triggered.connect(partial(self.open_sub_window, PmCoPilotApp))
+            pm_robot_tools_menu.addAction(open_pm_robot_co_pilot)
+        except ModuleNotFoundError as e:
+            self.service_node.get_logger().error(f"Error adding PM Co-Pilot to menu: {e}")
+        except NameError as e:
+            self.service_node.get_logger().error(f"Error adding PM Co-Pilot to menu: {e}")
 
         self.log_layout = QVBoxLayout()
         self.log_widget = QTreeWidget(self)
@@ -196,10 +203,10 @@ class RsapApp(QMainWindow):
         self.action_menu.menu_dictionary= {
             'Services': {
                 'Empty':  ['New'],
-                'Active Clients blk':  self.action_sequence_builder.get_active_client_blklist(),
-                'Active Clients':  self.action_sequence_builder.list_of_active_clients,
-                'Memorised Clients blk':  self.action_sequence_builder.get_memorized_client_blklist(),
-                'Memorised Clients ':  self.action_sequence_builder.get_list_memorized_service_clients(),
+                'Active Clients blk':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.get_active_client_blklist()),
+                'Active Clients':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.list_of_active_clients),
+                'Memorised Clients blk':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.get_memorized_client_blklist()),
+                'Memorised Clients ':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.get_list_memorized_service_clients()),
                 'Available Service Types':  get_service_interfaces(),
             },
             'Skills': ['TBD1','TBD2','TBD3'],
@@ -399,11 +406,14 @@ class RsapApp(QMainWindow):
             self.clear_action_parameter_layout()
             self.clear_log_viewer()
             self.set_service_meta_info_widget()
-            self.populateWidgets(self.handle_dict)
+            self.populateActionParameterWidgets(self.handle_dict)
 
         self.show_service_log(self.action_sequence_builder.get_action_at_index(row).log_entry)
 
-    def populateWidgets(self, data, parent_key=None):
+    def populateActionParameterWidgets(self, data, parent_key=None):
+        """
+        This method populates the action parameter layout with the parameters of the selected action.
+        """
         # iterate through the dict
         for key, value in data.items():
             if parent_key is not None:
@@ -412,16 +422,19 @@ class RsapApp(QMainWindow):
                 full_key = key
 
             if isinstance(value, OrderedDict):
-                self.populateWidgets(value, full_key)
+                self.populateActionParameterWidgets(value, full_key)
             else:
                 widget_with_button = QLineButton(full_key=full_key, 
                                                  initial_value=str(value), 
                                                  on_text_changed=self.updateDictionary, 
-                                                 on_button_clicked=self.additionalButtonClicked)
+                                                 on_button_clicked=self.get_recom_button_clicked)
                 
                 self.inner_layout.addWidget(widget_with_button)
 
-    def additionalButtonClicked(self, key, widget:QLineEdit):
+    def get_recom_button_clicked(self, key, widget:QLineEdit):
+        """
+        This method is called when the user clicks the button to get recommendations for a specific parameter.
+        """
         index = self.checkbox_list.currentRow()
         data = self.action_sequence_builder.get_recom_for_action_at_index_for_key(index=index, key=key)
         popup = PopupRecWindow(data)
@@ -461,6 +474,9 @@ class RsapApp(QMainWindow):
             self.action_selected()
 
     def clear_action_parameter_layout(self):
+        """
+        This method clears the action parameter layout.
+        """
         if self.inner_layout is not None:
             while self.inner_layout.count():
                 item = self.inner_layout.takeAt(0)
@@ -501,6 +517,10 @@ class RsapApp(QMainWindow):
         return handleTextChange
 
     def open_process_file(self):
+        """
+        This method opens a file dialog to select a process file to open.
+        """
+
         # if self.current_vision_pipeline.vision_pipeline_json_dir == None:
         #     self.current_vision_pipeline.vision_pipeline_json_dir = self.default_process_libary_path
         
@@ -532,6 +552,9 @@ class RsapApp(QMainWindow):
         self.create_new_file()
 
     def save_process(self):
+        """
+        This method saves the current process to a file.
+        """
         if self.action_sequence_builder.name is None:
             self.create_new_file()
         else:
@@ -540,6 +563,9 @@ class RsapApp(QMainWindow):
             self.update_last_saved()
             
     def create_new_file(self):
+        """
+        This method creates a new file and saves the current process to it.
+        """
         # if self.current_vision_pipeline.vision_pipeline_json_dir == None:
         #     self.current_vision_pipeline.vision_pipeline_json_dir = self.default_process_libary_path
 

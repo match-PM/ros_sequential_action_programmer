@@ -8,12 +8,20 @@ from rosidl_runtime_py.get_interfaces import get_service_interfaces
 import numpy as np
 from PyQt6.QtWidgets import  QDialog
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.UserInteractionActionDialog import UserInteractionActionDialog
+from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass
+class UserInteractionModes():
+    TERMINAL = 1
+    GUI = 2
 
 TERMINAL = 1
 GUI = 2
-
 class UserInteractionAction():
+
+    MODES = UserInteractionModes()
+
     def __init__(self, node: Node, interaction_mode: int, name:str ='UserInteraction', action_text:str = "") -> None:
+        #super().__init__(node)
+    
         self.node = node
         self.name = name
         self.action_text = action_text
@@ -48,7 +56,7 @@ class UserInteractionAction():
    
         return exec_success
     
-    def update_log_entry(self, success: bool, start_time: datetime, end_time: datetime):
+    def update_log_entry(self, success: bool, start_time: datetime, end_time: datetime, additional_text:str = ""):
         #self.log_entry={}
         self.log_entry["description"] = self.action_text
         self.log_entry["start_time"] = str(start_time.strftime("%Y-%m-%d_%H:%M:%S.%f"))
@@ -69,3 +77,12 @@ class UserInteractionAction():
         except Exception as e:
             self.node.get_logger().error(str(e))
             return False
+        
+    def __deepcopy__(self, memo):
+        """
+        deepcopy of this class is not possible without this mehtod definition
+        """
+        new_instance = UserInteractionAction(node=self.node, interaction_mode=self.interaction_mode, name=f"{self.name}_copy", action_text=self.action_text)
+        
+        return new_instance
+    

@@ -22,6 +22,8 @@ from geometry_msgs.msg import Vector3, Quaternion
 from importlib import import_module
 from sensor_msgs.msg._joint_state import JointState
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
+from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
+from rosidl_runtime_py.convert import message_to_ordereddict
 
 def rsetattr(obj, attr, val):
     pre, _, post = attr.rpartition('.')
@@ -35,13 +37,11 @@ def rgetattr(obj, attr, *args):
 
 class PmRobotAxisControl():
     
-    PM_Interfaces_Module = import_module('pm_moveit_interfaces.srv')
-
     BLACKLIST = ['1K_Dispenser_Flap', 'Z_Axis', '1K_Dispenser', '2K_Dispenser_Cartridge', 'Camera_Station', 'Camera_Calibration_Platelet', 'Gonio_Left_Stage_1_Top', 'Gonio_Left_Base', 'Gonio_Left_Stage_2_Bottom', 'Gonio_Right_Stage_1_Top', 'Gonio_Right_Stage_1_Bottom', 'Gonio_Right_Stage_2_Bottom', 'Gripper_Rot_Plate', 'UV_LED_Back', 'UV_Slider_X_Back', 'UV_LED_Front', 'UV_Slider_X_Front', 'X_Axis', 'axis_base', 'Y_Axis', '1K_Dispenser_TCP', '1K_Dispenser_Tip', '2K_Dispenser_TCP', 'Cam1_Toolhead_TCP', 'Camera_Bottom_View_Link', 'Camera_Bottom_View_Link_Optical', 'pm_robot_base_link', 'Camera_Top_View_Link', 'Camera_Top_View_Link_Optical', 'Gonio_Base_Right', 'Laser_Toolhead_TCP', 'PM_Robot_Tool_TCP', 'PM_Robot_Vacuum_Tool', 'PM_Robot_Vacuum_Tool_Tip',  'housing_hl', 'base_link_empthy', 'housing_hr', 'housing', 'housing_vl', 'housing_vr', 'laser_top_link', 'left_match_logo_font', 'left_match_logo_background', 'match_logo_link', 't_axis_toolchanger']
     
     def __init__(self, ros_node:Node):
         
-
+        self.PM_Interfaces_Module = import_module('pm_moveit_interfaces.srv')
         self.target_pose = Pose()
         self.tools = ['PM_Robot_Tool_TCP', '1K_Dispenser_TCP', 'Cam1_Toolhead_TCP','Laser_Toolhead_TCP']
         self._active_tool = 'PM_Robot_Tool_TCP'
@@ -50,20 +50,22 @@ class PmRobotAxisControl():
         self.logger = self.node.get_logger()
         self.current_tool_pose = Pose()
         self.rel_movement_position = Vector3()
-        self.tf_subscription = self.node.create_subscription(TFMessage,
-                                                            '/tf',
-                                                            self.tf_callback,
-                                                            10)
-        self.tf_subscription_2 = self.node.create_subscription(TFMessage,
-                                                '/tf_static',
-                                                self.tf_static_callback,
-                                                10)
+        # self.tf_subscription = self.node.create_subscription(TFMessage,
+        #                                                     '/tf',
+        #                                                     self.tf_callback,
+        #                                                     10)
+        # self.tf_subscription_2 = self.node.create_subscription(TFMessage,
+        #                                         '/tf_static',
+        #                                         self.tf_static_callback,
+        #                                         10)
         self.tf_buffer = Buffer(cache_time=rclpy.duration.Duration(seconds=10.0))
         
         self.tf_listener = TransformListener(self.tf_buffer, self.node, spin_thread=True)
         self.available_frames = []
         self.update_timer = self.node.create_timer(0.1, self.update_target,callback_group=self.clb_group)
+        self.joint_state_topic_watchdog = self.node.create_timer(10, self.check_js_subscription, callback_group=self.clb_group)
         self.frame_added = False    
+        self.joint_state_msg_received = False
         # subscribe to joint states
         self.joint_state_subscription = self.node.create_subscription(JointState, '/joint_states', self.joint_state_callback, 10, callback_group=self.clb_group)
         self.joint_state_list = []
@@ -75,18 +77,26 @@ class PmRobotAxisControl():
     def get_active_tool(self):
         return self._active_tool
     
-    def tf_callback(self, msg:TFMessage):
-        for transform in msg.transforms:
-            transform:TransformStamped
-            #print(transform.child_frame_id)
-            if transform.child_frame_id not in self.available_frames:
-                pass
+    def check_js_subscription(self):
+        #self.logger.warn("Checking joint state subscription")
+        if not self.joint_state_msg_received:
+            self.logger.error("No joint state message received within 10 s. Destroying subscription.")
+            self.joint_state_subscription.destroy()
+            self.joint_state_topic_watchdog.cancel()
+            self.update_timer.cancel()
+        
+    # def tf_callback(self, msg:TFMessage):
+    #     for transform in msg.transforms:
+    #         transform:TransformStamped
+    #         #print(transform.child_frame_id)
+    #         if transform.child_frame_id not in self.available_frames:
+    #             pass
     
-    def tf_static_callback(self, msg:TFMessage):
-        for transform in msg.transforms:
-            transform:TransformStamped
-            if transform.child_frame_id not in self.available_frames:
-                pass
+    # def tf_static_callback(self, msg:TFMessage):
+    #     for transform in msg.transforms:
+    #         transform:TransformStamped
+    #         if transform.child_frame_id not in self.available_frames:
+    #             pass
     
     def set_target_pose_from_frame_world_transform(self, frame:str):
         """
@@ -155,38 +165,36 @@ class PmRobotAxisControl():
     def move_to_target(self):
         # move to target pose
         if self.get_active_tool() == 'PM_Robot_Tool_TCP':
-            client = self.node.create_client(self.PM_Interfaces_Module.MoveToolTcpTo, '/pm_moveit_server/move_tool_to_frame', callback_group=self.clb_group)
+            service_action = ServiceAction(self.node, client='/pm_moveit_server/move_tool_to_frame', service_type='pm_moveit_interfaces/srv/MoveToolTcpTo')
+            #client = self.node.create_client(self.PM_Interfaces_Module.MoveToolTcpTo, '/pm_moveit_server/move_tool_to_frame', callback_group=self.clb_group)
             request = self.PM_Interfaces_Module.MoveToolTcpTo.Request()
         elif self.get_active_tool() == 'Cam1_Toolhead_TCP':
-            client = self.node.create_client(self.PM_Interfaces_Module.MoveCam1TcpTo, '/pm_moveit_server/move_cam1_to_frame', callback_group=self.clb_group)
+            service_action = ServiceAction(self.node, client='/pm_moveit_server/move_cam1_to_frame', service_type='pm_moveit_interfaces/srv/MoveCam1TcpTo')
+            #client = self.node.create_client(self.PM_Interfaces_Module.MoveCam1TcpTo, '/pm_moveit_server/move_cam1_to_frame', callback_group=self.clb_group)
             request = self.PM_Interfaces_Module.MoveCam1TcpTo.Request()
         elif self.get_active_tool() == 'Laser_Toolhead_TCP':
-            client = self.node.create_client(self.PM_Interfaces_Module.MoveLaserTcpTo, '/pm_moveit_server/move_laser_to_frame', callback_group=self.clb_group)
+            service_action = ServiceAction(self.node, client='/pm_moveit_server/move_laser_to_frame', service_type='pm_moveit_interfaces/srv/MoveLaserTcpTo')
+            #client = self.node.create_client(self.PM_Interfaces_Module.MoveLaserTcpTo, '/pm_moveit_server/move_laser_to_frame', callback_group=self.clb_group)
             request = self.PM_Interfaces_Module.MoveLaserTcpTo.Request()
         else:
             self.node.get_logger().error(f"Service for moving '{self.get_active_tool()}' not yet implemented!")
             return
         
-        if not client.wait_for_service(timeout_sec=1.0):
-            self.node.get_logger().error(f"Service for moving '{self.get_active_tool()}' not available! Launch XXXX and retry!")
-            return
-
         request.move_to_pose.position.x = self.target_pose.position.x / 1000
         request.move_to_pose.position.y = self.target_pose.position.y / 1000
         request.move_to_pose.position.z = self.target_pose.position.z / 1000
         request.execute = True
-        result = client.call(request)
-        #future = client.call_async(request)
-        # rclpy.spin_until_future_complete(self.node, future)
-        # if future.result() is not None:
-        #     self.node.get_logger().info(f'Result of {self.get_active_tool()}: {future.result().success}')
-        # else:
-        #     self.node.get_logger().info(f'Service call failed for {self.get_active_tool()} failed: {future.exception()}')
-        self.node.get_logger().info(f'Result of {self.get_active_tool()}: {result.success}')
-        client.destroy()
+        request_dict = message_to_ordereddict(request)
+        service_action.set_req_message_from_dict(request_dict)
+        success = service_action.execute()
+
+        #result = client.call(request)
+        
+        self.node.get_logger().info(f'Result of {self.get_active_tool()}: {success}')
         return
         
     def joint_state_callback(self, msg:JointState):
+        self.joint_state_msg_received = True
         # Create a list of tuples with first the name and second the position
         self.joint_state_list = list(zip(msg.name, msg.position, msg.velocity, msg.effort))
 
@@ -200,23 +208,23 @@ class PmRobotAxisControl():
 
 
 
-class PmDashboardApp(QMainWindow):
+class PmDashboardApp(QWidget):
     def __init__(self, ros_node:Node=None):
         super().__init__()
         self.path = get_package_share_directory('pm_robot_bringup')
         self.ros_node = ros_node
         self.pm_robot_control = PmRobotAxisControl(ros_node)
         self.clb_group = ReentrantCallbackGroup()
-        # create a timer
-        self.timer = self.ros_node.create_timer(0.1, self.cbk_timer_update_widget_current_tool_pose, callback_group=self.clb_group)
-        #self.set_config()
         self.init_ui()
         # Set active tool and update target poses
         self.set_active_tool()
 
+        self.timer = self.ros_node.create_timer(0.1, self.cbk_timer_update_widget_current_tool_pose, callback_group=self.clb_group)
+
+
     def init_ui(self):
         central_widget = QWidget(self)
-        self.setCentralWidget(central_widget)
+        #self.setCentralWidget(central_widget)
         self.font_label = QFont()  # Create a QFont object
         self.font_label.setPointSize(14)  # Set the font size to 16 points
         main_layout = QGridLayout()
@@ -261,15 +269,16 @@ class PmDashboardApp(QMainWindow):
         self.text_output_terminal = QTextEdit()
         self.text_output_terminal.setReadOnly(True)
         self.vertical_layout.addWidget(self.text_output_terminal)
-        central_widget.setLayout(main_layout)
 
         self.table_widget = QTableWidget()
         self.table_widget.setMinimumWidth(450)
         self.table_widget.setMinimumHeight(500)
         main_layout.addWidget(self.table_widget,2,2)
 
+        central_widget.setLayout(main_layout)
+
         self.setWindowTitle('PM Robot Dashboard')
-        self.setGeometry(100, 100, 600, 400)
+        self.setGeometry(100, 100, 1400, 800)
 
     def update_target_pose_widget(self):
         self.display_widget_target_pose_position_x.setText(str(round(self.pm_robot_control.target_pose.position.x,6)))
@@ -402,6 +411,8 @@ class PmDashboardApp(QMainWindow):
 
     def populateTable(self):
         #column_names = ['Name', 'Position', 'Velocity', 'Effort']
+        if len(self.pm_robot_control.joint_state_list) == 0:
+            return
         column_names = ['Name', 'Position [m]']
         self.table_widget.setHorizontalHeaderLabels(column_names)
         self.table_widget.setRowCount(len(self.pm_robot_control.joint_state_list))

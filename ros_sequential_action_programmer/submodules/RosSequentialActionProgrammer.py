@@ -20,6 +20,7 @@ from typing import Tuple
 import yaml
 from yaml.loader import SafeLoader
 from ros_sequential_action_programmer.submodules.obj_dict_modules.dict_functions import convert_to_ordered_dict, get_key_value_pairs_from_dict
+from typing import Union
 
 CHECK = 0
 SET = 1
@@ -58,7 +59,10 @@ class RosSequentialActionProgrammer:
         self.list_of_active_clients = [item[0] for item in self.list_of_active_services]
         self._list_of_service_types = [item[1] for item in self.list_of_active_services]
 
-    def get_active_services(self):
+    def get_active_services(self)->list[Tuple[str, list[str]]]:
+        """
+        Returns a list of active services as a tuple of client and service type.
+        """
         return self.list_of_active_services
 
     def get_service_type_for_client(self, service_client) -> str:
@@ -70,11 +74,19 @@ class RosSequentialActionProgrammer:
                 return self._list_of_service_types[index][0]
         return None
 
-    def append_service_to_action_list(
-        self, service_client: str, service_type: str = None, service_name=None) -> bool:
+    def append_service_to_action_list(self, service_client: str, service_type: str = None, service_name=None) -> bool:
+        """
+        This function appends a service to the action_list.
+        :param service_client: The name of the service client.
+        :param service_type: The type of the service. If not given, the function will try to get the service type from the service client.
+        :param service_name: The name of the service. If not given, the function will use the service_client as name.
+
+        :return: True if the service was appended successfully, False otherwise.
+        """
         index = len(self.action_list)-1
         if index < 0:
             index = 0
+
         return self.append_service_to_action_list_at_index(service_client=service_client,
                                                         service_type=service_type,
                                                         service_name=service_name,
@@ -86,6 +98,15 @@ class RosSequentialActionProgrammer:
         index: int,
         service_type: str = None,
         service_name=None) -> bool:
+        """
+        This function appends a service to the action_list at a given index.
+        :param service_client: The name of the service client.
+        :param index: The index where the service should be appended.
+        :param service_type: The type of the service. If not given, the function will try to get the service type from the service client.
+        :param service_name: The name of the service. If not given, the function will use the service_client as name.
+        
+        :return: True if the service was appended successfully, False otherwise.
+        """
 
         if not service_type:
             service_type = self.get_service_type_for_client(service_client)
@@ -114,7 +135,15 @@ class RosSequentialActionProgrammer:
         action_name: str,
         action_description: str,
         interaction_mode = TERMINAL) -> bool:
-
+        """
+        This function appends a user interaction to the action_list at a given index.
+        :param index: The index where the user interaction should be appended.
+        :param action_name: The name of the user interaction.
+        :param action_description: The description of the user interaction.
+        :param interaction_mode: The mode of the user interaction. Can be either TERMINAL or GUI.
+        
+        :return: True if the user interaction was appended successfully, False otherwise.
+        """
         if not index > len(self.action_list):
             new_action = UserInteractionAction(
                     node=self.node,
@@ -130,13 +159,23 @@ class RosSequentialActionProgrammer:
         else:
             return False
         
-    def get_action_at_index(self, index: int) -> ServiceAction:
+    def get_action_at_index(self, index: int) -> Union[ServiceAction, UserInteractionAction]:
+        """
+        Returns the action at the index from the action_list.
+        :param index: The index of the action.
+
+        :return: The action at the index.
+        """
         if not index > len(self.action_list):
             return self.action_list[index]
         else:
             return None
 
     def delete_action_at_index(self, index: int) -> bool:
+        """
+        Deletes the action at the index from the action_list.
+        :param index: The index of the action.
+        """
         if not index > len(self.action_list):
             del self.action_list[index]
             return True
@@ -165,6 +204,8 @@ class RosSequentialActionProgrammer:
     def load_from_JSON(self, file_path) -> bool:
         """
         Sets the action list from a given json-file path.
+        :param file_path: The path to the json-file.
+        :return: True if the action list was set successfully, False otherwise.
         """
         file_data = None
         loading_action_list = []
@@ -276,6 +317,8 @@ class RosSequentialActionProgrammer:
     def set_current_action(self, index: int) -> bool:
         """
         Sets the current action to the index from input.
+        :param index: The index of the action to be set.
+        :return: True if the action was set successfully, False otherwise.
         """
         if index < len(self.action_list):
             self.current_action_index = index
@@ -287,6 +330,11 @@ class RosSequentialActionProgrammer:
         return self.get_action_at_index(self.current_action_index).get_action_name()
 
     def execute_current_action(self, log_mode: int = LOG_NEVER) -> bool:
+        """
+        This function executes the current action. It returns a bool value for success indication.
+        :param log_mode: The mode of the log. Can be either LOG_NEVER or LOG_AT_END.
+        """
+
         try:
             # Set values from earlier service respones to this service request, might fail, if earlier call has not been executed
             
@@ -295,7 +343,7 @@ class RosSequentialActionProgrammer:
                 if not set_success:
                     raise Exception
 
-            success_exec, service_response = self.get_action_at_index(self.current_action_index).execute()
+            success_exec = self.get_action_at_index(self.current_action_index).execute()
             # append action log to history
             self.append_action_log(
                 index=self.current_action_index,
@@ -311,7 +359,7 @@ class RosSequentialActionProgrammer:
                     f"Action {self.get_current_action_name()} executed successfully!"
                 )
             else:
-                raise Exception
+                raise Exception("Error executing action!")
 
             return success_exec
 
@@ -324,7 +372,11 @@ class RosSequentialActionProgrammer:
         """
         This function executes the action_list successifly starting at the start_index.
         It returns bool value for success indication and also the index of the action when the method terminates.
+        :param index_start: The index of the action to start with.
+        :param log_mode: The mode of the log. Can be either LOG_NEVER or LOG_AT_END.
+        :return: Tuple of bool and int. The bool value indicates success, the int value indicates the index of the action when the method terminates.
         """
+
         if index_start < len(self.action_list):
             for index in range(len(self.action_list)):
                 self.current_action_index = index
@@ -340,6 +392,7 @@ class RosSequentialActionProgrammer:
         """
         This method returns the service request as a OrderedDict.
         The dict will be copied so changes to the OrderedDict will not apply to the process action_list.
+        :param index: The index of the action.
         """
         try:
             return_value = copy.deepcopy(self.action_list[index].service_req_dict)
@@ -351,6 +404,7 @@ class RosSequentialActionProgrammer:
         """
         This method returns the service request as a OrderedDict.
         The dict will be copied so changes to the OrderedDict will not apply to the process action_list.
+        :param index: The index of the action.
         """
         try:
             return_value = copy.deepcopy(
@@ -360,8 +414,7 @@ class RosSequentialActionProgrammer:
         except Exception as e:
             return None
 
-    def set_service_req_from_dict_at_index(
-        self, index: int, dict: collections.OrderedDict
+    def set_service_req_from_dict_at_index(self, index: int, dict: collections.OrderedDict
     ) -> bool:
         """
         Tries to set the service request of the service at index. Returns bool for success.
@@ -411,6 +464,9 @@ class RosSequentialActionProgrammer:
         return service_response_dict_list
 
     def get_active_client_whtlist(self)-> list:
+        """
+        This function returns only clients, that are listed in the whitelist.yaml
+        """
         self.initialize_service_list()
         client_list = [t[0] for t in self.list_of_active_services]
         service_type_list = [t[1][0] for t in self.list_of_active_services]
@@ -418,12 +474,18 @@ class RosSequentialActionProgrammer:
         return self.get_client_whitelist(clients_list = client_list, service_list = service_type_list)
 
     def get_active_client_blklist(self)-> list:
+        """
+        This function returns only clients, that are not listed in the blacklist.yaml
+        """
         self.initialize_service_list()
         client_list = [t[0] for t in self.list_of_active_services]
         service_type_list = [t[1][0] for t in self.list_of_active_services]
         return self.get_client_blacklist(clients_list = client_list, service_list = service_type_list)
 
     def get_memorized_client_blklist(self)-> list:
+        """
+        This function returns only clients, that are not listed in the blacklist.yaml
+        """
         self.save_all_service_req_res_to_JSON()
 
         client_list = [t[0] for t in self.list_of_memorized_services]
@@ -557,8 +619,30 @@ class RosSequentialActionProgrammer:
             return False
 
     def get_list_memorized_service_clients(self)->list:
+        """
+        Returns a list of all memorized service clients.
+        """
         self.save_all_service_req_res_to_JSON()
         return [t[0] for t in self.list_of_memorized_services]
+        
+    def list_of_clients_to_dict(self, list_of_clients: list)->dict:
+        """
+        This function returns a dictionary of clients and their services.
+        """
+        result_dict = {}
+        for client in list_of_clients:
+            parts = client.split("/", 2)
+            if len(parts) >= 2:
+                client_node = f"/{parts[1]}"
+                client_service = "/".join(parts[1:])
+                client_service = f"/{client_service}"
+                if client_node not in result_dict:
+                    result_dict[client_node] = []
+                result_dict[client_node].append(client_service)
+            else:
+                # Handle cases where there are not enough parts
+                print(f"Unexpected format for client: {client}")
+        return result_dict
     
     def get_srv_type_from_memorized_client(self, client:str)->str:
         for clt, service_type in self.list_of_memorized_services:
@@ -737,11 +821,14 @@ class RosSequentialActionProgrammer:
             self.node.get_logger().error("Failed here")
             return False
 
-    def check_for_reference(self, input_value: any) -> (bool, bool, int, str):
+    def check_for_reference(self, input_value: any) -> tuple[bool, bool, int, str]:
         """
         This function takes an input value as input. The function checks if the value conatins an reference to another action value.
-        If yes, it returns 1. True/False for if it contains a reference, 2. if a given refence contains erros,
-        3. if a ref the index of the action in the action plan and 4. the key of the value of the targeted action.
+        If yes, it returns 
+        1. True/False for if it contains a reference, 
+        2. if a given refence contains erros,
+        3. if a ref the index of the action in the action plan 
+        4. the key of the value of the targeted action.
         """
         ref_index = None
         ref_key = None
@@ -765,9 +852,15 @@ class RosSequentialActionProgrammer:
             return False, error_in_reference, ref_index, ref_key
 
     def get_current_action_log(self) -> dict:
+        """
+        Returns the log entry of the current action. If the action has not been executed yet, it will return an empty dict.
+        """
         return self.get_action_at_index(self.current_action_index).get_log_entry()
 
     def get_current_action_index(self) -> int:
+        """
+        Returns the index of the current action.
+        """
         return self.current_action_index
 
     # Log - Functions
@@ -778,7 +871,10 @@ class RosSequentialActionProgrammer:
         key = f"{index}_{action_name}"
         self.action_log.append({key: action_log})
 
-    def update_action_sequence_log(self):
+    def _update_action_sequence_log(self):
+        """
+        Updates the action sequence log with the current action sequence log.
+        """
         self.action_sequence_log["action_sequence_name"] = self.name
         self.action_sequence_log["action_log"] = self.action_log
 
@@ -829,7 +925,7 @@ class RosSequentialActionProgrammer:
         Saves the action sequence log to the folder.
         """
         if (self.folder_path is not None) and (self.name is not None):
-            self.update_action_sequence_log()
+            self._update_action_sequence_log()
             export_time = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
             try:
                 file_path = f"{self.folder_path}/logs/"
@@ -854,6 +950,12 @@ class RosSequentialActionProgrammer:
             return False
 
     def move_action_at_index_to_index(self, old_index: int,new_index:int) -> bool:
+        """
+        This function moves the action at old_index to new_index.
+        :param old_index: The index of the action to be moved.
+        :param new_index: The index where the action should be moved to.
+        :return: True if the action was moved successfully, False otherwise.
+        """
         if ((old_index >= 0) and 
         (old_index <= len(self.action_list)) and 
         (old_index != new_index) and

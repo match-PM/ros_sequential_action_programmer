@@ -99,7 +99,7 @@ class ServiceAction:
                 f"Error occured! Given service type does not exist (service_type: {self.service_type})!"
             )
 
-    def execute(self) -> Tuple[bool, Any]:
+    def execute(self) -> bool:
         if self.service_request and self.service_metaclass and self.service_type:
             # update srv request from dictionary
             self.update_srv_req_obj_from_dict()
@@ -153,7 +153,7 @@ class ServiceAction:
                 timer.destroy()
             self.update_log_entry(srv_call_success, srv_start_time, srv_end_time)
             self.node.get_logger().info(f"Service return: {self.service_res_dict}")
-            return srv_call_success, self.service_res_dict
+            return srv_call_success
 
     def client_executer_watchdog(self, node_name, future_obj):
         node_names = self.node.get_node_names()
