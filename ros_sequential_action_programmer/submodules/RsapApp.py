@@ -171,7 +171,6 @@ class RsapApp(QMainWindow):
 
         try:
             open_pm_robot_co_pilot = QAction("PM Co-Pilot", self)
-            # open_pm_robot_co_pilot.triggered.connect(self.openCoPilot)
             open_pm_robot_co_pilot.triggered.connect(partial(self.open_sub_window, PmCoPilotApp))
             pm_robot_tools_menu.addAction(open_pm_robot_co_pilot)
         except ModuleNotFoundError as e:

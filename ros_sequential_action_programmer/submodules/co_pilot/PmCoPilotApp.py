@@ -12,24 +12,12 @@ import io
 
 from openai import OpenAI
 
-from PyQt6.QtGui import QIcon, QFont, QPalette, QColor, QTextCursor, QTextBlockFormat, QTextCharFormat
-from PyQt6.QtWidgets import QLabel, QDialog, QApplication, QMainWindow, QWidget, QVBoxLayout, QTextEdit, QPushButton, QStyleFactory
+from PyQt6.QtGui import QIcon, QAction, QFont, QPalette, QColor, QTextCursor, QTextBlockFormat, QTextCharFormat
+from PyQt6.QtWidgets import QLabel, QWidgetAction, QMenuBar, QDialog, QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, QStyleFactory
 from PyQt6.QtCore import QEvent, QObject, pyqtSignal, QThread, QSize, QRect, QPoint
 
 from ros_sequential_action_programmer.submodules.co_pilot.AssistantAPI import AssistantAPI
 
-class InitializationWorker(QObject):
-    initializationComplete = pyqtSignal(object)  # Signal to emit when initialization is complete, passing the initialized assistantAPI
-
-    def __init__(self, service_node: Node):
-        super().__init__()
-        self.service_node = service_node
-
-    def run(self):
-        # Initialize assistantAPI here
-        assistantAPI = AssistantAPI(self.service_node)
-        # Emit signal once initialization is complete
-        self.initializationComplete.emit(assistantAPI)
 
 class SpeechWorker(QObject):
     
@@ -168,6 +156,9 @@ class ChatDisplay(QTextEdit):
         cursor.insertText(speaker + text + '\n')
         self.setTextCursor(cursor)
 
+    def clear(self) -> None:
+        return super().clear()
+    
 class ConfirmationDialog(QDialog):
     def __init__(self, question, parent=None):
         super().__init__(parent)
@@ -190,7 +181,19 @@ class ConfirmationDialog(QDialog):
         self.no_button = QPushButton("No", self)
         self.no_button.clicked.connect(self.reject)
         layout.addWidget(self.no_button)
-        
+
+class InitializationWorker(QObject):
+    initializationComplete = pyqtSignal(object)  # Signal to emit when initialization is complete, passing the initialized assistantAPI
+
+    def __init__(self, service_node: Node):
+        super().__init__()
+        self.service_node = service_node
+
+    def run(self):
+        # Initialize assistantAPI here
+        assistantAPI = AssistantAPI(self.service_node)
+        # Emit signal once initialization is complete
+        self.initializationComplete.emit(assistantAPI)     
 
 class PmCoPilotApp(QMainWindow):
     def __init__(self, service_node:Node):
@@ -205,6 +208,8 @@ class PmCoPilotApp(QMainWindow):
 
         self.service_node = service_node
 
+        self.assistantAPI: AssistantAPI = None
+
         self.init_thread = QThread()
         self.init_worker = InitializationWorker(service_node)
         self.init_worker.moveToThread(self.init_thread)
@@ -214,15 +219,6 @@ class PmCoPilotApp(QMainWindow):
         
         # Start the thread
         self.init_thread.start()
-
-
-    def onInitializationComplete(self, assistantAPI):
-        # Once initialization is complete, you can use assistantAPI and continue with the setup
-        self.assistantAPI = assistantAPI
-        self.init_thread.quit()
-        self.init_thread.wait()
-
-        self.update_status_display("Assistant ready for your input!")
 
     def setupUI(self):
         # Apply a style suitable for dark mode
@@ -273,6 +269,23 @@ class PmCoPilotApp(QMainWindow):
         self.listen_button.clicked.connect(self.startSpeechRecognition)
         self.layout.addWidget(self.listen_button)
 
+        # Add menu bar
+        menu_bar = self.menuBar()  # This will create a menu bar
+
+        # Create an "Edit" menu
+        edit_menu = menu_bar.addMenu("Edit")
+
+        # Add "New Thread" action
+        new_thread_action = QAction("New Thread", self)
+        new_thread_action.triggered.connect(self.start_new_thread)  # You need to define this method
+        edit_menu.addAction(new_thread_action)
+
+        # Add "New Assistant" action
+        new_assistant_action = QAction("New Assistant", self)
+        new_assistant_action.triggered.connect(self.create_new_assistant)  # You need to define this method
+        edit_menu.addAction(new_assistant_action)
+
+
         # Set the minimum size for the window
         self.setMinimumSize(QSize(800, 600))
 
@@ -301,24 +314,48 @@ class PmCoPilotApp(QMainWindow):
         """
         self.setStyleSheet(style_sheet)
 
+    def onInitializationComplete(self, assistantAPI):
+        # Once initialization is complete, you can use assistantAPI and continue with the setup
+        self.assistantAPI = assistantAPI
+        self.init_thread.quit()
+        self.init_thread.wait()
+
+        self.update_status_display("Assistant ready for your input!")
+
+    def start_new_thread(self):
+        self.service_node.get_logger().info("New thread will be started!")
+        try:
+            self.assistantAPI.create_new_thread()
+        except Exception as e:
+            self.service_node.get_logger().error(f"New thread could not be created: Error {e}!")
+        
+        self.chat_history.clear()
+        self.update_status_display("New thread started! Assistant ready for your input!")
+        self.service_node.get_logger().info("New thread started!")
+
+    def create_new_assistant(self):
+        self.service_node.get_logger().info("New assistant will be created!")
+
+
+
     def startSpeechRecognition(self):
         self.service_node.get_logger().info(f"start speech recognition")
-        # self.thread = QThread()
-        # self.worker = SpeechWorker(self.service_node)
-        # self.worker.moveToThread(self.thread)
+        self.thread = QThread()
+        self.worker = SpeechWorker(self.service_node)
+        self.worker.moveToThread(self.thread)
 
-        # # Connect signals
-        # self.thread.started.connect(self.worker.run)
+        # Connect signals
+        self.thread.started.connect(self.worker.run)
 
-        # # self.worker.textReceived.connect(self.handleSpeechInput)
-        # self.worker.errorOccurred.connect(self.handleError)
-        # self.worker.finished.connect(self.thread.quit)  # Ensure worker emits a finished signal when done
-        # self.worker.finished.connect(self.worker.deleteLater)  # Cleanup worker after finishing
-        # self.thread.finished.connect(self.thread.deleteLater)  # Cleanup thread after it finishes
+        # self.worker.textReceived.connect(self.handleSpeechInput)
+        self.worker.errorOccurred.connect(self.handleError)
+        self.worker.finished.connect(self.thread.quit)  # Ensure worker emits a finished signal when done
+        self.worker.finished.connect(self.worker.deleteLater)  # Cleanup worker after finishing
+        self.thread.finished.connect(self.thread.deleteLater)  # Cleanup thread after it finishes
 
-        # self.worker.finished.connect(self.handleSpeechInput)
+        self.worker.finished.connect(self.handleSpeechInput)
 
-        # self.thread.start()
+        self.thread.start()
 
     def handleSpeechInput(self, message):
         # Process the recognized text as input
@@ -365,11 +402,6 @@ class PmCoPilotApp(QMainWindow):
 
     def update_status_display(self, status_message):
         self.status_label.setText(f"Status: {status_message}")
-
-
-    def update_chat_history(self,speaker, message, background_color):
-        # Update the chat history with the user's message and the bot's response
-        self.chat_history.append(speaker + message)
 
 
     def closeEvent(self, event: QEvent):

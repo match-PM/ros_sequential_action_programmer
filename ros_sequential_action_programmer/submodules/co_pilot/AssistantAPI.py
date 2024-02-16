@@ -23,14 +23,15 @@ class AssistantAPI:
         self.client.api_key = os.environ["OPENAI_API_KEY"]
         
 
-        config_path = self.path + '/OpenAI_config.yaml'        
-        with open(config_path, 'r') as file:
+        self.config_path = self.path + '/OpenAI_config.yaml'        
+        with open(self.config_path, 'r') as file:
             config_data = yaml.safe_load(file)
-            gpt_model = config_data['gpt_model'][0]
-            instruction_prompt = config_data['instruction_prompt']
+            self.gpt_model = config_data['gpt_model'][0]
+            self.instruction_prompt = config_data['instruction_prompt']
+            self.thread_id = config_data['last_thread_id'][0]
 
-            self.service_node.get_logger().info(f"model {gpt_model}")
-            self.service_node.get_logger().info(f"instr {instruction_prompt}")
+            self.service_node.get_logger().info(f"model {self.gpt_model}")
+            self.service_node.get_logger().info(f"instr {self.instruction_prompt}")
 
         #to retrieve all defined assistants
         self.my_assistants = self.client.beta.assistants.list(
@@ -48,35 +49,57 @@ class AssistantAPI:
             self.assistant = self.client.beta.assistants.update(
                 assistant_id=self.assistant_id
             )
+            if self.thread_id == '':
+                self.create_new_thread()
+            else: 
+                self.thread = self.client.beta.threads.retrieve(self.thread_id)
 
         else:
-            self.service_node.get_logger().warn(f"No Assistant defined! A new one is created!")
+            self.create_new_assistant()
 
-            # Upload file
-            self.update_and_upload_file()
-
-            self.file_id = self.get_file_id()
-
-            #call this once to create the assistant
-            self.assistant = self.client.beta.assistants.create(
-                name="PM Co Pilot",
-                instructions=instruction_prompt,
-                model = gpt_model,
-                tools = tool,
-                file_ids=[self.file_id]
-            )
-            #to retrieve all defined assistants
-            self.my_assistants = self.client.beta.assistants.list(
-                order="desc",
-                limit = "20"
-            )
-            self.assistant_id = self.my_assistants.data[0].id
+        self.service_node.get_logger().info(f"Co-Pilot AssistantAPI initialized! ThreadID: {self.thread.id}")
 
 
-        self.thread = self.client.beta.threads.create()
+    def create_new_assistant(self):
+        self.service_node.get_logger().warn(f"No Assistant defined! A new one is created!")
 
-        self.service_node.get_logger().info("Co-Pilot AssistantAPI initialized!")
+        # Upload file
+        self.update_and_upload_file()
 
+        self.file_id = self.get_file_id()
+
+        #call this once to create the assistant
+        self.assistant = self.client.beta.assistants.create(
+            name="PM Co Pilot",
+            instructions=self.instruction_prompt,
+            model = self.gpt_model,
+            tools = tool,
+            file_ids=[self.file_id]
+        )
+        #to retrieve all defined assistants
+        self.my_assistants = self.client.beta.assistants.list(
+            order="desc",
+            limit = "20"
+        )
+        self.assistant_id = self.my_assistants.data[0].id
+
+        self.create_new_thread()
+
+    def create_new_thread(self):
+        try:
+            self.thread = self.client.beta.threads.create()
+        except Exception as e:
+            return e
+        
+        try:
+            with open(self.config_path, 'r') as file:
+                config_data = yaml.safe_load(file)
+            config_data['last_thread_id'][0] = str(self.thread.id)
+
+            with open(self.config_path, 'w') as file:
+                yaml.safe_dump(config_data, file)
+        except Exception as e:
+            return e
 
     def get_file_id(self):
         #Call this to get the list of all uploaded files
