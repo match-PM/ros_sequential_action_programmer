@@ -59,8 +59,33 @@ class AssistantAPI:
 
         self.service_node.get_logger().info(f"Co-Pilot AssistantAPI initialized! ThreadID: {self.thread.id}")
 
+    def update_assistant(self):
+        '''
+        Update the assisant. Gets the current services and frames and add it to the assistant.
+        '''
+        #to retrieve all defined assistants
+        self.my_assistants = self.client.beta.assistants.list(
+            order="desc",
+            limit = "20"
+        )  
+
+        self.assistant_id = self.my_assistants.data[0].id
+
+        self.file_id = self.update_and_upload_file()
+
+        # get the current assistant and add the current file
+        self.my_assistant = self.client.beta.assistants.retrieve(self.assistant_id)
+        
+        self.assistant = self.client.beta.assistants.update(
+            assistant_id=self.assistant_id,
+            file_ids=[self.file_id]
+        )
+        self.create_new_thread()
 
     def create_new_assistant(self):
+        '''
+        Creates a new assistant.
+        '''
         self.service_node.get_logger().warn(f"No Assistant defined! A new one is created!")
 
         # Upload file
@@ -86,6 +111,9 @@ class AssistantAPI:
         self.create_new_thread()
 
     def create_new_thread(self):
+        '''
+        Creates a new thread and saves the id in the config yaml.
+        '''
         try:
             self.thread = self.client.beta.threads.create()
         except Exception as e:
@@ -102,6 +130,9 @@ class AssistantAPI:
             return e
 
     def get_file_id(self):
+        '''
+        Gets the id of the last added file.
+        '''
         #Call this to get the list of all uploaded files
         file_list = self.client.files.list()
 
@@ -111,46 +142,54 @@ class AssistantAPI:
     
     
     def update_and_upload_file(self):
+        '''
+        Gets a list of current active services and frames. Saves it as a json and uploads it to the api.
+        Return the file_id.
+        '''
+        # Delete all uploaded files before new one is uploaded
+        self.delete_files()
 
         file_name = "services_and_frames.json"
         file_path = f"{self.path}/{file_name}"
 
-        # # Get current tf_static frames
-        # tf_data = []
-        # try:
-        #     tf_data = self.action_sequence_node.recommendations.get_recommendations()
+        # Get current tf_static frames
+        tf_data = []
+        try:
+            tf_data = self.action_sequence_node.recommendations.get_recommendations()
 
-        #     tf_data = tf_data[1]['TF_static']
-        # except Exception:
-        #     self.service_node.get_logger().warn("tf_static topic not active!")
+            tf_data = tf_data[1]['TF_static']
+        except Exception:
+            self.service_node.get_logger().warn("tf_static topic not active!")
 
 
-        # # Get all services that are included in the whitelist.yaml
-        # data = self.action_sequence_node.get_all_service_req_res_dict(self.action_sequence_node.get_active_client_whtlist())
+        # Get all services that are included in the whitelist.yaml
+        data = self.action_sequence_node.get_all_service_req_res_dict(self.action_sequence_node.get_active_client_whtlist())
         
-        # if data == {}:
-        #     self.service_node.get_logger().warn("No active services!")
+        if data == {}:
+            self.service_node.get_logger().warn("No active services!")
 
-        # data['Frames'] = tf_data
+        data['Frames'] = tf_data
 
-        # # Save json-file
-        # try:
-        #     with open(file_path, 'w') as file:
-        #         json.dump(data, file)
+        # Save json-file
+        try:
+            with open(file_path, 'w') as file:
+                json.dump(data, file)
 
-        #     self.service_node.get_logger().info(f"List saved to {file_path}")
+            self.service_node.get_logger().info(f"List saved to {file_path}")
 
-        # except IOError as e:
-        #     self.service_node.get_logger().error(f"An error occurred while writing the file: {e}")
+        except IOError as e:
+            self.service_node.get_logger().error(f"An error occurred while writing the file: {e}")
 
-        # except Exception as e:
-        #     self.service_node.get_logger().error(f"An unexpected error occurred: {e}")
+        except Exception as e:
+            self.service_node.get_logger().error(f"An unexpected error occurred: {e}")
 
         # upload file to openAI API
         file = self.client.files.create(
             file=open(file_path, "rb"),
             purpose='assistants'
         )
+
+        return self.get_file_id()
 
     
     def add_message(self,message:str):
@@ -213,7 +252,7 @@ class AssistantAPI:
                 output = json.dumps(response)
                 self.service_node.get_logger().info(f"output {output}")
             else:
-                output = False
+                output = json.dumps(False)
 
             self.tools_output_array.append({"tool_call_id": tool_call_id, "output": output})
 

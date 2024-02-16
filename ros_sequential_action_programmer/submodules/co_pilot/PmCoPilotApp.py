@@ -5,11 +5,10 @@ from rclpy.node import Node
 
 import speech_recognition as sr
 import pyttsx3
-# import whisper
 from pydub import AudioSegment
 from pydub.playback import play
 import io
-
+import tempfile
 from openai import OpenAI
 
 from PyQt6.QtGui import QIcon, QAction, QFont, QPalette, QColor, QTextCursor, QTextBlockFormat, QTextCharFormat
@@ -38,7 +37,7 @@ class SpeechWorker(QObject):
         with sr.Microphone() as source:
             self.service_node.get_logger().info("Speech Recognition initialized!")
             try:
-                audio = r.listen(source,timeout=2,phrase_time_limit=2)
+                audio = r.listen(source,timeout=2,phrase_time_limit=20)
                 
                 # Convert the audio data to an audio file format (e.g., WAV)
                 audio_data = audio.get_wav_data()
@@ -60,7 +59,8 @@ class SpeechWorker(QObject):
 
                 transcript = self.client.audio.transcriptions.create(
                     model="whisper-1",
-                    file=audio_file
+                    file=audio_file,
+                    language="en"
                 )
 
                 # Use pydub to play back the audio file
@@ -281,8 +281,8 @@ class PmCoPilotApp(QMainWindow):
         edit_menu.addAction(new_thread_action)
 
         # Add "New Assistant" action
-        new_assistant_action = QAction("New Assistant", self)
-        new_assistant_action.triggered.connect(self.create_new_assistant)  # You need to define this method
+        new_assistant_action = QAction("Update Assistant", self)
+        new_assistant_action.triggered.connect(self.update_assistant)  # You need to define this method
         edit_menu.addAction(new_assistant_action)
 
 
@@ -333,10 +333,16 @@ class PmCoPilotApp(QMainWindow):
         self.update_status_display("New thread started! Assistant ready for your input!")
         self.service_node.get_logger().info("New thread started!")
 
-    def create_new_assistant(self):
-        self.service_node.get_logger().info("New assistant will be created!")
-
-
+    def update_assistant(self):
+        self.service_node.get_logger().info("Assistant will be updated with new file")
+        try:
+            self.assistantAPI.update_assistant()
+        except Exception as e:
+            self.service_node.get_logger().error(f"Assistant could not be updated: Error {e}!")
+        
+        self.chat_history.clear()
+        self.update_status_display("New file added to the assistant! Assistant ready for your input!")
+        self.service_node.get_logger().info("Assistant updated!")
 
     def startSpeechRecognition(self):
         self.service_node.get_logger().info(f"start speech recognition")
@@ -369,9 +375,28 @@ class PmCoPilotApp(QMainWindow):
         self.service_node.get_logger().info(f"Error: {error_message}")
 
     def onProcessedMessage(self, response):
+        self.client = OpenAI()
+        self.client.api_key = os.environ["OPENAI_API_KEY"]
+        
+        speech_repsonse = self.client.audio.speech.create(
+            model="tts-1",
+            voice="alloy",
+            input=response
+        )
+        # Save the speech response to a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmpfile:
+            tmpfile.write(speech_repsonse.content)
+            tmp_filename = tmpfile.name
+
+        # Load the temporary file into an AudioSegment
+        sound = AudioSegment.from_file(tmp_filename)
+
+        # Play the audio
+        play(sound)
+        os.remove(tmp_filename)
         # Use pyttsx3 to speak out the response
-        self.speech_engine.say(response)
-        self.speech_engine.runAndWait()
+        # self.speech_engine.say(response)
+        # self.speech_engine.runAndWait()
 
     def on_send_clicked(self):
         message = self.message_input.toPlainText()
@@ -399,6 +424,7 @@ class PmCoPilotApp(QMainWindow):
 
     def handle_processed_message(self, response):
         self.chat_history.append_reply("OpenAI: ", response)
+        # self.onProcessedMessage(response=response)
 
     def update_status_display(self, status_message):
         self.status_label.setText(f"Status: {status_message}")
