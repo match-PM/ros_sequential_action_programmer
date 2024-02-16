@@ -106,28 +106,45 @@ class MessageWorker(QObject):
         self.assistantAPI.add_message(self.message)
         self.assistantAPI.run_assistant()
 
+        dot_state = 0
+        animation_sequence = ["", ".", "..", "..."]
+
         while self.assistantAPI.retrieve_status() not in ["completed", "failed", "requires_action"]:
             status = self.assistantAPI.retrieve_status()
-            self.service_node.get_logger().info(f"Status {status}")
-            self.update_status.emit(status)
+            # self.service_node.get_logger().info(f"Status 1 {status}")            
+            animated_status = status + animation_sequence[dot_state]
+            self.update_status.emit(animated_status)
+            
+            # Cycle through the animation sequence
+            dot_state = (dot_state + 1) % len(animation_sequence)
+
             time.sleep(1)
 
         self.update_status.emit(self.assistantAPI.retrieve_status())
 
         if self.assistantAPI.retrieve_status() == "requires_action":
-            print("Function call")
+            # self.service_node.get_logger().info("Function call")
             self.assistantAPI.execute_function()
             self.assistantAPI.output_function_to_assistant()
         else:
-            print("No function call")
+            self.service_node.get_logger().info("No function call")
 
         while self.assistantAPI.retrieve_status() not in ["completed", "failed", "requires_action"]:
-            self.update_status.emit(self.assistantAPI.retrieve_status())
+            # self.service_node.get_logger().info(f"Status 2 {status}")
+            status = self.assistantAPI.retrieve_status()
+
+            animated_status = status + animation_sequence[dot_state]
+            self.update_status.emit(animated_status)
+            
+            # Cycle through the animation sequence
+            dot_state = (dot_state + 1) % len(animation_sequence)
             time.sleep(1)
 
         self.update_status.emit(self.assistantAPI.retrieve_status())
-
-        response = self.assistantAPI.retrieve_response()
+        try:
+            response = self.assistantAPI.retrieve_response()
+        except:
+            response = "No message received!"
         self.finished.emit(response)
 
 class ChatDisplay(QTextEdit):
@@ -285,22 +302,23 @@ class PmCoPilotApp(QMainWindow):
         self.setStyleSheet(style_sheet)
 
     def startSpeechRecognition(self):
-        self.thread = QThread()
-        self.worker = SpeechWorker(self.service_node)
-        self.worker.moveToThread(self.thread)
+        self.service_node.get_logger().info(f"start speech recognition")
+        # self.thread = QThread()
+        # self.worker = SpeechWorker(self.service_node)
+        # self.worker.moveToThread(self.thread)
 
-        # Connect signals
-        self.thread.started.connect(self.worker.run)
+        # # Connect signals
+        # self.thread.started.connect(self.worker.run)
 
-        # self.worker.textReceived.connect(self.handleSpeechInput)
-        self.worker.errorOccurred.connect(self.handleError)
-        self.worker.finished.connect(self.thread.quit)  # Ensure worker emits a finished signal when done
-        self.worker.finished.connect(self.worker.deleteLater)  # Cleanup worker after finishing
-        self.thread.finished.connect(self.thread.deleteLater)  # Cleanup thread after it finishes
+        # # self.worker.textReceived.connect(self.handleSpeechInput)
+        # self.worker.errorOccurred.connect(self.handleError)
+        # self.worker.finished.connect(self.thread.quit)  # Ensure worker emits a finished signal when done
+        # self.worker.finished.connect(self.worker.deleteLater)  # Cleanup worker after finishing
+        # self.thread.finished.connect(self.thread.deleteLater)  # Cleanup thread after it finishes
 
-        self.worker.finished.connect(self.handleSpeechInput)
+        # self.worker.finished.connect(self.handleSpeechInput)
 
-        self.thread.start()
+        # self.thread.start()
 
     def handleSpeechInput(self, message):
         # Process the recognized text as input
@@ -357,9 +375,9 @@ class PmCoPilotApp(QMainWindow):
     def closeEvent(self, event: QEvent):
         # Custom actions to perform when the window is closing
         self.cleanup()
-        if self.thread is not None and self.thread.isRunning():
-            self.thread.quit()  # Request the thread to quit
-            self.thread.wait()  # Wait for the thread to finish
+        # if self.thread is not None and self.thread.isRunning():
+        #     self.thread.quit()  # Request the thread to quit
+        #     self.thread.wait()  # Wait for the thread to finish
         event.accept()  # Proceed with the window closing
 
     def cleanup(self):

@@ -3,7 +3,7 @@ import json
 from rclpy.node import Node
 from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
 from ros_sequential_action_programmer.submodules.obj_dict_modules.dict_functions import convert_to_ordered_dict, get_key_value_pairs_from_dict
-
+from typing import Tuple, Any
 
 class ServiceCalls:
     def __init__(self, node:Node) -> None:
@@ -29,7 +29,7 @@ class ServiceCalls:
         return self.service_action.get_init_success()
     
         
-    def execute_service_call(self,srv_values):
+    def execute_service_call(self,srv_values) -> Tuple[bool, Any]:
         """
         Execute a service call.
 
@@ -47,7 +47,7 @@ class ServiceCalls:
             service_response = self.service_action.service_res_dict
             print(success_execute)    
 
-            return service_response
+            return success_execute, service_response
         else:
             return False
 

@@ -149,12 +149,14 @@ class AssistantAPI:
     
     def retrieve_status(self):
         #retrieve the run status
-        self.run = self.client.beta.threads.runs.retrieve(
-            thread_id = self.thread.id,
-            run_id = self.run.id
-        )
-        print(self.run.status)
-        return self.run.status
+        try:
+            self.run = self.client.beta.threads.runs.retrieve(
+                thread_id = self.thread.id,
+                run_id = self.run.id
+            )
+            return self.run.status
+        except:
+            return 'failed'
     
     def execute_function(self):
         #figure out which function should be called
@@ -182,10 +184,13 @@ class AssistantAPI:
             #     print(f"Error parsing JSON for tool {tool_call_id}: {function_call_args['error']}")
             #     output = "Function parameters not formatted as a json!"
             if (function_name == 'ServiceCall'):
-                response=self.service_builder.execute_service_call(srv_values=function_arg)
+                success, response=self.service_builder.execute_service_call(srv_values=function_arg)
 
-            output = json.dumps(response)
-            self.service_node.get_logger().info(f"output {output}")
+            if success:
+                output = json.dumps(response)
+                self.service_node.get_logger().info(f"output {output}")
+            else:
+                output = False
 
             self.tools_output_array.append({"tool_call_id": tool_call_id, "output": output})
 

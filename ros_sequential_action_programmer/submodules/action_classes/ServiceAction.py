@@ -110,6 +110,7 @@ class ServiceAction:
             
             if not client.wait_for_service(timeout_sec=2.0):
                 self.node.get_logger().error(f"Client {self.client} not available, aborting...")
+                self.service_res_dict = collections.OrderedDict([("Error", "Client not available")])
                 srv_call_success = False
                 srv_end_time = datetime.now()
                 self.update_log_entry(srv_call_success, srv_start_time, srv_end_time,additional_text='Client not available! Exited with error!')
