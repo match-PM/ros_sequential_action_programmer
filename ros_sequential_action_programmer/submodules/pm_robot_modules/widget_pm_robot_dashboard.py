@@ -165,25 +165,23 @@ class PmRobotAxisControl():
     def move_to_target(self):
         # move to target pose
         if self.get_active_tool() == 'PM_Robot_Tool_TCP':
-            service_action = ServiceAction(self.node, client='/pm_moveit_server/move_tool_to_frame', service_type='pm_moveit_interfaces/srv/MoveToolTcpTo')
+            service_action = ServiceAction(self.node, client='/pm_moveit_server/move_tool_to_pose', service_type='pm_moveit_interfaces/srv/MoveToPose')
             #client = self.node.create_client(self.PM_Interfaces_Module.MoveToolTcpTo, '/pm_moveit_server/move_tool_to_frame', callback_group=self.clb_group)
-            request = self.PM_Interfaces_Module.MoveToolTcpTo.Request()
         elif self.get_active_tool() == 'Cam1_Toolhead_TCP':
-            service_action = ServiceAction(self.node, client='/pm_moveit_server/move_cam1_to_frame', service_type='pm_moveit_interfaces/srv/MoveCam1TcpTo')
+            service_action = ServiceAction(self.node, client='/pm_moveit_server/move_cam1_to_pose', service_type='pm_moveit_interfaces/srv/MoveToPose')
             #client = self.node.create_client(self.PM_Interfaces_Module.MoveCam1TcpTo, '/pm_moveit_server/move_cam1_to_frame', callback_group=self.clb_group)
-            request = self.PM_Interfaces_Module.MoveCam1TcpTo.Request()
         elif self.get_active_tool() == 'Laser_Toolhead_TCP':
-            service_action = ServiceAction(self.node, client='/pm_moveit_server/move_laser_to_frame', service_type='pm_moveit_interfaces/srv/MoveLaserTcpTo')
+            service_action = ServiceAction(self.node, client='/pm_moveit_server/move_laser_to_pose', service_type='pm_moveit_interfaces/srv/MoveToPose')
             #client = self.node.create_client(self.PM_Interfaces_Module.MoveLaserTcpTo, '/pm_moveit_server/move_laser_to_frame', callback_group=self.clb_group)
-            request = self.PM_Interfaces_Module.MoveLaserTcpTo.Request()
         else:
             self.node.get_logger().error(f"Service for moving '{self.get_active_tool()}' not yet implemented!")
             return
         
+        request = self.PM_Interfaces_Module.MoveToPose.Request()
         request.move_to_pose.position.x = self.target_pose.position.x / 1000
         request.move_to_pose.position.y = self.target_pose.position.y / 1000
         request.move_to_pose.position.z = self.target_pose.position.z / 1000
-        request.execute = True
+        request.execute_movement = True
         request_dict = message_to_ordereddict(request)
         service_action.set_req_message_from_dict(request_dict)
         success = service_action.execute()
