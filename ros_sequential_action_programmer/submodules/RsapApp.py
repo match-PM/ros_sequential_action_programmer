@@ -204,8 +204,10 @@ class RsapApp(QMainWindow):
                 'Empty':  ['New'],
                 'Active Clients blk':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.get_active_client_blklist()),
                 'Active Clients':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.list_of_active_clients),
+                'Active Clients wht':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.get_active_client_whtlist()),
                 'Memorised Clients blk':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.get_memorized_client_blklist()),
                 'Memorised Clients ':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.get_list_memorized_service_clients()),
+                'Memorised Clients wht':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.get_memorized_client_whitelist()),
                 'Available Service Types':  get_service_interfaces(),
             },
             'Skills': ['TBD1','TBD2','TBD3'],
@@ -330,6 +332,7 @@ class RsapApp(QMainWindow):
 
     def set_widget_action_sequence_name(self, text):
         self.action_sequence_name_widget.setText("Process name: " + text)
+        self.action_sequence_name_widget.setToolTip(self.action_sequence_builder.action_file_path)
 
     def create_service_parameter_layout(self):
         self.scroll_area = QScrollArea()

@@ -300,7 +300,7 @@ class RosSequentialActionProgrammer:
             process_dict["action_list"] = action_list
             try:
                 with open(f"{self.folder_path}/{self.name}.json", "w") as json_file:
-                    json.dump(process_dict, json_file)
+                    json.dump(process_dict, json_file,indent=4)
                 self.node.get_logger().info("Saved!")
                 return True
             except FileNotFoundError as e:
@@ -492,6 +492,14 @@ class RosSequentialActionProgrammer:
         service_type_list = [t[1] for t in self.list_of_memorized_services]
         return self.get_client_blacklist(clients_list = client_list, service_list = service_type_list)
     
+    def get_memorized_client_whitelist(self)-> list:
+        """
+        This function returns only clients, that are not listed in the whitelist.yaml
+        """
+        client_list = [t[0] for t in self.list_of_memorized_services]
+        service_type_list = [t[1] for t in self.list_of_memorized_services]
+        return self.get_client_whitelist(clients_list = client_list, service_list = service_type_list)
+    
     def get_client_whitelist(self, clients_list: list, service_list: list)->list:
         """
         This function returns only clients, that are listed in the whitelist.yaml
@@ -532,7 +540,7 @@ class RosSequentialActionProgrammer:
             if not list_of_blk_clients:
                 list_of_blk_clients = []
             if not list_of_blk_types:
-                list_of_blk_types= []
+                list_of_blk_types = []
             
             for index, client in enumerate(clients_list):
                 if not client in list_of_blk_clients and not service_list[index] in list_of_blk_types:
@@ -934,7 +942,7 @@ class RosSequentialActionProgrammer:
                 with open(
                     f"{file_path}/{self.name}_log_{str(export_time)}.json", "w"
                 ) as json_file:
-                    json.dump(self.action_sequence_log, json_file)
+                    json.dump(self.action_sequence_log, json_file,indent=4)
                 self.node.get_logger().info("Action sequence log saved!")
                 self.action_log.clear()
                 return True

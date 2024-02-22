@@ -1,8 +1,9 @@
 # show only service clients with the following names
 clients_by_name:
  - '/pm_moveit_server/move'
+ - '/assembly_manager/'
+ - '/pm_vision_manager/'
 
-# Be careful with this. Only service clients with this service type will be shown
 clients_by_type:
   # - 'rcl_interfaces/srv/GetParameters'
 
