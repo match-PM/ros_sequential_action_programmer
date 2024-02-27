@@ -7,7 +7,8 @@ from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 import rclpy
-
+# import packagenotfounderror
+from ament_index_python.packages import PackageNotFoundError
 class RecomGenerator():
     def __init__(self,ros_node:Node) -> None:
         self.recommendations=[]
@@ -77,7 +78,7 @@ class RecomGenerator():
             vision_cameras = self.get_files_in_dir(directory=camera_config_path,file_end='.yaml', exclude_str=['vision_assistant'])
             self.append_to_recommendation({'Vision-Processes': vision_processes})
             self.append_to_recommendation({'Vision-Cameras': vision_cameras})
-        except:
+        except PackageNotFoundError as e:
             print("Opening package failed! Package 'pm_vision_manager' not found!")
     
     def update_frame_list(self):
@@ -94,26 +95,6 @@ class RecomGenerator():
         self.update_frame_list()
         self.vision_init()
 
-    def get_files_in_dir(self, directory: str, file_end: str, exclude_str:list[str] = []):
-        """
-        This function returns a list of files in the directory with the given file_end.
-        Parameters:
-        directory: str
-        file_end: str
-        exclude_str: list[str]
-        """
-        files = []
-        for foldername, subfolders, filenames in os.walk(directory):
-            for filename in filenames:
-                if filename.endswith(file_end):
-                    valid_file = True
-                    for string in exclude_str:
-                        if string in filename:
-                            valid_file = False
-                    if valid_file:    
-                        files.append(os.path.join(foldername, filename).replace(directory, ''))
-        return files
-    
     def get_recommendations(self)->list:
         self.update_recommendations()
         return self.recommendations
@@ -134,7 +115,26 @@ class RecomGenerator():
                     return
         self.recommendations.append(input_recom_dict)
 
-    
+    @staticmethod
+    def get_files_in_dir(directory: str, file_end: str, exclude_str:list[str] = []):
+        """
+        This function returns a list of files in the directory with the given file_end.
+        Parameters:
+        param: directory: str
+        file_end: str
+        exclude_str: list[str]
+        """
+        files = []
+        for foldername, subfolders, filenames in os.walk(directory):
+            for filename in filenames:
+                if filename.endswith(file_end):
+                    valid_file = True
+                    for string in exclude_str:
+                        if string in filename:
+                            valid_file = False
+                    if valid_file:    
+                        files.append(os.path.join(foldername, filename).replace(directory, ''))
+        return files
 
 if __name__ == "__main__":
     recommendations = RecomGenerator()

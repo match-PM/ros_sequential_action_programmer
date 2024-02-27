@@ -22,6 +22,8 @@ import ast
 
 from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_config import PmRobotConfigWidget
 from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import PmDashboardApp
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.AppTextWidget import AppTextOutput
+from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_vision import append_vision_widget_to_menu
 
 # Change this later to be cleaner
 try:
@@ -168,6 +170,9 @@ class RsapApp(QMainWindow):
         open_pm_robot_tools = QAction("PM Robot Jog Panel", self)
         open_pm_robot_tools.triggered.connect(partial(self.open_sub_window, PmDashboardApp))
         pm_robot_tools_menu.addAction(open_pm_robot_tools)
+
+        # Add vision manager to the menu, this will only be added if the package is found
+        append_vision_widget_to_menu(self, pm_robot_tools_menu, self.service_node)
 
         try:
             open_pm_robot_co_pilot = QAction("PM Co-Pilot", self)
@@ -738,21 +743,6 @@ class RsapApp(QMainWindow):
             self.service_node.get_logger().error(f"Error opening sub window: {e}")
         except Exception as e:
             self.service_node.get_logger().error(f"Error opening sub window: {e}")
-
-class AppTextOutput(QTextEdit):
-    def __init__(self):
-        super().__init__()
-        self.setReadOnly(True)
-
-    def append_red_text(self, text:str) -> None:
-        self.setTextColor(QColor("red"))
-        self.append(text)
-        self.setTextColor(QColor("black"))
-
-    def append_green_text(self, text:str) -> None:
-        self.setTextColor(QColor("green"))
-        self.append(text)
-        self.setTextColor(QColor("black"))
 
 class QLineButton(QWidget):
     def __init__(self, full_key, initial_value, on_text_changed, on_button_clicked):
