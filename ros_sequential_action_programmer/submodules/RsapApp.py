@@ -24,6 +24,9 @@ from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robo
 from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import PmDashboardApp
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AppTextWidget import AppTextOutput
 from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_vision import append_vision_widget_to_menu
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.NoScrollComboBox import NoScrollComboBox
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_widgets import ActionListWidget, ActionListItem
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.RecomButton import RecomButton
 
 # Change this later to be cleaner
 try:
@@ -103,7 +106,7 @@ class RsapApp(QMainWindow):
 
         execute_layout = QHBoxLayout()
         # Add combobox for vision pipline building
-        self.checkbox_list = ReorderableCheckBoxListWidget()
+        self.checkbox_list = ActionListWidget()
         self.checkbox_list.itemClicked.connect(self.action_selected)
         #self.checkbox_list.itemChanged.connect(self.set_function_states)
         self.checkbox_list.CustDragSig.connect(self.on_action_drag_drop)
@@ -266,7 +269,7 @@ class RsapApp(QMainWindow):
         # Get the name of the service from the currently acive action, which is the newly added one
         if success:
             service_name =  self.action_sequence_builder.get_current_action_name()
-            function_checkbox = ReorderableCheckBoxListItem(f"{pos_to_insert}. {service_name}")
+            function_checkbox = ActionListItem(f"{pos_to_insert}. {service_name}")
             self.checkbox_list.insertItem(pos_to_insert,function_checkbox)
             self.init_actions_list()
             self.checkbox_list.setCurrentRow(pos_to_insert)
@@ -281,7 +284,7 @@ class RsapApp(QMainWindow):
         """
         self.checkbox_list.clear()
         for index, action in enumerate(self.action_sequence_builder.action_list):
-            function_checkbox = ReorderableCheckBoxListItem(f"{index}. {action.name}")
+            function_checkbox = ActionListItem(f"{index}. {action.name}")
             self.checkbox_list.addItem(function_checkbox)
 
     # def initiate_current_action_execution(self):
@@ -383,7 +386,7 @@ class RsapApp(QMainWindow):
 
         # Create a dropdown menu for selecting the error handling inputs
         label_error_handling_box = QLabel(f"Execution identifier: ")
-        self.error_handling_box = QComboBox()
+        self.error_handling_box = NoScrollComboBox()
 
         box_values = ['None'] + self.action_sequence_builder.get_action_at_index(row).get_service_bool_fields()
         self.error_handling_box.addItems(box_values)
@@ -431,7 +434,7 @@ class RsapApp(QMainWindow):
             if isinstance(value, OrderedDict):
                 self.populateActionParameterWidgets(value, full_key)
             else:
-                widget_with_button = QLineButton(full_key=full_key, 
+                widget_with_button = RecomButton(full_key=full_key, 
                                                  initial_value=str(value), 
                                                  on_text_changed=self.updateDictionary, 
                                                  on_button_clicked=self.get_recom_button_clicked)
@@ -660,7 +663,7 @@ class RsapApp(QMainWindow):
             # Get the name of the service from the currently acive action, which is the newly added one
             if success:
                 service_name =  self.action_sequence_builder.get_current_action_name()
-                function_checkbox = ReorderableCheckBoxListItem(f"{pos_to_insert}. {service_name}")
+                function_checkbox = ActionListItem(f"{pos_to_insert}. {service_name}")
                 self.checkbox_list.insertItem(pos_to_insert,function_checkbox)
                 self.init_actions_list()
                 self.checkbox_list.setCurrentRow(pos_to_insert)
@@ -744,65 +747,6 @@ class RsapApp(QMainWindow):
         except Exception as e:
             self.service_node.get_logger().error(f"Error opening sub window: {e}")
 
-class QLineButton(QWidget):
-    def __init__(self, full_key, initial_value, on_text_changed, on_button_clicked):
-        super().__init__()
-
-        label = QLabel(full_key)
-        edit = QLineEdit(initial_value)
-        edit.textChanged.connect(on_text_changed(full_key, edit))
-
-        button = QPushButton("+")
-        button.clicked.connect(partial(on_button_clicked,full_key,edit))
-
-        label_layout = QHBoxLayout()
-        edit_button_layout = QHBoxLayout()
-
-        edit_button_layout.addWidget(edit)
-        edit_button_layout.addWidget(button)
-        
-        label_layout.addWidget(label)
-
-        main_layout = QVBoxLayout()
-        main_layout.addLayout(label_layout)
-        main_layout.addLayout(edit_button_layout)
-        self.setLayout(main_layout)
-
-class ReorderableCheckBoxListWidget(QListWidget):
-    CustDragSig = QtCore.pyqtSignal()
-    def __init__(self):
-        super(ReorderableCheckBoxListWidget,self).__init__()
-        self.setAcceptDrops(True)
-        self.setDragEnabled(True)
-        self.setAcceptDrops(True)
-        self.setDropIndicatorShown(True)
-        self.setDragDropMode(QListWidget.DragDropMode.InternalMove)
-        self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-
-    def get_widget_list_names(self):
-        name_list=[]
-        for index in range(self.count()):
-            item = self.item(index)
-            if item:
-                name_list.append(item.text())
-        return name_list
-    
-    def dropEvent(self, event):
-        super(ReorderableCheckBoxListWidget, self).dropEvent(event)
-        event.accept()
-        self.CustDragSig.emit()
-
-    def dragEnterEvent(self, event):
-        self.drag_source_position = self.currentRow()  # Capture the source position
-        super(ReorderableCheckBoxListWidget, self).dragEnterEvent(event)
-
-class ReorderableCheckBoxListItem(QListWidgetItem):
-    def __init__(self, function_name):
-        super().__init__(function_name)
-        self.setFlags(self.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-        font = self.font()
-        font.setPointSize(14)
-        self.setFont(font)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

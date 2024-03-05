@@ -1,5 +1,4 @@
-import sys
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QDialog, QDialogButtonBox, QPushButton, QFormLayout
+from PyQt6.QtWidgets import QVBoxLayout, QLabel, QLineEdit, QDialog, QDialogButtonBox
 
 class AddServiceDialog(QDialog):
     def __init__(self, service_name='', service_client='', service_type='', parent=None):

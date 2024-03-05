@@ -1,5 +1,5 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QMenu,  QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import  QMainWindow, QMenu
 from PyQt6.QtGui import QAction
 from functools import partial
 from copy import copy

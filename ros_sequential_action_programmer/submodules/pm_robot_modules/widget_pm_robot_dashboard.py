@@ -24,6 +24,8 @@ from sensor_msgs.msg._joint_state import JointState
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
 from rosidl_runtime_py.convert import message_to_ordereddict
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.AppTextWidget import AppTextOutput
+
 
 def rsetattr(obj, attr, val):
     pre, _, post = attr.rpartition('.')
@@ -117,6 +119,9 @@ class PmRobotAxisControl():
             print(e)
 
     def update_current_tool_pose(self):
+        """
+        Set current tool pose from active tool transform from TF
+        """
         try:
             tool_world_pose = self.tf_buffer.lookup_transform("world", self.get_active_tool(), rclpy.time.Time())
             self.current_tool_pose.position.x = tool_world_pose.transform.translation.x * 1000
@@ -130,6 +135,9 @@ class PmRobotAxisControl():
             print(e)
 
     def update_target_pose_with_current_pose(self):
+        """
+        Set the target pose to the current tool pose
+        """
         self.target_pose.position.x = self.current_tool_pose.position.x
         self.target_pose.position.y = self.current_tool_pose.position.y
         self.target_pose.position.z = self.current_tool_pose.position.z
@@ -162,21 +170,19 @@ class PmRobotAxisControl():
                 self.available_frames.append(frame)
                 self.frame_added = True
 
-    def move_to_target(self):
+    def move_to_target(self) -> bool:
         # move to target pose
         if self.get_active_tool() == 'PM_Robot_Tool_TCP':
             service_action = ServiceAction(self.node, client='/pm_moveit_server/move_tool_to_pose', service_type='pm_moveit_interfaces/srv/MoveToPose')
-            #client = self.node.create_client(self.PM_Interfaces_Module.MoveToolTcpTo, '/pm_moveit_server/move_tool_to_frame', callback_group=self.clb_group)
         elif self.get_active_tool() == 'Cam1_Toolhead_TCP':
             service_action = ServiceAction(self.node, client='/pm_moveit_server/move_cam1_to_pose', service_type='pm_moveit_interfaces/srv/MoveToPose')
-            #client = self.node.create_client(self.PM_Interfaces_Module.MoveCam1TcpTo, '/pm_moveit_server/move_cam1_to_frame', callback_group=self.clb_group)
         elif self.get_active_tool() == 'Laser_Toolhead_TCP':
             service_action = ServiceAction(self.node, client='/pm_moveit_server/move_laser_to_pose', service_type='pm_moveit_interfaces/srv/MoveToPose')
-            #client = self.node.create_client(self.PM_Interfaces_Module.MoveLaserTcpTo, '/pm_moveit_server/move_laser_to_frame', callback_group=self.clb_group)
         else:
             self.node.get_logger().error(f"Service for moving '{self.get_active_tool()}' not yet implemented!")
-            return
+            return False
         
+        service_action.set_service_bool_identifier('success')
         request = self.PM_Interfaces_Module.MoveToPose.Request()
         request.move_to_pose.position.x = self.target_pose.position.x / 1000
         request.move_to_pose.position.y = self.target_pose.position.y / 1000
@@ -189,7 +195,7 @@ class PmRobotAxisControl():
         #result = client.call(request)
         
         self.node.get_logger().info(f'Result of {self.get_active_tool()}: {success}')
-        return
+        return success
         
     def joint_state_callback(self, msg:JointState):
         self.joint_state_msg_received = True
@@ -259,12 +265,12 @@ class PmDashboardApp(QWidget):
         self.automove_active = self.automove_checkbox.isChecked
         # Add move button
         self.move_button = QPushButton('Move to Target')
-        self.move_button.clicked.connect(self.pm_robot_control.move_to_target)
+        self.move_button.clicked.connect(self.move_to_target)
         self.vertical_layout.addWidget(self.automove_checkbox)
         self.vertical_layout.addWidget(self.move_button)
 
         # add text output
-        self.text_output_terminal = QTextEdit()
+        self.text_output_terminal = AppTextOutput()
         self.text_output_terminal.setReadOnly(True)
         self.vertical_layout.addWidget(self.text_output_terminal)
 
@@ -277,6 +283,13 @@ class PmDashboardApp(QWidget):
 
         self.setWindowTitle('PM Robot Dashboard')
         self.setGeometry(100, 100, 1400, 800)
+
+    def move_to_target(self):
+        success = self.pm_robot_control.move_to_target()
+        if success:
+            self.text_output_terminal.append_green_text('Move successful')
+        else:
+            self.text_output_terminal.append_red_text('Move failed')
 
     def update_target_pose_widget(self):
         self.display_widget_target_pose_position_x.setText(str(round(self.pm_robot_control.target_pose.position.x,6)))
@@ -382,9 +395,12 @@ class PmDashboardApp(QWidget):
 
     def set_active_tool(self):
         # for changing active tool
+        self.pm_robot_control.set_target_pose_from_frame_world_transform(self.target_frame_combobox.currentText())
         self.pm_robot_control.set_active_tool(self.active_tool_combobox.currentText())
+        
         self.pm_robot_control.update_current_tool_pose()
-        self.pm_robot_control.update_target_pose_with_current_pose()
+        # update target pose with current pose, currently we do not want this
+        #self.pm_robot_control.update_target_pose_with_current_pose()
         self.update_target_pose_widget()
 
     def cbk_timer_update_widget_current_tool_pose(self):
@@ -401,6 +417,9 @@ class PmDashboardApp(QWidget):
 
     def cbk_target_frame_changed(self):
         self.pm_robot_control.set_target_pose_from_frame_world_transform(self.target_frame_combobox.currentText())
+        self.pm_robot_control.set_active_tool(self.active_tool_combobox.currentText())
+
+        self.pm_robot_control.update_current_tool_pose()
         self.update_target_pose_widget()
 
     def automove_active(self):
