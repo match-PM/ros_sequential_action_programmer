@@ -78,6 +78,8 @@ class AssistantAPI:
         
         self.assistant = self.client.beta.assistants.update(
             assistant_id=self.assistant_id,
+            model=self.gpt_model,
+            instructions=self.instruction_prompt,
             file_ids=[self.file_id]
         )
         self.create_new_thread()
@@ -144,7 +146,7 @@ class AssistantAPI:
     def update_and_upload_file(self):
         '''
         Gets a list of current active services and frames. Saves it as a json and uploads it to the api.
-        Return the file_id.
+        Returns the file_id.
         '''
         # Delete all uploaded files before new one is uploaded
         self.delete_files()
@@ -152,36 +154,36 @@ class AssistantAPI:
         file_name = "services_and_frames.json"
         file_path = f"{self.path}/{file_name}"
 
-        # Get current tf_static frames
-        tf_data = []
-        try:
-            tf_data = self.action_sequence_node.recommendations.get_recommendations()
+        # # Get current tf_static frames
+        # tf_data = []
+        # try:
+        #     tf_data = self.action_sequence_node.recommendations.get_recommendations()
 
-            tf_data = tf_data[1]['TF_static']
-        except Exception:
-            self.service_node.get_logger().warn("tf_static topic not active!")
+        #     tf_data = tf_data[1]['TF_static']
+        # except Exception:
+        #     self.service_node.get_logger().warn("tf_static topic not active!")
 
 
-        # Get all services that are included in the whitelist.yaml
-        data = self.action_sequence_node.get_all_service_req_res_dict(self.action_sequence_node.get_active_client_whtlist())
+        # # Get all services that are included in the whitelist.yaml
+        # data = self.action_sequence_node.get_all_service_req_res_dict(self.action_sequence_node.get_active_client_whtlist())
         
-        if data == {}:
-            self.service_node.get_logger().warn("No active services!")
+        # if data == {}:
+        #     self.service_node.get_logger().warn("No active services!")
 
-        data['Frames'] = tf_data
+        # data['Frames'] = tf_data
 
-        # Save json-file
-        try:
-            with open(file_path, 'w') as file:
-                json.dump(data, file)
+        # # Save json-file
+        # try:
+        #     with open(file_path, 'w') as file:
+        #         json.dump(data, file)
 
-            self.service_node.get_logger().info(f"List saved to {file_path}")
+        #     self.service_node.get_logger().info(f"List saved to {file_path}")
 
-        except IOError as e:
-            self.service_node.get_logger().error(f"An error occurred while writing the file: {e}")
+        # except IOError as e:
+        #     self.service_node.get_logger().error(f"An error occurred while writing the file: {e}")
 
-        except Exception as e:
-            self.service_node.get_logger().error(f"An unexpected error occurred: {e}")
+        # except Exception as e:
+        #     self.service_node.get_logger().error(f"An unexpected error occurred: {e}")
 
         # upload file to openAI API
         file = self.client.files.create(
@@ -236,7 +238,7 @@ class AssistantAPI:
             function_arg = each_tool.function.arguments
             print("Tool ID:" + tool_call_id)
             print("Function to Call:" + function_name )
-            print("Parameters to use:" + function_arg)
+            self.service_node.get_logger().info(f"Parameters to use: {function_arg}")
 
             function_arg = json.loads(function_arg)
 
