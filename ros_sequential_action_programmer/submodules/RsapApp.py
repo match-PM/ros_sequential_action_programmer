@@ -24,6 +24,8 @@ from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robo
 from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import PmDashboardApp
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AppTextWidget import AppTextOutput
 from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_vision import append_vision_widget_to_menu
+from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import append_jog_panel_to_menu
+
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.NoScrollComboBox import NoScrollComboBox
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_widgets import ActionListWidget, ActionListItem
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.RecomButton import RecomButton
@@ -170,12 +172,15 @@ class RsapApp(QMainWindow):
         open_pm_robot_config.triggered.connect(partial(self.open_sub_window, PmRobotConfigWidget))
         pm_robot_tools_menu.addAction(open_pm_robot_config)
 
-        open_pm_robot_tools = QAction("PM Robot Jog Panel", self)
-        open_pm_robot_tools.triggered.connect(partial(self.open_sub_window, PmDashboardApp))
-        pm_robot_tools_menu.addAction(open_pm_robot_tools)
+        # open_pm_robot_tools = QAction("PM Robot Jog Panel", self)
+        # open_pm_robot_tools.triggered.connect(partial(self.open_sub_window, PmDashboardApp))
+        # pm_robot_tools_menu.addAction(open_pm_robot_tools)
 
         # Add vision manager to the menu, this will only be added if the package is found
         append_vision_widget_to_menu(self, pm_robot_tools_menu, self.service_node)
+        
+        # Add jog panel to the menu, this will only be added if the package is found
+        append_jog_panel_to_menu(self, pm_robot_tools_menu, self.service_node)
 
         try:
             open_pm_robot_co_pilot = QAction("PM Co-Pilot", self)

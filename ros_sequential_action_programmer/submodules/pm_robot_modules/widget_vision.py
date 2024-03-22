@@ -15,6 +15,8 @@ import yaml
 from ament_index_python.packages import PackageNotFoundError
 from functools import partial
 import json
+import subprocess
+import os
 
 try:
     from pm_vision_interfaces.srv import GetRunningAssistants, StartVisionAssistant, StopVisionAssistant
@@ -33,7 +35,8 @@ def append_vision_widget_to_menu(mainWindow: QMainWindow, menu_bar:QMenu, node:N
     try:
         package_dir = get_package_share_directory('pm_vision_manager')
         open_vision = QAction("Vision Manager", mainWindow)
-        open_vision.triggered.connect(partial(create_vision_widget, mainWindow, node))
+        #open_vision.triggered.connect(partial(create_vision_widget, mainWindow, node))
+        open_vision.triggered.connect(open_new_vision_instance)
         menu_bar.addAction(open_vision)
 
     except PackageNotFoundError:
@@ -43,6 +46,12 @@ def append_vision_widget_to_menu(mainWindow: QMainWindow, menu_bar:QMenu, node:N
 def create_vision_widget(main_window, node:Node):
     main_window.vision_widget = VisionWidget(node)
     main_window.vision_widget.show()
+
+def open_new_vision_instance():
+    command  = 'terminator --new-tab -x ros2 launch pm_vision_manager pm_vision.launch.py'
+    subprocess.call(command, shell=True)
+
+
 
 class VisionWidget(QWidget):
     def __init__(self, node:Node):
@@ -213,5 +222,6 @@ def main(args=None):
     
 
 if __name__ == '__main__':
-    main()
+    open_new_vision_instance()
+    #main()
 

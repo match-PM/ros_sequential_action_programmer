@@ -1,7 +1,7 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QGridLayout, QMainWindow, QTableWidget, QTableWidgetItem, QWidget, QVBoxLayout, QLabel, QTextEdit, QLineEdit, QPushButton, QFormLayout, QHBoxLayout, QCheckBox, QComboBox
+from PyQt6.QtWidgets import QApplication, QTabWidget, QGridLayout, QMenu, QMainWindow, QTableWidget, QTableWidgetItem, QWidget, QVBoxLayout, QLabel, QTextEdit, QLineEdit, QPushButton, QFormLayout, QHBoxLayout, QCheckBox, QComboBox
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QAction
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from functools import partial, reduce
@@ -25,7 +25,19 @@ from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallb
 from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
 from rosidl_runtime_py.convert import message_to_ordereddict
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AppTextWidget import AppTextOutput
+from ament_index_python.packages import PackageNotFoundError
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+from builtin_interfaces.msg import Duration
+from rclpy.action import ActionClient
+from control_msgs.action import FollowJointTrajectory
+from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_joint_control import PmRobotJointControlWidget
 
+import time
+try:
+    from pm_moveit_interfaces.srv import MoveToPose
+except ImportError:
+    print("pm_moveit_interfaces not found")
+    pass
 
 def rsetattr(obj, attr, val):
     pre, _, post = attr.rpartition('.')
@@ -37,13 +49,37 @@ def rgetattr(obj, attr, *args):
     return reduce(_getattr, [obj] + attr.split('.'))
 
 
+def append_jog_panel_to_menu(mainWindow: QMainWindow, menu_bar:QMenu, node:Node):
+    """
+    This function tries to append the jobpanel widget to the menu bar of the main window.
+    It will only work if the 'pm_moveit_server' package is installed.
+    param mainWindow: The main window of the application
+    param menu_bar: The menu bar of the main window
+    param node: a ros node
+    """
+    try:
+        package_dir = get_package_share_directory('pm_moveit_server')
+        open_vision = QAction("PM Robot Jog Pannel", mainWindow)
+        open_vision.triggered.connect(partial(create_jog_widget, mainWindow, node))
+        menu_bar.addAction(open_vision)
+
+    except PackageNotFoundError:
+        print("pm_vision_manager not found")
+        return
+
+def create_jog_widget(main_window, node:Node):
+    main_window.jog_panel = PmDashboardApp(node)
+    main_window.jog_panel.show()
+
+
+
+
 class PmRobotAxisControl():
     
     BLACKLIST = ['1K_Dispenser_Flap', 'Z_Axis', '1K_Dispenser', '2K_Dispenser_Cartridge', 'Camera_Station', 'Camera_Calibration_Platelet', 'Gonio_Left_Stage_1_Top', 'Gonio_Left_Base', 'Gonio_Left_Stage_2_Bottom', 'Gonio_Right_Stage_1_Top', 'Gonio_Right_Stage_1_Bottom', 'Gonio_Right_Stage_2_Bottom', 'Gripper_Rot_Plate', 'UV_LED_Back', 'UV_Slider_X_Back', 'UV_LED_Front', 'UV_Slider_X_Front', 'X_Axis', 'axis_base', 'Y_Axis', '1K_Dispenser_TCP', '1K_Dispenser_Tip', '2K_Dispenser_TCP', 'Cam1_Toolhead_TCP', 'Camera_Bottom_View_Link', 'Camera_Bottom_View_Link_Optical', 'pm_robot_base_link', 'Camera_Top_View_Link', 'Camera_Top_View_Link_Optical', 'Gonio_Base_Right', 'Laser_Toolhead_TCP', 'PM_Robot_Tool_TCP', 'PM_Robot_Vacuum_Tool', 'PM_Robot_Vacuum_Tool_Tip',  'housing_hl', 'base_link_empthy', 'housing_hr', 'housing', 'housing_vl', 'housing_vr', 'laser_top_link', 'left_match_logo_font', 'left_match_logo_background', 'match_logo_link', 't_axis_toolchanger']
     
     def __init__(self, ros_node:Node):
         
-        self.PM_Interfaces_Module = import_module('pm_moveit_interfaces.srv')
         self.target_pose = Pose()
         self.tools = ['PM_Robot_Tool_TCP', '1K_Dispenser_TCP', 'Cam1_Toolhead_TCP','Laser_Toolhead_TCP']
         self._active_tool = 'PM_Robot_Tool_TCP'
@@ -71,7 +107,7 @@ class PmRobotAxisControl():
         # subscribe to joint states
         self.joint_state_subscription = self.node.create_subscription(JointState, '/joint_states', self.joint_state_callback, 10, callback_group=self.clb_group)
         self.joint_state_list = []
-        
+
     def set_active_tool(self, tool:str):
         if tool in self.tools:
             self._active_tool = tool
@@ -183,7 +219,7 @@ class PmRobotAxisControl():
             return False
         
         service_action.set_service_bool_identifier('success')
-        request = self.PM_Interfaces_Module.MoveToPose.Request()
+        request = MoveToPose.Request()
         request.move_to_pose.position.x = self.target_pose.position.x / 1000
         request.move_to_pose.position.y = self.target_pose.position.y / 1000
         request.move_to_pose.position.z = self.target_pose.position.z / 1000
@@ -227,14 +263,16 @@ class PmDashboardApp(QWidget):
 
 
     def init_ui(self):
-        central_widget = QWidget(self)
+        central_widget = QTabWidget(self)
         #self.setCentralWidget(central_widget)
         self.font_label = QFont()  # Create a QFont object
         self.font_label.setPointSize(14)  # Set the font size to 16 points
-        main_layout = QGridLayout()
+        
 
+        ik_control_widget = QWidget()
         self.vertical_layout = QVBoxLayout()
 
+        main_layout = QGridLayout()
         main_layout.addLayout(self.vertical_layout,2,0,1,2)
 
         # active tool combobox
@@ -263,6 +301,12 @@ class PmDashboardApp(QWidget):
         # add automove checkbox
         self.automove_checkbox = QCheckBox('Auto Move')
         self.automove_active = self.automove_checkbox.isChecked
+
+        # Add button to set target pose to current pose 
+        self.set_target_to_current_button = QPushButton('Set Target to Current')
+        self.set_target_to_current_button.clicked.connect(self.update_target_pose_with_current_pose)
+        self.vertical_layout.addWidget(self.set_target_to_current_button)
+
         # Add move button
         self.move_button = QPushButton('Move to Target')
         self.move_button.clicked.connect(self.move_to_target)
@@ -278,9 +322,14 @@ class PmDashboardApp(QWidget):
         self.table_widget.setMinimumWidth(450)
         self.table_widget.setMinimumHeight(500)
         main_layout.addWidget(self.table_widget,2,2)
+        ik_control_widget.setLayout(main_layout)
 
-        central_widget.setLayout(main_layout)
-
+        self.joint_jog_widget = PmRobotJointControlWidget(self.ros_node)
+        
+        # create tabs
+        central_widget.addTab(self.joint_jog_widget, "Joint Control")
+        central_widget.addTab(ik_control_widget, "Terminal")
+        
         self.setWindowTitle('PM Robot Dashboard')
         self.setGeometry(100, 100, 1400, 800)
 
@@ -290,6 +339,10 @@ class PmDashboardApp(QWidget):
             self.text_output_terminal.append_green_text('Move successful')
         else:
             self.text_output_terminal.append_red_text('Move failed')
+
+    def update_target_pose_with_current_pose(self):
+        self.pm_robot_control.update_target_pose_with_current_pose()
+        self.update_target_pose_widget()
 
     def update_target_pose_widget(self):
         self.display_widget_target_pose_position_x.setText(str(round(self.pm_robot_control.target_pose.position.x,6)))
