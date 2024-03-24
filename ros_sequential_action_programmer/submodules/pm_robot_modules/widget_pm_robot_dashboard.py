@@ -12,27 +12,22 @@ import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from threading import Thread 
-from tf2_msgs.msg import TFMessage
-from geometry_msgs.msg import TransformStamped
-from tf2_ros import Buffer, TransformListener, TransformBroadcaster, StaticTransformBroadcaster
+from tf2_ros import Buffer, TransformListener
 from copy import deepcopy, copy
-import yaml
-import tf2_py as tf2
 from geometry_msgs.msg import Vector3, Quaternion
 from importlib import import_module
 from sensor_msgs.msg._joint_state import JointState
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
-from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
 from rosidl_runtime_py.convert import message_to_ordereddict
-from ros_sequential_action_programmer.submodules.RsapApp_submodules.AppTextWidget import AppTextOutput
 from ament_index_python.packages import PackageNotFoundError
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from builtin_interfaces.msg import Duration
-from rclpy.action import ActionClient
-from control_msgs.action import FollowJointTrajectory
-from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_joint_control import PmRobotJointControlWidget
 
 import time
+
+from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_joint_control import PmRobotJointControlWidget
+from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.AppTextWidget import AppTextOutput
+from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_pneumatic import PmRobotPneumaticControlWidget
+
 try:
     from pm_moveit_interfaces.srv import MoveToPose
 except ImportError:
@@ -142,6 +137,12 @@ class PmRobotAxisControl():
         Args:
             frame (str): frame name
         """
+        if frame is None:
+            self.logger.error("Frame is None")
+            return
+        if frame == '':
+            self.logger.error("Frame is None")
+            return
         try:
             tool_world_pose = self.tf_buffer.lookup_transform("world", frame, rclpy.time.Time())
             self.target_pose.position.x = tool_world_pose.transform.translation.x * 1000
@@ -254,6 +255,8 @@ class PmDashboardApp(QWidget):
         self.path = get_package_share_directory('pm_robot_bringup')
         self.ros_node = ros_node
         self.pm_robot_control = PmRobotAxisControl(ros_node)
+        self.joint_jog_widget = PmRobotJointControlWidget(self.ros_node)
+        self.pneumatic_controller_widget = PmRobotPneumaticControlWidget(self.ros_node)
         self.clb_group = ReentrantCallbackGroup()
         self.init_ui()
         # Set active tool and update target poses
@@ -324,14 +327,16 @@ class PmDashboardApp(QWidget):
         main_layout.addWidget(self.table_widget,2,2)
         ik_control_widget.setLayout(main_layout)
 
-        self.joint_jog_widget = PmRobotJointControlWidget(self.ros_node)
-        
+
         # create tabs
-        central_widget.addTab(self.joint_jog_widget, "Joint Control")
         central_widget.addTab(ik_control_widget, "Terminal")
+        central_widget.addTab(self.joint_jog_widget, "Joint Control")
+        central_widget.addTab(self.pneumatic_controller_widget, "Pneumatic Control")
         
+
+        central_widget.setGeometry(0, 0, 1400, 1100)
         self.setWindowTitle('PM Robot Dashboard')
-        self.setGeometry(100, 100, 1400, 800)
+        self.setGeometry(100, 100, 1600, 1200)
 
     def move_to_target(self):
         success = self.pm_robot_control.move_to_target()
@@ -448,7 +453,7 @@ class PmDashboardApp(QWidget):
 
     def set_active_tool(self):
         # for changing active tool
-        self.pm_robot_control.set_target_pose_from_frame_world_transform(self.target_frame_combobox.currentText())
+        self.pm_robot_control.set_target_pose_from_frame_world_transform(self.pm_robot_control.get_active_tool())
         self.pm_robot_control.set_active_tool(self.active_tool_combobox.currentText())
         
         self.pm_robot_control.update_current_tool_pose()
@@ -527,7 +532,9 @@ def main(args=None):
     try:
         ex.show()
         sys.exit(app.exec())
-
+    except Exception as e:
+        print(f"Error {e}")
+    
     finally:
         just_a_node.destroy_node()
         executor.shutdown()
