@@ -45,11 +45,19 @@ class JointJogControl():
         self._action_client.wait_for_server()
         self.subscription_running = False
 
-        while not self.subscription_running:
-            self.node.get_logger().info("Waiting for subscription to start")
-            time.sleep(0.2)
+        self.timer = self.node.create_timer(0.1, self.check_available)
 
-        self.set_target_from_current()
+        # while not self.subscription_running:
+        #     self.node.get_logger().info("Waiting for subscription to start")
+
+        #     time.sleep(0.2)
+
+        #self.set_target_from_current()
+
+    def check_available(self):
+        if self.subscription_running:
+            self.timer.cancel()
+            self.set_target_from_current()
 
     def get_joint_limits(self):
         for joint in self.urdf.joints:
@@ -60,7 +68,7 @@ class JointJogControl():
                 self.upper_limits[self.get_index_of_joint(joint.name)]=limit.upper
 
     def get_robot_description(self):
-        while not self.get_robot_description_srv.wait_for_service(timeout_sec=5.0):
+        while not self.get_robot_description_srv.wait_for_service(timeout_sec=1.0):
             self.node.get_logger().info('Service not available, waiting again...')
 
         req = GetParameters.Request()

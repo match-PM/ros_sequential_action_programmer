@@ -10,29 +10,8 @@ from geometry_msgs.msg import Pose
 from operator import attrgetter
 import rclpy
 from rclpy.node import Node
-from rclpy.executors import MultiThreadedExecutor
-from threading import Thread 
-from tf2_msgs.msg import TFMessage
-from geometry_msgs.msg import TransformStamped
-from tf2_ros import Buffer, TransformListener, TransformBroadcaster, StaticTransformBroadcaster
-from copy import deepcopy, copy
-import yaml
-import tf2_py as tf2
-from geometry_msgs.msg import Vector3, Quaternion
-from importlib import import_module
-from sensor_msgs.msg._joint_state import JointState
-from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
-from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
-from rosidl_runtime_py.convert import message_to_ordereddict
-from ros_sequential_action_programmer.submodules.RsapApp_submodules.AppTextWidget import AppTextOutput
-from ament_index_python.packages import PackageNotFoundError
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from builtin_interfaces.msg import Duration
-from rclpy.action import ActionClient
-from control_msgs.action import FollowJointTrajectory
-import time
-from ros_sequential_action_programmer.submodules.pm_robot_modules.joint_controller_class import JointJogControl
-import math
+
+
 
 
 class PmRobotPneumaticControlWidget(QWidget):
@@ -60,15 +39,15 @@ class PmRobotPneumaticControlWidget(QWidget):
             self.ros_node.get_logger().error(f"Error getting pneumatic controllers: {e}")
 
     def populate_controller_widget(self):
-        self.layout = QVBoxLayout()
-        self.setLayout(self.layout)
-        self.layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.layout = QVBoxLayout(self)
+        
         get_states_button = QPushButton("Get States")
         get_states_button.clicked.connect(self.init_states)
         get_states_button.setFixedWidth(800)
         get_states_button.setFixedHeight(50)
 
         self.layout.addWidget(get_states_button)
+        self.layout.setAlignment(get_states_button, Qt.AlignmentFlag.AlignCenter)
 
         for controller in self.controller_names:
             controller_label = QLabel(controller)

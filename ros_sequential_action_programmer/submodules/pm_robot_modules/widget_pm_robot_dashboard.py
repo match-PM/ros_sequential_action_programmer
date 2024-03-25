@@ -27,7 +27,7 @@ from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robo
 from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AppTextWidget import AppTextOutput
 from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_pneumatic import PmRobotPneumaticControlWidget
-
+from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_nozzle import PmRobotNozzleControlWidget
 try:
     from pm_moveit_interfaces.srv import MoveToPose
 except ImportError:
@@ -95,8 +95,8 @@ class PmRobotAxisControl():
         
         self.tf_listener = TransformListener(self.tf_buffer, self.node, spin_thread=True)
         self.available_frames = []
-        self.update_timer = self.node.create_timer(0.1, self.update_target,callback_group=self.clb_group)
-        self.joint_state_topic_watchdog = self.node.create_timer(10, self.check_js_subscription, callback_group=self.clb_group)
+        self.update_timer = self.node.create_timer(0.1, self.update_target, callback_group=self.clb_group)
+        #self.joint_state_topic_watchdog = self.node.create_timer(10, self.check_js_subscription, callback_group=self.clb_group)
         self.frame_added = False    
         self.joint_state_msg_received = False
         # subscribe to joint states
@@ -144,7 +144,7 @@ class PmRobotAxisControl():
             self.logger.error("Frame is None")
             return
         try:
-            tool_world_pose = self.tf_buffer.lookup_transform("world", frame, rclpy.time.Time())
+            tool_world_pose = self.tf_buffer.lookup_transform("world", frame, rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=1.0))
             self.target_pose.position.x = tool_world_pose.transform.translation.x * 1000
             self.target_pose.position.y = tool_world_pose.transform.translation.y * 1000
             self.target_pose.position.z = tool_world_pose.transform.translation.z * 1000
@@ -160,7 +160,7 @@ class PmRobotAxisControl():
         Set current tool pose from active tool transform from TF
         """
         try:
-            tool_world_pose = self.tf_buffer.lookup_transform("world", self.get_active_tool(), rclpy.time.Time())
+            tool_world_pose = self.tf_buffer.lookup_transform("world", self.get_active_tool(), rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=1.0))
             self.current_tool_pose.position.x = tool_world_pose.transform.translation.x * 1000
             self.current_tool_pose.position.y = tool_world_pose.transform.translation.y * 1000
             self.current_tool_pose.position.z = tool_world_pose.transform.translation.z * 1000
@@ -184,14 +184,16 @@ class PmRobotAxisControl():
         self.target_pose.orientation.z = self.current_tool_pose.orientation.z
 
     def update_target(self):
-        self.update_current_tool_pose()
-        self.target_pose.position.x += float(self.rel_movement_position.x)
-        self.target_pose.position.y += float(self.rel_movement_position.y)
-        self.target_pose.position.z += float(self.rel_movement_position.z)
-        self.rel_movement_position.x = 0.0
-        self.rel_movement_position.y = 0.0
-        self.rel_movement_position.z = 0.0
-        self.update_frame_list()
+        if self.joint_state_msg_received:
+            #self.logger.info("Updating target")
+            self.update_current_tool_pose()
+            self.target_pose.position.x += float(self.rel_movement_position.x)
+            self.target_pose.position.y += float(self.rel_movement_position.y)
+            self.target_pose.position.z += float(self.rel_movement_position.z)
+            self.rel_movement_position.x = 0.0
+            self.rel_movement_position.y = 0.0
+            self.rel_movement_position.z = 0.0
+            self.update_frame_list()
 
     def update_frame_list(self):
         self.frame_dict = yaml.safe_load(self.tf_buffer.all_frames_as_yaml())
@@ -235,6 +237,7 @@ class PmRobotAxisControl():
         return success
         
     def joint_state_callback(self, msg:JointState):
+        #self.logger.info("Joint state message received")
         self.joint_state_msg_received = True
         # Create a list of tuples with first the name and second the position
         self.joint_state_list = list(zip(msg.name, msg.position, msg.velocity, msg.effort))
@@ -257,6 +260,7 @@ class PmDashboardApp(QWidget):
         self.pm_robot_control = PmRobotAxisControl(ros_node)
         self.joint_jog_widget = PmRobotJointControlWidget(self.ros_node)
         self.pneumatic_controller_widget = PmRobotPneumaticControlWidget(self.ros_node)
+        self.nozzle_controller_widget = PmRobotNozzleControlWidget(self.ros_node)
         self.clb_group = ReentrantCallbackGroup()
         self.init_ui()
         # Set active tool and update target poses
@@ -329,9 +333,10 @@ class PmDashboardApp(QWidget):
 
 
         # create tabs
-        central_widget.addTab(ik_control_widget, "Terminal")
+        central_widget.addTab(ik_control_widget, "Ik Control")
         central_widget.addTab(self.joint_jog_widget, "Joint Control")
         central_widget.addTab(self.pneumatic_controller_widget, "Pneumatic Control")
+        central_widget.addTab(self.nozzle_controller_widget, "Nozzle Control")
         
 
         central_widget.setGeometry(0, 0, 1400, 1100)
@@ -463,15 +468,16 @@ class PmDashboardApp(QWidget):
 
     def cbk_timer_update_widget_current_tool_pose(self):
         # for timer to update current tool pose
-        self.pm_robot_control.update_current_tool_pose()
-        self.display_widget_current_pose_position_x.setText(str(round(self.pm_robot_control.current_tool_pose.position.x,6)))
-        self.display_widget_current_pose_position_y.setText(str(round(self.pm_robot_control.current_tool_pose.position.y,6)))
-        self.display_widget_current_pose_position_z.setText(str(round(self.pm_robot_control.current_tool_pose.position.z,6)))
-        if self.pm_robot_control.frame_added:
-            self.target_frame_combobox.clear()
-            self.target_frame_combobox.addItems(self.pm_robot_control.available_frames)
-            self.pm_robot_control.frame_added = False
-        self.populateTable()
+        if self.pm_robot_control.joint_state_msg_received:
+            self.pm_robot_control.update_current_tool_pose()
+            self.display_widget_current_pose_position_x.setText(str(round(self.pm_robot_control.current_tool_pose.position.x,6)))
+            self.display_widget_current_pose_position_y.setText(str(round(self.pm_robot_control.current_tool_pose.position.y,6)))
+            self.display_widget_current_pose_position_z.setText(str(round(self.pm_robot_control.current_tool_pose.position.z,6)))
+            if self.pm_robot_control.frame_added:
+                self.target_frame_combobox.clear()
+                self.target_frame_combobox.addItems(self.pm_robot_control.available_frames)
+                self.pm_robot_control.frame_added = False
+            self.populateTable()
 
     def cbk_target_frame_changed(self):
         self.pm_robot_control.set_target_pose_from_frame_world_transform(self.target_frame_combobox.currentText())
