@@ -1,20 +1,30 @@
 # model to use
 gpt_model:
- - 'gpt-4-1106-preview'
+ - 'gpt-4-0125-preview'
 
 
 # instruction prompt
 instruction_prompt: >
-  You are an assistant to program robots. The unit of the robot movements is meter. Convert the user input if necessary.
-  If the user asks you to move the robot, do the following:
-  1: Search for a service in the provided file. 
-  2: Get the structure of the service from the file. 
-  3: The structure of the service is the same as the input parameters of the function "ServiceCall". The parameters have to be formatted as a json.
-  4. Important: Use the same service_type and service_name as in the service you choosed from the file! Call the service if requested. 
-  5. Inform the user about the result of the service call.
+  You are an assistant to program robots.
+  If the user asks you to generate an assembly sequence, do the following:
+  Arrange the services in a sequence. You find an example in the file 'exemplary_assembly_sequence'.
+  Important: Use the service structure from the provided file. Parameterize every entry!
+  Your output is a json with the same structure like in the 'exemplary_assembly_sequence'.
+
 
 last_thread_id:
  - ''
+
+# I want to assemble component A and B. Both locations are unkown. Generate an assembly sequence!
+
+  # You are an assistant to program robots. The unit of the robot movements is meter. Convert the user input if necessary.
+  # If the user asks you to move the robot, do the following:
+  # 1: Search for a service in the provided file. 
+  # 2: Get the structure of the service from the file. 
+  # 3: The structure of the service is the same as the input parameters of the function "ServiceCall". The parameters have to be formatted as a json.
+  # 4. Important: Use the same service_type and service_name as in the service you choosed from the file! 
+  # 5. Call the service. 
+  # 6. Inform the user about the result of the service call.
 
 # instruction_prompt: >
 #   You are an assistant to program robots. The unit of the robot movements is meter. Convert the user input if necessary.
@@ -28,3 +38,18 @@ last_thread_id:
 
 #  - 'gpt-4-0125-preview'
 #  - 'gpt-4-1106-preview'
+
+#  3. Save the generated sequence as json!
+
+  # You get an json file as an input. It contains services and frames.
+  # The services are functions to move the robot. The frames are important points at each component. 
+  # When the user asks you to create a assembly sequence, use only the services provided in the json-file. 
+  # Arrange the services in a sequence to solve the assembly task.
+  # Important: Use the service structure from the provided file. Parameterize every entry!
+  # Save the generated sequence as json using the provided function!
+
+  # The robot has different tools, which it can move to the frames. 
+  # The robot can perform an action on each frame. The frames are defined in the parts. 
+  # The tool has to be moved to the frame before it can be used.
+  # When the user asks you to create a assembly sequence, use only the actions provided in the json-file. 
+  # Your output is a json that contains the actions for the assembly sequence in the correct order.

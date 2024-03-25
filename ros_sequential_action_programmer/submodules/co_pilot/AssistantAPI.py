@@ -71,7 +71,13 @@ class AssistantAPI:
 
         self.assistant_id = self.my_assistants.data[0].id
 
-        self.file_id = self.update_and_upload_file()
+        file_service_frames = "services_and_frames.json"
+        file_exemplary_sq = "exemplary_assembly_sequence.json"
+
+        file_path_services = f"{self.path}/{file_service_frames}"
+        file_path_sq = f"{self.path}/{file_service_frames}"
+
+        file_id = self.upload_file(file_path_services)
 
         # get the current assistant and add the current file
         self.my_assistant = self.client.beta.assistants.retrieve(self.assistant_id)
@@ -80,9 +86,10 @@ class AssistantAPI:
             assistant_id=self.assistant_id,
             model=self.gpt_model,
             instructions=self.instruction_prompt,
-            file_ids=[self.file_id]
+            file_ids=[file_id]
         )
         self.create_new_thread()
+
 
     def create_new_assistant(self):
         '''
@@ -90,10 +97,15 @@ class AssistantAPI:
         '''
         self.service_node.get_logger().warn(f"No Assistant defined! A new one is created!")
 
-        # Upload file
-        self.update_and_upload_file()
+        file_service_frames = "services_and_frames.json"
+        file_exemplary_sq = "exemplary_assembly_sequence.json"
 
-        self.file_id = self.get_file_id()
+        file_path_services = f"{self.path}/{file_service_frames}"
+        file_path_sq = f"{self.path}/{file_exemplary_sq}"
+
+        # Upload file
+        file_id_services_frames = self.upload_file(file_path_services)
+        file_id_sq = self.upload_file(file_path_sq)
 
         #call this once to create the assistant
         self.assistant = self.client.beta.assistants.create(
@@ -101,7 +113,7 @@ class AssistantAPI:
             instructions=self.instruction_prompt,
             model = self.gpt_model,
             tools = tool,
-            file_ids=[self.file_id]
+            file_ids=[file_id_services_frames,file_id_sq]
         )
         #to retrieve all defined assistants
         self.my_assistants = self.client.beta.assistants.list(
@@ -143,14 +155,27 @@ class AssistantAPI:
         return file_id
     
     
-    def update_and_upload_file(self):
+    def upload_file(self, file_path):
         '''
-        Gets a list of current active services and frames. Saves it as a json and uploads it to the api.
+        Uploads file it to the api.
         Returns the file_id.
         '''
         # Delete all uploaded files before new one is uploaded
-        self.delete_files()
+        # self.delete_files()
+       
 
+        # upload file to openAI API
+        file = self.client.files.create(
+            file=open(file_path, "rb"),
+            purpose='assistants'
+        )
+
+        return self.get_file_id()
+
+    def save_srv_frame_json(self):
+        '''
+        Gets a list of current active services and frames and saves it as a json.
+        '''
         file_name = "services_and_frames.json"
         file_path = f"{self.path}/{file_name}"
 
@@ -184,14 +209,6 @@ class AssistantAPI:
 
         # except Exception as e:
         #     self.service_node.get_logger().error(f"An unexpected error occurred: {e}")
-
-        # upload file to openAI API
-        file = self.client.files.create(
-            file=open(file_path, "rb"),
-            purpose='assistants'
-        )
-
-        return self.get_file_id()
 
     
     def add_message(self,message:str):
@@ -249,16 +266,37 @@ class AssistantAPI:
             #     output = "Function parameters not formatted as a json!"
             if (function_name == 'ServiceCall'):
                 success, response=self.service_builder.execute_service_call(srv_values=function_arg)
+                if success:
+                    output = json.dumps(response)
+                    self.service_node.get_logger().info(f"output {output}")
+                else:
+                    output = json.dumps(False)
 
-            if success:
-                output = json.dumps(response)
-                self.service_node.get_logger().info(f"output {output}")
-            else:
-                output = json.dumps(False)
+            elif (function_name == 'SaveSequence'):
+                output = self.save_json(function_arg)
 
             self.tools_output_array.append({"tool_call_id": tool_call_id, "output": output})
 
         print(self.tools_output_array)
+
+
+    def save_json(self, data:str):
+        file_name = "assembly_sequence.json"
+        file_path = f"{self.path}/{file_name}"
+
+        # Save json-file
+        try:
+            with open(file_path, 'w') as file:
+                json.dump(data, file)
+
+            self.service_node.get_logger().info(f"List saved to {file_path}")
+            return True
+
+        except IOError as e:
+            self.service_node.get_logger().error(f"An error occurred while writing the file: {e}")
+
+        except Exception as e:
+            self.service_node.get_logger().error(f"An unexpected error occurred: {e}")
 
 
     def extract_json_from_string(self, s):
