@@ -11,8 +11,8 @@ import io
 import tempfile
 from openai import OpenAI
 
-from PyQt6.QtGui import QIcon, QAction, QFont, QPalette, QColor, QTextCursor, QTextBlockFormat, QTextCharFormat
-from PyQt6.QtWidgets import QLabel, QWidgetAction, QMenuBar, QDialog, QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, QStyleFactory
+from PyQt6.QtGui import QIcon, QAction, QFont, QPalette, QColor, QTextCursor, QTextBlockFormat, QTextCharFormat, QFontMetrics
+from PyQt6.QtWidgets import QSizePolicy, QLabel, QWidgetAction, QMenuBar, QDialog, QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, QStyleFactory
 from PyQt6.QtCore import QEvent, QObject, pyqtSignal, QThread, QSize, QRect, QPoint
 
 from ros_sequential_action_programmer.submodules.co_pilot.AssistantAPI import AssistantAPI
@@ -254,6 +254,16 @@ class PmCoPilotApp(QMainWindow):
         # Add a text edit for typing messages
         self.message_input = QTextEdit()
         self.message_input.setFont(QFont("Helvetica", 12))
+        # Calculate the height for 4 rows of text
+        fontMetrics = QFontMetrics(self.message_input.font())
+        textHeight = fontMetrics.lineSpacing() * 8  # 4 rows of text
+        self.message_input.setFixedHeight(textHeight)
+
+        # Set size policy: allow horizontal resizing but keep vertical size fixed
+        sizePolicy = self.message_input.sizePolicy()
+        sizePolicy.setHorizontalPolicy(QSizePolicy.Policy.Expanding)
+        sizePolicy.setVerticalPolicy(QSizePolicy.Policy.Fixed)
+        self.message_input.setSizePolicy(sizePolicy)
         self.layout.addWidget(self.message_input)
 
         # Add a send button
@@ -277,12 +287,17 @@ class PmCoPilotApp(QMainWindow):
 
         # Add "New Thread" action
         new_thread_action = QAction("New Thread", self)
-        new_thread_action.triggered.connect(self.start_new_thread)  # You need to define this method
+        new_thread_action.triggered.connect(self.start_new_thread) 
         edit_menu.addAction(new_thread_action)
 
         # Add "New Assistant" action
-        new_assistant_action = QAction("Update Assistant", self)
-        new_assistant_action.triggered.connect(self.update_assistant)  # You need to define this method
+        new_assistant_action = QAction("Update Assistant Files", self)
+        new_assistant_action.triggered.connect(self.update_assistant_files)  
+        edit_menu.addAction(new_assistant_action)
+
+        # Add "New Assistant" action
+        new_assistant_action = QAction("Update Assistant Config", self)
+        new_assistant_action.triggered.connect(self.update_assistant_config)  
         edit_menu.addAction(new_assistant_action)
 
 
@@ -333,15 +348,26 @@ class PmCoPilotApp(QMainWindow):
         self.update_status_display("New thread started! Assistant ready for your input!")
         self.service_node.get_logger().info("New thread started!")
 
-    def update_assistant(self):
+    def update_assistant_files(self):
         self.service_node.get_logger().info("Assistant will be updated with new file")
         try:
-            self.assistantAPI.update_assistant()
+            self.assistantAPI.update_assistant_files()
         except Exception as e:
             self.service_node.get_logger().error(f"Assistant could not be updated: Error {e}!")
         
         self.chat_history.clear()
         self.update_status_display("New file added to the assistant! Assistant ready for your input!")
+        self.service_node.get_logger().info("Assistant updated!")
+
+    def update_assistant_config(self):
+        self.service_node.get_logger().info("Assistant will be updated with new config")
+        try:
+            self.assistantAPI.update_assistant_config()
+        except Exception as e:
+            self.service_node.get_logger().error(f"Assistant could not be updated: Error {e}!")
+        
+        self.chat_history.clear()
+        self.update_status_display("Assistant config updated! Assistant ready for your input!")
         self.service_node.get_logger().info("Assistant updated!")
 
     def startSpeechRecognition(self):

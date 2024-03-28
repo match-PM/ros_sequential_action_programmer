@@ -16,23 +16,15 @@ class AssistantAPI:
         self.action_sequence_node = RosSequentialActionProgrammer(service_node)
         self.service_builder = ServiceCalls(service_node)
         
+        # self.path = '/home/match-mover/Documents/ros2_ws/src/ros_sequential_action_programmer/config'
         self.path = get_package_share_directory("ros_sequential_action_programmer")
         
         # Init client
         self.client = OpenAI()
         self.client.api_key = os.environ["OPENAI_API_KEY"]
+
+        self.load_openai_config()
         
-
-        self.config_path = self.path + '/OpenAI_config.yaml'        
-        with open(self.config_path, 'r') as file:
-            config_data = yaml.safe_load(file)
-            self.gpt_model = config_data['gpt_model'][0]
-            self.instruction_prompt = config_data['instruction_prompt']
-            self.thread_id = config_data['last_thread_id'][0]
-
-            self.service_node.get_logger().info(f"model {self.gpt_model}")
-            self.service_node.get_logger().info(f"instr {self.instruction_prompt}")
-
         #to retrieve all defined assistants
         self.my_assistants = self.client.beta.assistants.list(
             order="desc",
@@ -59,9 +51,23 @@ class AssistantAPI:
 
         self.service_node.get_logger().info(f"Co-Pilot AssistantAPI initialized! ThreadID: {self.thread.id}")
 
-    def update_assistant(self):
+    def load_openai_config(self):
         '''
-        Update the assisant. Gets the current services and frames and add it to the assistant.
+        Gets the config for the openAI API from yaml.
+        '''
+        self.config_path = self.path + '/OpenAI_config.yaml'        
+        with open(self.config_path, 'r') as file:
+            config_data = yaml.safe_load(file)
+            self.gpt_model = config_data['gpt_model'][0]
+            self.instruction_prompt = config_data['instruction_prompt']
+            self.thread_id = config_data['last_thread_id'][0]
+
+            self.service_node.get_logger().info(f"model {self.gpt_model}")
+            self.service_node.get_logger().info(f"instr {self.instruction_prompt}")
+
+    def update_assistant_files(self):
+        '''
+        Update the files attached to the assisant. Gets the current services and frames and add it to the assistant.
         '''
         #to retrieve all defined assistants
         self.my_assistants = self.client.beta.assistants.list(
@@ -90,12 +96,37 @@ class AssistantAPI:
         )
         self.create_new_thread()
 
+    def update_assistant_config(self):
+        '''
+        Updates the assistant API prompt and model.
+        '''
+        self.load_openai_config()
+
+        #to retrieve all defined assistants
+        self.my_assistants = self.client.beta.assistants.list(
+            order="desc",
+            limit = "20"
+        )  
+
+        self.assistant_id = self.my_assistants.data[0].id
+
+        # get the current assistant and add the current file
+        self.my_assistant = self.client.beta.assistants.retrieve(self.assistant_id)
+        
+        self.assistant = self.client.beta.assistants.update(
+            assistant_id=self.assistant_id,
+            model=self.gpt_model,
+            instructions=self.instruction_prompt,
+        )
 
     def create_new_assistant(self):
         '''
         Creates a new assistant.
         '''
         self.service_node.get_logger().warn(f"No Assistant defined! A new one is created!")
+
+        # delete uploaded files
+        self.delete_uploaded_files()
 
         file_service_frames = "services_and_frames.json"
         file_exemplary_sq = "exemplary_assembly_sequence.json"
@@ -105,7 +136,7 @@ class AssistantAPI:
 
         # Upload file
         file_id_services_frames = self.upload_file(file_path_services)
-        file_id_sq = self.upload_file(file_path_sq)
+        # file_id_sq = self.upload_file(file_path_sq)
 
         #call this once to create the assistant
         self.assistant = self.client.beta.assistants.create(
@@ -113,7 +144,7 @@ class AssistantAPI:
             instructions=self.instruction_prompt,
             model = self.gpt_model,
             tools = tool,
-            file_ids=[file_id_services_frames,file_id_sq]
+            file_ids=[file_id_services_frames]
         )
         #to retrieve all defined assistants
         self.my_assistants = self.client.beta.assistants.list(
@@ -154,16 +185,12 @@ class AssistantAPI:
         file_id = file_list.data[0].id
         return file_id
     
-    
     def upload_file(self, file_path):
         '''
         Uploads file it to the api.
         Returns the file_id.
         '''
-        # Delete all uploaded files before new one is uploaded
-        # self.delete_files()
        
-
         # upload file to openAI API
         file = self.client.files.create(
             file=open(file_path, "rb"),
@@ -280,14 +307,18 @@ class AssistantAPI:
         print(self.tools_output_array)
 
 
-    def save_json(self, data:str):
+    def save_json(self, data):
         file_name = "assembly_sequence.json"
         file_path = f"{self.path}/{file_name}"
+        self.service_node.get_logger().info(f"Data: {data}")
+
+        # data = json.loads(data)
+        data_json = json.loads(data['json'])
 
         # Save json-file
         try:
             with open(file_path, 'w') as file:
-                json.dump(data, file)
+                json.dump(data_json, file,indent=4)
 
             self.service_node.get_logger().info(f"List saved to {file_path}")
             return True
@@ -356,7 +387,7 @@ class AssistantAPI:
         return assistant_msg
 
     # deletes all files uploaded to the API
-    def delete_files(self):
+    def delete_uploaded_files(self):
         #Call this to get the list of all uploaded files
         file_list = self.client.files.list()
         for file in file_list:
@@ -364,10 +395,10 @@ class AssistantAPI:
 
 
     # Deletes the file attached to the assistant
-    def delete_assistant_file(self):
+    def delete_assistant_file(self, file_id):
         delete_file = self.client.beta.assistants.files.delete(
             assistant_id=self.assistant_id,
-            file_id=self.file_id
+            file_id=file_id
         )
         return delete_file
     

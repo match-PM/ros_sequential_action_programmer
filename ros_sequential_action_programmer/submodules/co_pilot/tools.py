@@ -6,16 +6,16 @@ tool = [
       "type": "function",
       "function": {
           "name": "SaveSequence",
-          "description": "This function saves the assembly sequence as a json-file.",
+          "description": "This function saves a json-string. Remove all \ and \n and input the complete string!",
           "parameters": {
               "type": "object",
               "properties": {
-                  "assembly_sequence": {
+                  "json": {
                       "type": "string",
-                      "description": "Assembly sequence formatted as a json.",
+                      "description": "json-string",
                   },
               },
-              "required": ["assembly_sequence"],
+              "required": ["json"],
           },
       },
     },
