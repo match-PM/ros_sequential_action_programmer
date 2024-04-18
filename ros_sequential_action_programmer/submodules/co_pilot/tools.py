@@ -2,24 +2,26 @@ tool = [
     {
       "type": "retrieval"
     },
-    {
-      "type": "function",
-      "function": {
-          "name": "SaveSequence",
-          "description": "This function saves a json-string. Remove all \ and \n and input the complete string!",
-          "parameters": {
-              "type": "object",
-              "properties": {
-                  "json": {
-                      "type": "string",
-                      "description": "json-string",
-                  },
-              },
-              "required": ["json"],
-          },
-      },
-    },
 ] 
+
+
+    # {
+    #   "type": "function",
+    #   "function": {
+    #       "name": "SaveSequence",
+    #       "description": "This function saves a json-string. Remove all \ and \n and input the complete string!",
+    #       "parameters": {
+    #           "type": "object",
+    #           "properties": {
+    #               "json": {
+    #                   "type": "string",
+    #                   "description": "json-string",
+    #               },
+    #           },
+    #           "required": ["json"],
+    #       },
+    #   },
+    # },
    # {
     #   "type": "function",
     #   "function": {

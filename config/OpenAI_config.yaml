@@ -1,6 +1,6 @@
 # model to use
 gpt_model:
- - 'gpt-4-0125-preview'
+ - 'gpt-4-1106-preview'
 
 
 # instruction prompt
@@ -13,9 +13,9 @@ instruction_prompt: >
   2. **Use only the provided services and frames**: Use only the services and frames mentioned in the 'services_and_frames' file.
   3. **Parameterization**: Ensure all services are parameterized correctly. Use every parameter, even you do not have to adjust it!
   4. **Sequence of operations is crucial**: Always move the tool to the required frame before executing any service like gripper or vision.
-  5. **Validation** Check carefully whether you have followed all the instructions.
-  - Your output is a json.
-  -- Use this structure:
+  5. **Functionality of tools**: Use the provided functions for vision, gripper and adhesive dispensing at the corresponding frames. 
+  6. **Validation** Check carefully whether you have followed all the instructions.
+  7. **Output a json**: Output the full sequence with every action in the following json format:
     {
       "name": "exemplary_assembly_sequence",
       "saved_at": "2024-03-15 16:43:47.653458",
@@ -43,21 +43,39 @@ instruction_prompt: >
                   "exec_wait_for_user_input": false,
                   "execute": true
               }
+          },
+          {
+              "action_position": 1,
+              "action_type": "ServiceAction",
+              "name": "/pm_vision_manager/ExecuteVision",
+              "service_client": "/pm_vision_manager/ExecuteVision",
+              "service_type": "pm_vision_interfaces/srv/ExecuteVision",
+              "error_identifier": null,
+              "description": "",
+              "request": {
+                    "process_filename": "",
+                    "camera_config_filename": "",
+                    "process_uid": "",
+                    "image_display_time": 0,
+                    "run_cross_validation": false
+              }
           }
       ]
     }
-  - **Validation** Check again whether you have followed the instructions 1-4.
-  - Aks the user if you should save the json. 
-  -- Important: Enter the complete json!! Without any spaces!! Without any ...!
+  - **Validation** Check again whether you have followed the instructions 1-5.
+
 
 
 last_thread_id:
  - ''
 
 
-
+# I want to locate component A and grip it.
 # I want to assemble component A and B. Both locations are unkown. Generate an assembly sequence!
 # I want to assemble component A and B with adhesive. Both locations are unkown. Generate an assembly sequence!
+
+  # - Aks the user if you should save the json. 
+  # -- Important: Enter the complete json!! Without any spaces!! Without any ...!
 
   # You are an assistant to program robots. The robot has different tools which can be moved to frames. 
   # An action can be performed at a frame, but the tool must first be moved to the frame! 

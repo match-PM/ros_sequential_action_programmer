@@ -313,12 +313,12 @@ class AssistantAPI:
         self.service_node.get_logger().info(f"Data: {data}")
 
         # data = json.loads(data)
-        data_json = json.loads(data['json'])
+        # data_json = json.loads(data['json'])
 
         # Save json-file
         try:
             with open(file_path, 'w') as file:
-                json.dump(data_json, file,indent=4)
+                json.dump(data, file,indent=4)
 
             self.service_node.get_logger().info(f"List saved to {file_path}")
             return True
@@ -330,21 +330,18 @@ class AssistantAPI:
             self.service_node.get_logger().error(f"An unexpected error occurred: {e}")
 
 
-    def extract_json_from_string(self, s):
+    def extract_json_from_string(self, output_string):
         try:
-            start = s.index('{')
-            end = start
-            brace_count = 0
-            for i in range(start, len(s)):
-                if s[i] == '{':
-                    brace_count += 1
-                elif s[i] == '}':
-                    brace_count -= 1
-                    if brace_count == 0:
-                        end = i
-                        break
-            json_str = s[start:end+1]
-            return json.loads(json_str)
+            # Find the start and end index of the JSON content
+            start_index = output_string.index('{')
+            end_index = output_string.rindex('}') + 1
+                     
+            # Extract the JSON content
+            json_content = output_string[start_index:end_index]
+
+            # Load the JSON string
+            json_data = json.loads(json_content)
+            return json_data
         except ValueError as e:
             # Handle case where '{' or '}' is not found or JSON is malformed
             return {"error": f"ValueError: {str(e)}"}
@@ -384,6 +381,12 @@ class AssistantAPI:
                 assistant_msg = message.content[0].text.value
 
         print("Assistant: " + assistant_msg)
+        
+        try:
+            json_sequence = self.extract_json_from_string(assistant_msg)
+            self.save_json(json_sequence)
+        except:
+            self.service_node.get_logger().warn(f"Response does not contain a json!")
         return assistant_msg
 
     # deletes all files uploaded to the API
