@@ -115,8 +115,29 @@ class RecomGenerator():
                     return
         self.recommendations.append(input_recom_dict)
 
+    # @staticmethod
+    # def get_files_in_dir(directory: str, file_end: str, exclude_str:list[str] = []):
+    #     """
+    #     This function returns a list of files in the directory with the given file_end.
+    #     Parameters:
+    #     param: directory: str
+    #     file_end: str
+    #     exclude_str: list[str]
+    #     """
+    #     files = []
+    #     for foldername, subfolders, filenames in os.walk(directory):
+    #         for filename in filenames:
+    #             if filename.endswith(file_end):
+    #                 valid_file = True
+    #                 for string in exclude_str:
+    #                     if string in filename:
+    #                         valid_file = False
+    #                 if valid_file:    
+    #                     files.append(os.path.join(foldername, filename).replace(directory, ''))
+    #     return files
+
     @staticmethod
-    def get_files_in_dir(directory: str, file_end: str, exclude_str:list[str] = []):
+    def get_files_in_dir(directory: str, file_end: str, exclude_str: list[str] = []):
         """
         This function returns a list of files in the directory with the given file_end.
         Parameters:
@@ -132,8 +153,9 @@ class RecomGenerator():
                     for string in exclude_str:
                         if string in filename:
                             valid_file = False
+                            break  # No need to continue checking once a match is found
                     if valid_file:    
-                        files.append(os.path.join(foldername, filename).replace(directory, ''))
+                        files.append(os.path.relpath(os.path.join(foldername, filename), directory))
         return files
 
 if __name__ == "__main__":
