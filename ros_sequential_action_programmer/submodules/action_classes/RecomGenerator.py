@@ -9,6 +9,14 @@ from tf2_ros.transform_listener import TransformListener
 import rclpy
 # import packagenotfounderror
 from ament_index_python.packages import PackageNotFoundError
+from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
+
+
+try:
+    from assembly_manager_interfaces.msg import ObjectScene, Object, RefFrame
+except:
+    pass
+
 class RecomGenerator():
     def __init__(self,ros_node:Node) -> None:
         self.recommendations=[]
@@ -23,14 +31,35 @@ class RecomGenerator():
         #                                                '/tf_static',
         #                                                self.tf_static_callback,
         #                                                10)
+        self.callback_group = ReentrantCallbackGroup()
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self.ros_node, spin_thread=True)
         
+        # subscribe to assembly manager
+        self.assembly_manager_subscription = self.ros_node.create_subscription(ObjectScene,"assembly_manager/scene",self.am_callback,10,callback_group=self.callback_group)
+                                                                 
         self.update_recommendations()
         #self.timer = self.ros_node.create_timer(1.0, self.on_timer)
 
     def on_timer(self):
         pass
+
+    def am_callback(self, msg: ObjectScene):
+        class_string = 'objects_in_scene'
+        class_string_frames = 'object_frames_in_scene'
+        components_in_scene = []
+        object_frames_in_scene = []
+        for component in msg.objects_in_scene:
+            component:Object
+            components_in_scene.append(component.obj_name)
+            for frame in component.ref_frames:
+                frame:RefFrame
+                object_frames_in_scene.append(frame.frame_name)
+        #self.ros_node.get_logger().info(f"AM callback: {str(components_in_scene)}")
+        self.delete_from_recommendation(class_string_frames)
+        self.delete_from_recommendation(class_string)
+        self.append_to_recommendation({class_string:components_in_scene})
+        self.append_to_recommendation({class_string_frames:object_frames_in_scene})
 
     def tf_callback(self, msg: TFMessage):
         frames_list = []
@@ -89,6 +118,7 @@ class RecomGenerator():
             frames = []
         else:
             frames = list(frame_dict.keys())
+        self.delete_from_recommendation('TF_frames')
         self.append_to_recommendation({'TF_frames':frames})
 
     def update_recommendations(self):
@@ -98,6 +128,14 @@ class RecomGenerator():
     def get_recommendations(self)->list:
         self.update_recommendations()
         return self.recommendations
+    
+    def delete_from_recommendation(self, key:str):
+        for recom in self.recommendations:
+            for recom_key in recom.keys():
+                if recom_key == key:
+                    self.recommendations.remove(recom)
+                    return
+        return
     
     def append_to_recommendation(self,input_recom_dict:dict):
         # for input_key, input_value in input_recom_dict.items():
