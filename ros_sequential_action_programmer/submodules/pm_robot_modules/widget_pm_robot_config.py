@@ -164,6 +164,8 @@ class PmRobotConfigWidget(QWidget):
         self.dispenser_tip = DispenserTipConfig('pm_robot_1K_dispenser_tip', self.config_data['pm_robot_1K_dispenser_tip'])
         self.gonio_left = GonioConfig('pm_robot_gonio_left', 'with_Gonio_Left', self.config_data['pm_robot_gonio_left'])
         self.gonio_right = GonioConfig('pm_robot_gonio_right', 'with_Gonio_Right', self.config_data['pm_robot_gonio_right'])
+        self.smarpod = GonioConfig('pm_smparpod_station', 'with_smarpod_station', self.config_data['pm_smparpod_station'])
+
         self.set_config()
         self.init_ui()
 
@@ -177,6 +179,7 @@ class PmRobotConfigWidget(QWidget):
         horizontal_layout_gripper_2_jaw = QHBoxLayout()
         horizontal_layout_gonio_left = QHBoxLayout()
         horizontal_layout_gonio_right = QHBoxLayout()
+        horizontal_layout_smarpod = QHBoxLayout()
 
         # vacuum gripper checkbox
         self.box_activate_vacuum = QCheckBox()
@@ -202,6 +205,11 @@ class PmRobotConfigWidget(QWidget):
         self.box_activate_gonio_right = QCheckBox()
         self.box_activate_gonio_right.setChecked(self.gonio_right.gonio_active)
         self.box_activate_gonio_right.clicked.connect(partial(self.clb_gonio_checkbox_change, self.box_activate_gonio_right, self.gonio_right))
+
+       # gonio right checkbox  
+        self.box_activate_smarpod = QCheckBox()
+        self.box_activate_smarpod.setChecked(self.smarpod.gonio_active)
+        self.box_activate_smarpod.clicked.connect(partial(self.clb_gonio_checkbox_change, self.box_activate_smarpod, self.smarpod))
 
         # vacuum gripper combobox
         self.vacuum_tool_combobox = QComboBox()
@@ -257,6 +265,12 @@ class PmRobotConfigWidget(QWidget):
         self.gonio_right_combobox.setCurrentText(self.gonio_right.current_chuck)
         self.gonio_right_combobox.currentTextChanged.connect(partial(self.clb_gonio_combobox_change, self.gonio_right_combobox, self.gonio_right))
 
+        # smarpod combobox
+        self.smarpod_combobox = QComboBox()
+        self.smarpod_combobox.addItems(self.smarpod.available_chucks)
+        self.smarpod_combobox.setCurrentText(self.smarpod.current_chuck)
+        self.smarpod_combobox.currentTextChanged.connect(partial(self.clb_gonio_combobox_change, self.smarpod_combobox, self.smarpod))
+
         # layout for vacuum gripper
         vertical_layout.addWidget(QLabel('Vacuum Gripper Settings'))
         horizontal_layout_vacuum.addWidget(self.box_activate_vacuum)
@@ -292,7 +306,15 @@ class PmRobotConfigWidget(QWidget):
         vertical_layout.addWidget(QLabel('Gonio Right Settings'))
         horizontal_layout_gonio_right.addWidget(self.box_activate_gonio_right)
         horizontal_layout_gonio_right.addWidget(self.gonio_right_combobox)
+
         vertical_layout.addLayout(horizontal_layout_gonio_right)
+
+        #layout for smarpod
+        vertical_layout.addWidget(QLabel('Smarpod Settings'))
+        horizontal_layout_smarpod.addWidget(self.box_activate_smarpod)
+        horizontal_layout_smarpod.addWidget(self.smarpod_combobox)
+
+        vertical_layout.addLayout(horizontal_layout_smarpod)        
 
         # add save button
         save_button = QPushButton("Save Config")
@@ -359,6 +381,7 @@ class PmRobotConfigWidget(QWidget):
         self.config_data[self.dispenser_tip.config_key]= self.dispenser_tip.get_config()
         self.config_data[self.gonio_left.config_key]= self.gonio_left.get_config()
         self.config_data[self.gonio_right.config_key]= self.gonio_right.get_config()
+        self.config_data[self.smarpod.config_key]= self.smarpod.get_config()
         print(self.config_data)
         #self.save_config()
 

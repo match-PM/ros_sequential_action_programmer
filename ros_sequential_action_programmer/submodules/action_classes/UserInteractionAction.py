@@ -29,6 +29,7 @@ class UserInteractionAction():
         if name == "":
             self.name = 'UserInteraction'
         self.log_entry={}
+        description = ""
 
 
     def execute(self) -> bool:

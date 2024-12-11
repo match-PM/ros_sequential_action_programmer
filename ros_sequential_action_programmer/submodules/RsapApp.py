@@ -37,6 +37,7 @@ except ModuleNotFoundError as e:
     print(f"Error importing PmCoPilotApp: {e}")
 
 from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI
+from ros_sequential_action_programmer.submodules.action_classes.RosActionAction import RosActionAction
 
 class RsapApp(QMainWindow):
     def __init__(self, service_node:Node):
@@ -223,6 +224,16 @@ class RsapApp(QMainWindow):
                 'Memorised Clients wht':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.get_memorized_client_whitelist()),
                 'Available Service Types':  get_service_interfaces(),
             },
+            'Actions':{
+                'Empty':  ['New'],
+                'Active Clients blk':  ['New'],
+                'Active Clients':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.list_of_active_ros_action_clients),
+                'Active Clients wht':  ['New'],
+                'Memorised Clients blk':  ['New'],
+                'Memorised Clients ':  ['New'],
+                'Memorised Clients wht':  ['New'],
+                'Available Service Types':  ['New'],
+            },
             'Skills': ['TBD1','TBD2','TBD3'],
             'Other': {
                 'Conditions': {
@@ -247,6 +258,17 @@ class RsapApp(QMainWindow):
                 self.append_service_dialog(serivce_type = f"{menu_output[-2]}/{menu_output[-1]}")
             elif menu_output[-1] == 'New':
                 self.append_service_dialog()
+        elif menu_output[0] == 'Actions':
+            if 'Clients' in menu_output[1] and 'Active' in menu_output[1]:
+                self.append_ros_action_service_dialog(type_action='action',client=menu_output[-1])
+            elif 'Clients' in menu_output[1] and 'Memorised' in menu_output[1]:
+                self.append_ros_action_service_dialog(type_action='action',client=menu_output[-1],
+                                           type=self.action_sequence_builder.get_srv_type_from_memorized_client(menu_output[-1]))
+            #elif 'Type' in menu_output[1]:
+            #    self.append_ros_action_service_dialog(serivce_type = f"{menu_output[-2]}/{menu_output[-1]}")
+            #elif menu_output[-1] == 'New':
+            #    self.append_ros_action_service_dialog()
+
         elif menu_output[0]=='Other':
             if menu_output[-1] == 'User Interaction':
                 self.append_user_interaction_dialog()
@@ -404,6 +426,50 @@ class RsapApp(QMainWindow):
         self.inner_layout.addWidget(label_error_handling_box)
         self.inner_layout.addWidget(self.error_handling_box)
 
+    def set_ros_action_meta_info_widget(self):
+        row = self.checkbox_list.currentRow()
+
+        label_action_name = QLabel("Action Name:")
+        self.action_name_edit = QLineEdit(self.action_sequence_builder.get_action_at_index(row).name)
+        self.inner_layout.addWidget(label_action_name)
+        self.inner_layout.addWidget(self.action_name_edit)    
+
+        # Set info for service client
+        label_action_client_desc = QLabel(f"Action Client: ")
+        label_action_client = QLineEdit(f"{self.action_sequence_builder.get_action_at_index(row).client}")
+        label_action_client.setReadOnly(True)
+        self.inner_layout.addWidget(label_action_client_desc)
+        self.inner_layout.addWidget(label_action_client)
+
+        # Set info for service type
+        label_action_service_desc = QLabel(f"Action Type: ")
+        label_action_service_type = QLineEdit(f"{self.action_sequence_builder.get_action_at_index(row).action_type}")
+        label_action_service_type.setReadOnly(True)
+        self.inner_layout.addWidget(label_action_service_desc)
+        self.inner_layout.addWidget(label_action_service_type)
+
+        # Set info for service type
+        label_action_description_desc = QLabel(f"Description: ")
+        self.label_action_description = QTextEdit(f"{self.action_sequence_builder.get_action_at_index(row).description}")
+        self.inner_layout.addWidget(label_action_description_desc)
+        self.inner_layout.addWidget(self.label_action_description)
+
+        # Create a dropdown menu for selecting the error handling inputs
+        #label_error_handling_box = QLabel(f"Execution identifier: ")
+        #self.error_handling_box = NoScrollComboBox()
+
+        #box_values = ['None'] + self.action_sequence_builder.get_action_at_index(row).get_service_bool_fields()
+        #self.error_handling_box.addItems(box_values)
+        # Set the default value when creating the qcombobox
+        #currently_set_error_handler = self.action_sequence_builder.get_action_at_index(row).get_service_bool_identifier()
+        #if currently_set_error_handler is None:
+        #    currently_set_error_handler = "None"
+
+        #self.error_handling_box.setCurrentIndex(box_values.index(currently_set_error_handler))
+        #self.inner_layout.addWidget(label_error_handling_box)
+        #self.inner_layout.addWidget(self.error_handling_box)
+
+
     def on_action_drag_drop(self):
         self.action_sequence_builder.move_action_at_index_to_index(old_index=self.checkbox_list.drag_source_position,
                                                             new_index=self.checkbox_list.currentRow())
@@ -421,6 +487,14 @@ class RsapApp(QMainWindow):
             self.clear_action_parameter_layout()
             self.clear_log_viewer()
             self.set_service_meta_info_widget()
+            self.populateActionParameterWidgets(self.handle_dict)
+        
+        elif isinstance(self.action_sequence_builder.get_action_at_index(row), RosActionAction):
+            self.handle_dict = None
+            self.handle_dict = self.action_sequence_builder.get_copy_impl_srv_dict_at_index(row)
+            self.clear_action_parameter_layout()
+            self.clear_log_viewer()
+            self.set_ros_action_meta_info_widget()
             self.populateActionParameterWidgets(self.handle_dict)
 
         self.show_service_log(self.action_sequence_builder.get_action_at_index(row).log_entry)
@@ -464,19 +538,26 @@ class RsapApp(QMainWindow):
         index = self.checkbox_list.currentRow()
         # if no line selected index will be -1
         if index != -1:
-            # Apply error handler message
-            error_identifier = self.error_handling_box.currentText()
-            if error_identifier == 'None':
-                error_identifier = None
 
-            # set the error identifier
-            set_error_identifier_success = self.action_sequence_builder.get_action_at_index(index).set_service_bool_identifier(error_identifier)
+            set_error_identifier_success = True
+            
+            if isinstance(self.action_sequence_builder.get_action_at_index(index), ServiceAction):
+                set_error_identifier_success = False
+                # Apply error handler message
+                error_identifier = self.error_handling_box.currentText()
+                if error_identifier == 'None':
+                    error_identifier = None
+
+                # set the error identifier
+                set_error_identifier_success = self.action_sequence_builder.get_action_at_index(index).set_service_bool_identifier(error_identifier)
             
             # Set the action description text
             self.action_sequence_builder.get_action_at_index(index).description = self.label_action_description.toPlainText()
 
             # Apply values to service request dict
             self.action_sequence_builder.get_action_at_index(index).name = self.action_name_edit.text()
+
+            # Apply values to action
             set_success = self.action_sequence_builder.process_action_dict_at_index(index=index,mode=SET_IMPLICIT_SRV_DICT, input_impl_dict=self.handle_dict)
 
             if set_success and set_error_identifier_success:
@@ -616,10 +697,29 @@ class RsapApp(QMainWindow):
         add_service_dialog = AddServiceDialog(service_name, service_client, serivce_type)
         
         if add_service_dialog.exec():
-            service_name, service_client, service_type = add_service_dialog.get_values()
+            service_name, service_client, type = add_service_dialog.get_values()
             self.add_service_to_action_list(service_name=service_name,
                                             service_client=service_client,
-                                            service_type=service_type)
+                                            service_type=type)
+        else:
+            pass
+
+    def append_ros_action_service_dialog(self, type_action: str, name: str = None, client:str= None, type:str = None)->None:
+        """
+        type should be either 'action' or 'service'
+        """
+        add_service_dialog = AddServiceDialog(name, client, type)
+        
+        if add_service_dialog.exec():
+            name, client, type = add_service_dialog.get_values()
+            if type_action == 'service':
+                self.add_service_to_action_list(service_name = name,
+                                                service_client = client,
+                                                service_type =type)
+            else:
+                self.add_ros_action_to_action_list(action_name = name,
+                                                action_client = client,
+                                                action_type = type)
         else:
             pass
 
@@ -676,7 +776,28 @@ class RsapApp(QMainWindow):
                 self.action_selected()
             else:
                 self.text_output.append_red_text(f"Invalid input arguments")
-                    
+    
+    def add_ros_action_to_action_list(self, action_name: str, action_client:str, action_type:str = None) -> None:
+
+        pos_to_insert = self.checkbox_list.currentRow() + 1
+
+        if action_client:
+            success = self.action_sequence_builder.append_ros_action_to_action_list_at_index(action_client = action_client, 
+                                                                                    index = pos_to_insert, 
+                                                                                    action_type = action_type,
+                                                                                    action_name = action_name)
+            # Get the name of the service from the currently acive action, which is the newly added one
+            if success:
+                action_name =  self.action_sequence_builder.get_current_action_name()
+                function_checkbox = ActionListItem(f"{pos_to_insert}. {action_name}")
+                self.checkbox_list.insertItem(pos_to_insert,function_checkbox)
+                self.init_actions_list()
+                self.checkbox_list.setCurrentRow(pos_to_insert)
+                self.text_output.append(f"Inserted action: {action_name}")
+                self.action_selected()
+            else:
+                self.text_output.append_red_text(f"Invalid input arguments")
+
     def set_gui_interactionable(self,set_to:bool)->None:
         """
         With this method gui interactions can be set to true/false. 
