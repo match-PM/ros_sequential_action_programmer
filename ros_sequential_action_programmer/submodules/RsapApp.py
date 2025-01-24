@@ -1,4 +1,5 @@
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread, pyqtSlot, QRunnable, QObject, QThreadPool
+
 from PyQt6.QtWidgets import QScrollArea, QDialog, QHBoxLayout, QInputDialog, QTreeWidget, QTreeWidgetItem, QApplication, QGridLayout, QFrame, QMainWindow, QListWidget, QListWidgetItem, QDoubleSpinBox, QWidget, QVBoxLayout, QPushButton, QCheckBox, QLineEdit, QComboBox, QTextEdit,QLabel,QSlider, QSpinBox, QFontDialog, QFileDialog
 from PyQt6.QtGui import QColor, QTextCursor, QFont, QAction
 import os
@@ -38,6 +39,32 @@ except ModuleNotFoundError as e:
 
 from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI
 
+class RsapExecutionWorkerSignals(QObject):
+    signal = pyqtSignal(bool)
+
+class RsapExecutionWorker(QRunnable):
+    def __init__(self, action_sequence_builder:RosSequentialActionProgrammer):
+        super().__init__()
+        self.action_sequence_builder = action_sequence_builder
+        self.signals = RsapExecutionWorkerSignals()
+
+    @pyqtSlot()
+    def run(self):
+        success = self.action_sequence_builder.execute_current_action(log_mode=LOG_AT_END)
+        self.signals.signal.emit(success)
+
+class RsapExecutionRunWorker(QRunnable):
+    def __init__(self, action_sequence_builder:RosSequentialActionProgrammer):
+        super().__init__()
+        self.action_sequence_builder = action_sequence_builder
+        self.signals = RsapExecutionWorkerSignals()
+
+    @pyqtSlot()
+    def run(self):
+        success, index = self.action_sequence_builder.execute_action_list(index_start=self.action_sequence_builder.current_action_index)
+        self.signals.signal.emit(success)
+
+
 class RsapApp(QMainWindow):
     def __init__(self, service_node:Node):
         super().__init__()
@@ -49,6 +76,7 @@ class RsapApp(QMainWindow):
         # self.action_sequence_builder.append_service_to_action_list('/compute_fk')
         # self.action_sequence_builder.append_service_to_action_list(service_client='/object_manager/create_ref_frame', service_type='spawn_object_interfaces/srv/CreateRefFrame')
         # load the recent file (last opened file)
+        self.thread_pool = QThreadPool()
         self.load_recent_file()
         #print(self.action_sequence_builder.get_possible_srv_res_fields_at_index(index=3, target_key='frame_name'))
         self.initUI()
@@ -61,7 +89,13 @@ class RsapApp(QMainWindow):
         #self.action_exectuion_thread.run = self.execute_current_action
         #self.action_exectuion_thread.finished.connect(self.end_current_action_execution)
         self.sub_window_list = []
+        self._init_signal()
 
+
+    def _init_signal(self):
+        self.action_sequence_builder.signal_incoming_log.signal.connect(self.print_ros_log)
+        self.action_sequence_builder.signal_execution_status.signal.connect(self.set_widget_activations)
+        self.action_sequence_builder.signal_current_action.signal.connect(self.select_action_in_execution)
 
     def initUI(self):
         # Create the class for the action selection menu
@@ -89,20 +123,20 @@ class RsapApp(QMainWindow):
         layout.addWidget(self.action_sequence_name_widget,0,1,1,2)
 
         toolbar_layout = QVBoxLayout()
-        open_action_menu_button = QPushButton('Add \n Action')
-        open_action_menu_button.clicked.connect(self.show_action_menu)
-        open_action_menu_button.setFixedSize =(20,20)
+        self.open_action_menu_button = QPushButton('Add \n Action')
+        self.open_action_menu_button.clicked.connect(self.show_action_menu)
+        self.open_action_menu_button.setFixedSize =(20,20)
 
-        toolbar_layout.addWidget(open_action_menu_button,alignment=Qt.AlignmentFlag.AlignTop)
+        toolbar_layout.addWidget(self.open_action_menu_button,alignment=Qt.AlignmentFlag.AlignTop)
 
         # add button for deleting selected vision function
-        delete_button = QPushButton("Delete \n Selected")
-        delete_button.clicked.connect(self.delete_action_from_sequence)
-        toolbar_layout.addWidget(delete_button,alignment=Qt.AlignmentFlag.AlignTop)
+        self.delete_button = QPushButton("Delete \n Selected")
+        self.delete_button.clicked.connect(self.delete_action_from_sequence)
+        toolbar_layout.addWidget(self.delete_button,alignment=Qt.AlignmentFlag.AlignTop)
 
-        copy_and_insert_button = QPushButton("Copy and \n Insert")
-        copy_and_insert_button.clicked.connect(self.copy_and_insert_actions)
-        toolbar_layout.addWidget(copy_and_insert_button,alignment=Qt.AlignmentFlag.AlignTop)
+        self.copy_and_insert_button = QPushButton("Copy and \n Insert")
+        self.copy_and_insert_button.clicked.connect(self.copy_and_insert_actions)
+        toolbar_layout.addWidget(self.copy_and_insert_button,alignment=Qt.AlignmentFlag.AlignTop)
 
         layout.addLayout(toolbar_layout,1,0,alignment=Qt.AlignmentFlag.AlignTop)
 
@@ -309,8 +343,34 @@ class RsapApp(QMainWindow):
         
         success_set = self.action_sequence_builder.set_current_action(index)
         success = False
+
         if success_set:
-            success = self.action_sequence_builder.execute_current_action(log_mode=LOG_AT_END)
+            _new_worker = RsapExecutionWorker(self.action_sequence_builder)
+            _new_worker.signals.signal.connect(self.post_execute_current_action)
+            self.thread_pool.start(_new_worker)
+
+            #success = self.action_sequence_builder.execute_current_action(log_mode=LOG_AT_END)
+            
+        #self.service_node.get_logger().info(f"TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTttt")
+
+        # if success:
+        #     text_output = f"Action '{self.action_sequence_builder.get_current_action_name()}' executed successfully!"
+        #     self.text_output.append_green_text(text_output)
+        #     light_green = QColor(144, 238, 144)
+        #     self.checkbox_list.currentItem().setBackground(light_green)
+        #     if index < self.checkbox_list.count()-1:
+        #         self.checkbox_list.setCurrentRow(index+1)
+        #     else:
+        #         self.checkbox_list.setCurrentRow(0)
+        #     self.action_selected()
+        # else:
+        #     self.text_output.append_red_text("An error occured in action execution!")
+        #     self.checkbox_list.currentItem().setBackground(QColor("red"))
+        #     self.action_selected()
+        # return success
+
+    def post_execute_current_action(self, success:bool):
+        index = self.checkbox_list.currentRow()
         if success:
             text_output = f"Action '{self.action_sequence_builder.get_current_action_name()}' executed successfully!"
             self.text_output.append_green_text(text_output)
@@ -325,23 +385,40 @@ class RsapApp(QMainWindow):
             self.text_output.append_red_text("An error occured in action execution!")
             self.checkbox_list.currentItem().setBackground(QColor("red"))
             self.action_selected()
-        return success
 
-    def run_action_sequence(self):
-        error = False
 
-        start_index = self.checkbox_list.currentRow()
-        end_index = self.checkbox_list.count()
-
+    def run_action_sequence(self) -> bool:
+        
+        index = self.checkbox_list.currentRow()
         # Return early if no function is selected
-        if start_index == -1:
+        if index == -1:
             return False
+        
+        success_set = self.action_sequence_builder.set_current_action(index)
+        success = False
 
-        for start_index in range(start_index, end_index):
-            if not error or self.stop_execution:
-                error = not self.execute_current_action()
-            else:
-                break
+        if success_set:
+            _new_worker = RsapExecutionRunWorker(self.action_sequence_builder)
+            #_new_worker.signals.signal.connect(self.post_execute_current_action)
+            self.thread_pool.start(_new_worker)
+
+    # def run_action_sequence(self):
+    #     error = False
+
+    #     start_index = self.checkbox_list.currentRow()
+    #     end_index = self.checkbox_list.count()
+
+    #     # Return early if no function is selected
+    #     if start_index == -1:
+    #         return False
+
+    #     for ind in range(start_index, end_index):
+    #         if not error or self.stop_execution:
+    #             #self.select_action_in_execution(ind)
+    #             error = not self.execute_current_action()
+    #         else:
+    #             break
+
 
     def set_widget_action_sequence_name(self, text):
         self.action_sequence_name_widget.setText("Process name: " + text)
@@ -752,6 +829,35 @@ class RsapApp(QMainWindow):
         except Exception as e:
             self.service_node.get_logger().error(f"Error opening sub window: {e}")
 
+    def print_ros_log(self, msg, Level):
+        # INFO
+        if Level ==0:
+            self.text_output.append_black_text("[INFO]" + msg)
+        # WARN
+        if Level ==1:
+            self.text_output.append_orange_text("[WARN]" +msg)
+        # ERROR
+        if Level ==2:
+            self.text_output.append_red_text("[ERROR]" +msg)
+        # DEBUG
+        if Level ==3:
+            self.text_output.append_blue_text("[DEBUG]" +msg)
+
+    def set_widget_activations(self, state):
+        # This method activates/deactivates the buttons in the GUI when the action sequence is running
+        #self.text_output.append_red_text(f"{state}")
+        self.run_action_sequence_button.setEnabled(not state)
+        self.execute_step_button.setEnabled(not state)
+        self.copy_and_insert_button.setEnabled(not state)
+        self.delete_button.setEnabled(not state)
+        self.open_action_menu_button.setEnabled(not state)
+        self.checkbox_list.setEnabled(not state)
+
+    def select_action_in_execution(self, index):
+        self.service_node.get_logger().error(f"TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTt")
+        self.text_output.append_green_text(f"Started exectuion of sequence. Executing action: {index}")
+        self.checkbox_list.setCurrentRow(index)
+        self.action_selected()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

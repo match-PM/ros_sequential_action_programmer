@@ -15,3 +15,17 @@ class AppTextOutput(QTextEdit):
         self.setTextColor(QColor("green"))
         self.append(text)
         self.setTextColor(QColor("black"))
+
+    def append_blue_text(self, text:str) -> None:
+        self.setTextColor(QColor("blue"))
+        self.append(text)
+        self.setTextColor(QColor("black"))
+
+    def append_orange_text(self, text:str) -> None:
+        self.setTextColor(QColor("orange"))
+        self.append(text)
+        self.setTextColor(QColor("black"))
+
+    def append_black_text(self, text:str) -> None:
+        self.setTextColor(QColor("black"))
+        self.append(text)

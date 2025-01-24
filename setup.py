@@ -7,13 +7,14 @@ submodules_obj_dict_classes = 'ros_sequential_action_programmer/submodules/obj_d
 submodules_app = 'ros_sequential_action_programmer/submodules/RsapApp_submodules'
 pm_robot_modules = 'ros_sequential_action_programmer/submodules/pm_robot_modules'
 co_pilot = 'ros_sequential_action_programmer/submodules/co_pilot'
+submodules_rsap= 'ros_sequential_action_programmer/submodules/rsap_modules'
 
 setup(
     name=package_name,
     version='0.0.0',
     #packages=find_packages(exclude=['test']),
     #packages=find_packages(package_name,submodules),   
-    packages=(package_name,submodules, submodules_action_classes, submodules_app, submodules_obj_dict_classes, pm_robot_modules, co_pilot),   
+    packages=(package_name,submodules, submodules_action_classes, submodules_app, submodules_obj_dict_classes, pm_robot_modules, co_pilot,submodules_rsap),   
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
