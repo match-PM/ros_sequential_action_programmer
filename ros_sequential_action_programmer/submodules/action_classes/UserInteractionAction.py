@@ -9,12 +9,23 @@ import numpy as np
 from PyQt6.QtWidgets import  QDialog
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.UserInteractionActionDialog import UserInteractionActionDialog
 from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass
+from PyQt6.QtCore import Qt, QByteArray, pyqtSignal, QObject, QThread
+
 class UserInteractionModes():
     TERMINAL = 1
     GUI = 2
 
 TERMINAL = 1
 GUI = 2
+
+class OpenUserInteractionSignal(QObject):
+    """Signal to notify that the execution of the sequence has been started."""
+    signal = pyqtSignal(str, object)
+
+class ResultReadySignal(QObject):
+    """Signal to notify that the execution of the sequence has been started."""
+    signal = pyqtSignal(bool)
+        
 class UserInteractionAction():
 
     MODES = UserInteractionModes()
@@ -29,6 +40,8 @@ class UserInteractionAction():
         if name == "":
             self.name = 'UserInteraction'
         self.log_entry={}
+        self.open_user_interaction_signal = OpenUserInteractionSignal()
+        self.result_ready_signal = ResultReadySignal()
 
 
     def execute(self) -> bool:
@@ -44,18 +57,33 @@ class UserInteractionAction():
                 exec_success = True
 
         elif self.interaction_mode == GUI:
-            user_dialog = UserInteractionActionDialog(self.action_text)
-            result = user_dialog.exec()
-
-            if result == QDialog.DialogCode.Accepted:
+            result = self.request_user_interaction(self.action_text)
+            exec_success = result
+            # self.node.get_logger().error("User interaction successful10000!")
+            # user_dialog = UserInteractionActionDialog(self.action_text)
+            # self.node.get_logger().error("User interaction successful2000!")
+            # result = user_dialog.exec()
+            # self.node.get_logger().error("User interaction successful1!")
+            # if result == QDialog.DialogCode.Accepted:
                 
-                exec_success = True
+            #     exec_success = True
+            #     self.node.get_logger().error("User interaction successful2!")
 
         end_time = datetime.now()
         self.update_log_entry(success=exec_success, start_time=start_time, end_time=end_time)
    
         return exec_success
     
+    def request_user_interaction(self, messsage:str)->bool:
+        result_holder = {"result": None}
+        
+        self.open_user_interaction_signal.signal.emit(messsage, result_holder)
+        
+        while result_holder["result"] is None:
+            QThread.msleep(100)
+            
+        return result_holder["result"]
+        
     def update_log_entry(self, success: bool, start_time: datetime, end_time: datetime, additional_text:str = ""):
         #self.log_entry={}
         self.log_entry["description"] = self.action_text
@@ -86,3 +114,10 @@ class UserInteractionAction():
         
         return new_instance
     
+    def clear_log_entry(self) -> bool:
+        try:
+            self.log_entry = {}
+            return True
+        except Exception as e:
+            self.node.get_logger().error(str(e))
+            return False

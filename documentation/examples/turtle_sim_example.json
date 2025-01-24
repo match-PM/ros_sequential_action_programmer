@@ -1,0 +1,85 @@
+{
+    "name": "turtle_sim_example",
+    "saved_at": "2025-01-25 00:46:28.042862",
+    "action_list": [
+        {
+            "action_position": 0,
+            "action_type": "ServiceAction",
+            "name": "Teleport left bottom corner",
+            "service_client": "/turtle1/teleport_absolute",
+            "service_type": "turtlesim/srv/TeleportAbsolute",
+            "error_identifier": null,
+            "description": "",
+            "service_request": {
+                "x": 1.0,
+                "y": 1.0,
+                "theta": 0.0
+            }
+        },
+        {
+            "action_position": 1,
+            "action_type": "ServiceAction",
+            "name": "Teleport right bottom corner",
+            "service_client": "/turtle1/teleport_absolute",
+            "service_type": "turtlesim/srv/TeleportAbsolute",
+            "error_identifier": null,
+            "description": "",
+            "service_request": {
+                "x": 8.0,
+                "y": 1.0,
+                "theta": 1.0
+            }
+        },
+        {
+            "action_position": 2,
+            "action_type": "ServiceAction",
+            "name": "Teleport right top corner",
+            "service_client": "/turtle1/teleport_absolute",
+            "service_type": "turtlesim/srv/TeleportAbsolute",
+            "error_identifier": null,
+            "description": "",
+            "service_request": {
+                "x": 8.0,
+                "y": 8.0,
+                "theta": 0.0
+            }
+        },
+        {
+            "action_position": 3,
+            "action_type": "ServiceAction",
+            "name": "Teleport left top corner",
+            "service_client": "/turtle1/teleport_absolute",
+            "service_type": "turtlesim/srv/TeleportAbsolute",
+            "error_identifier": null,
+            "description": "",
+            "service_request": {
+                "x": 1.0,
+                "y": 8.0,
+                "theta": 0.0
+            }
+        },
+        {
+            "action_position": 4,
+            "action_type": "UserInteractionAction",
+            "name": "Set pen color interaction",
+            "action_text": "Do you want to set the pen color? Click okay to proceed. Click Cancel to aboard.",
+            "interaction_mode": 2
+        },
+        {
+            "action_position": 5,
+            "action_type": "ServiceAction",
+            "name": "Set pen red",
+            "service_client": "/turtle1/set_pen",
+            "service_type": "turtlesim/srv/SetPen",
+            "error_identifier": null,
+            "description": "Set the pen color to red",
+            "service_request": {
+                "r": 255,
+                "g": 0,
+                "b": 0,
+                "width": 3,
+                "off": 0
+            }
+        }
+    ]
+}

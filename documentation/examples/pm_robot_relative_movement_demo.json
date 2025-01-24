@@ -1,0 +1,197 @@
+{
+    "name": "pm_robot_relative_movement_demo",
+    "saved_at": "2025-01-24 22:55:04.263845",
+    "action_list": [
+        {
+            "action_position": 0,
+            "action_type": "ServiceAction",
+            "name": "/pm_moveit_server/move_laser_relative",
+            "service_client": "/pm_moveit_server/move_laser_relative",
+            "service_type": "pm_moveit_interfaces/srv/MoveRelative",
+            "error_identifier": "success",
+            "description": "",
+            "service_request": {
+                "translation": {
+                    "x": 0.01,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "w": 1.0
+                },
+                "execute_movement": true
+            }
+        },
+        {
+            "action_position": 1,
+            "action_type": "ServiceAction",
+            "name": "/pm_moveit_server/move_laser_relative",
+            "service_client": "/pm_moveit_server/move_laser_relative",
+            "service_type": "pm_moveit_interfaces/srv/MoveRelative",
+            "error_identifier": "success",
+            "description": "",
+            "service_request": {
+                "translation": {
+                    "x": -0.01,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "w": 1.0
+                },
+                "execute_movement": true
+            }
+        },
+        {
+            "action_position": 2,
+            "action_type": "ServiceAction",
+            "name": "/pm_moveit_server/move_laser_relative",
+            "service_client": "/pm_moveit_server/move_laser_relative",
+            "service_type": "pm_moveit_interfaces/srv/MoveRelative",
+            "error_identifier": "success",
+            "description": "",
+            "service_request": {
+                "translation": {
+                    "x": 0.01,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "w": 1.0
+                },
+                "execute_movement": true
+            }
+        },
+        {
+            "action_position": 3,
+            "action_type": "ServiceAction",
+            "name": "/pm_moveit_server/move_laser_relative",
+            "service_client": "/pm_moveit_server/move_laser_relative",
+            "service_type": "pm_moveit_interfaces/srv/MoveRelative",
+            "error_identifier": "success",
+            "description": "",
+            "service_request": {
+                "translation": {
+                    "x": -0.01,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "w": 1.0
+                },
+                "execute_movement": true
+            }
+        },
+        {
+            "action_position": 4,
+            "action_type": "ServiceAction",
+            "name": "/pm_moveit_server/move_laser_relative",
+            "service_client": "/pm_moveit_server/move_laser_relative",
+            "service_type": "pm_moveit_interfaces/srv/MoveRelative",
+            "error_identifier": "success",
+            "description": "",
+            "service_request": {
+                "translation": {
+                    "x": 0.01,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "w": 1.0
+                },
+                "execute_movement": true
+            }
+        },
+        {
+            "action_position": 5,
+            "action_type": "ServiceAction",
+            "name": "/pm_moveit_server/move_laser_relative",
+            "service_client": "/pm_moveit_server/move_laser_relative",
+            "service_type": "pm_moveit_interfaces/srv/MoveRelative",
+            "error_identifier": "success",
+            "description": "",
+            "service_request": {
+                "translation": {
+                    "x": -0.01,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "w": 1.0
+                },
+                "execute_movement": true
+            }
+        },
+        {
+            "action_position": 6,
+            "action_type": "ServiceAction",
+            "name": "/pm_moveit_server/move_laser_relative",
+            "service_client": "/pm_moveit_server/move_laser_relative",
+            "service_type": "pm_moveit_interfaces/srv/MoveRelative",
+            "error_identifier": "success",
+            "description": "",
+            "service_request": {
+                "translation": {
+                    "x": 0.01,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "w": 1.0
+                },
+                "execute_movement": true
+            }
+        },
+        {
+            "action_position": 7,
+            "action_type": "ServiceAction",
+            "name": "/pm_moveit_server/move_laser_relative",
+            "service_client": "/pm_moveit_server/move_laser_relative",
+            "service_type": "pm_moveit_interfaces/srv/MoveRelative",
+            "error_identifier": "success",
+            "description": "",
+            "service_request": {
+                "translation": {
+                    "x": -0.01,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "w": 1.0
+                },
+                "execute_movement": true
+            }
+        },
+        {
+            "action_position": 8,
+            "action_type": "UserInteractionAction",
+            "name": "UserInteraction",
+            "action_text": "",
+            "interaction_mode": 2
+        }
+    ]
+}

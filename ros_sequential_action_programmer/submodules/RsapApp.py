@@ -17,9 +17,12 @@ from ros_sequential_action_programmer.submodules.RsapApp_submodules.PopupRecWind
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionSelectionMenu import ActionSelectionMenu
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AddServiceDialog import AddServiceDialog
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AddUserInteractionDialog import AddUserInteractionDialog
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.StatusIndicator import StatusIndicator
 from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
 from rosidl_runtime_py.get_interfaces import get_service_interfaces
 import ast
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.UserInteractionActionDialog import UserInteractionActionDialog
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.app_worker import RsapExecutionWorker, RsapExecutionRunWorker
 
 from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_config import PmRobotConfigWidget
 from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import PmDashboardApp
@@ -39,31 +42,6 @@ except ModuleNotFoundError as e:
 
 from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI
 
-class RsapExecutionWorkerSignals(QObject):
-    signal = pyqtSignal(bool)
-
-class RsapExecutionWorker(QRunnable):
-    def __init__(self, action_sequence_builder:RosSequentialActionProgrammer):
-        super().__init__()
-        self.action_sequence_builder = action_sequence_builder
-        self.signals = RsapExecutionWorkerSignals()
-
-    @pyqtSlot()
-    def run(self):
-        success = self.action_sequence_builder.execute_current_action(log_mode=LOG_AT_END)
-        self.signals.signal.emit(success)
-
-class RsapExecutionRunWorker(QRunnable):
-    def __init__(self, action_sequence_builder:RosSequentialActionProgrammer):
-        super().__init__()
-        self.action_sequence_builder = action_sequence_builder
-        self.signals = RsapExecutionWorkerSignals()
-
-    @pyqtSlot()
-    def run(self):
-        success, index = self.action_sequence_builder.execute_action_list(index_start=self.action_sequence_builder.current_action_index)
-        self.signals.signal.emit(success)
-
 
 class RsapApp(QMainWindow):
     def __init__(self, service_node:Node):
@@ -71,28 +49,22 @@ class RsapApp(QMainWindow):
         self.service_node = service_node
         
         self.action_sequence_builder = RosSequentialActionProgrammer(service_node)
-        # self.action_sequence_builder.append_service_to_action_list('/pm_robot_gonio_left_controller/get_parameter_types')
-        # self.action_sequence_builder.append_service_to_action_list('/get_planning_scene')
-        # self.action_sequence_builder.append_service_to_action_list('/compute_fk')
-        # self.action_sequence_builder.append_service_to_action_list(service_client='/object_manager/create_ref_frame', service_type='spawn_object_interfaces/srv/CreateRefFrame')
-        # load the recent file (last opened file)
         self.thread_pool = QThreadPool()
+        # load the recent file (last opened file)
         self.load_recent_file()
-        #print(self.action_sequence_builder.get_possible_srv_res_fields_at_index(index=3, target_key='frame_name'))
+        self._init_signal()
         self.initUI()
         self.init_actions_list()
         self.save_as = False 
         self.stop_execution = False
         #self.initialize_active_service_list()
         self.execution_running = False
-        #self.action_exectuion_thread = QThread(parent=service_node.executor)
-        #self.action_exectuion_thread.run = self.execute_current_action
-        #self.action_exectuion_thread.finished.connect(self.end_current_action_execution)
         self.sub_window_list = []
-        self._init_signal()
+        
 
 
     def _init_signal(self):
+        self.user_interaction_signals_list = [] # used to store the signals for the user interaction
         self.action_sequence_builder.signal_incoming_log.signal.connect(self.print_ros_log)
         self.action_sequence_builder.signal_execution_status.signal.connect(self.set_widget_activations)
         self.action_sequence_builder.signal_current_action.signal.connect(self.select_action_in_execution)
@@ -121,6 +93,14 @@ class RsapApp(QMainWindow):
         else:
             self.set_widget_action_sequence_name(self.action_sequence_builder.name)
         layout.addWidget(self.action_sequence_name_widget,0,1,1,2)
+        
+        status_layout = QVBoxLayout()
+        #status_label = QLabel("Status")
+        #status_label.setFont(font)
+        #status_layout.addWidget(status_label,alignment=Qt.AlignmentFlag.AlignCenter)
+        self.status_indicator = StatusIndicator()
+        status_layout.addWidget(self.status_indicator,alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addLayout(status_layout,0,0,1,1,alignment=Qt.AlignmentFlag.AlignCenter)
 
         toolbar_layout = QVBoxLayout()
         self.open_action_menu_button = QPushButton('Add \n Action')
@@ -325,70 +305,26 @@ class RsapApp(QMainWindow):
         for index, action in enumerate(self.action_sequence_builder.action_list):
             function_checkbox = ActionListItem(f"{index}. {action.name}")
             self.checkbox_list.addItem(function_checkbox)
-
-    # def initiate_current_action_execution(self):
-    #     #self.set_gui_interactionable(False)
-    #     self.action_exectuion_thread.start()
-    
-    # def end_current_action_execution(self):
-    #     #self.set_gui_interactionable(True)
-    #     pass
     
     def execute_current_action(self) -> bool:
-        
+        # connect the signals for the user interaction if not already connected
+        self.pre_execution()
         index = self.checkbox_list.currentRow()
         # Return early if no function is selected
         if index == -1:
             return False
         
         success_set = self.action_sequence_builder.set_current_action(index)
-        success = False
 
         if success_set:
             _new_worker = RsapExecutionWorker(self.action_sequence_builder)
-            _new_worker.signals.signal.connect(self.post_execute_current_action)
+            _new_worker.signals.signal.connect(self.post_execute)
             self.thread_pool.start(_new_worker)
 
-            #success = self.action_sequence_builder.execute_current_action(log_mode=LOG_AT_END)
-            
-        #self.service_node.get_logger().info(f"TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTttt")
-
-        # if success:
-        #     text_output = f"Action '{self.action_sequence_builder.get_current_action_name()}' executed successfully!"
-        #     self.text_output.append_green_text(text_output)
-        #     light_green = QColor(144, 238, 144)
-        #     self.checkbox_list.currentItem().setBackground(light_green)
-        #     if index < self.checkbox_list.count()-1:
-        #         self.checkbox_list.setCurrentRow(index+1)
-        #     else:
-        #         self.checkbox_list.setCurrentRow(0)
-        #     self.action_selected()
-        # else:
-        #     self.text_output.append_red_text("An error occured in action execution!")
-        #     self.checkbox_list.currentItem().setBackground(QColor("red"))
-        #     self.action_selected()
-        # return success
-
-    def post_execute_current_action(self, success:bool):
-        index = self.checkbox_list.currentRow()
-        if success:
-            text_output = f"Action '{self.action_sequence_builder.get_current_action_name()}' executed successfully!"
-            self.text_output.append_green_text(text_output)
-            light_green = QColor(144, 238, 144)
-            self.checkbox_list.currentItem().setBackground(light_green)
-            if index < self.checkbox_list.count()-1:
-                self.checkbox_list.setCurrentRow(index+1)
-            else:
-                self.checkbox_list.setCurrentRow(0)
-            self.action_selected()
-        else:
-            self.text_output.append_red_text("An error occured in action execution!")
-            self.checkbox_list.currentItem().setBackground(QColor("red"))
-            self.action_selected()
-
-
     def run_action_sequence(self) -> bool:
-        
+        # connect the signals for the user interaction if not already connected
+        self.pre_execution()
+
         index = self.checkbox_list.currentRow()
         # Return early if no function is selected
         if index == -1:
@@ -398,27 +334,35 @@ class RsapApp(QMainWindow):
         success = False
 
         if success_set:
-            _new_worker = RsapExecutionRunWorker(self.action_sequence_builder)
-            #_new_worker.signals.signal.connect(self.post_execute_current_action)
+            _new_worker = RsapExecutionRunWorker(self.action_sequence_builder, index)
+            _new_worker.signals.signal.connect(self.post_execute)            
             self.thread_pool.start(_new_worker)
-
-    # def run_action_sequence(self):
-    #     error = False
-
-    #     start_index = self.checkbox_list.currentRow()
-    #     end_index = self.checkbox_list.count()
-
-    #     # Return early if no function is selected
-    #     if start_index == -1:
-    #         return False
-
-    #     for ind in range(start_index, end_index):
-    #         if not error or self.stop_execution:
-    #             #self.select_action_in_execution(ind)
-    #             error = not self.execute_current_action()
-    #         else:
-    #             break
-
+            
+            
+    def pre_execution(self):
+        self.status_indicator.set_state_running()
+        self._init_user_interaction_signals()
+    
+    def post_execute(self):
+        self.checkbox_list.setCurrentRow(self.action_sequence_builder.current_action_index)
+        self.action_selected()
+        self.set_action_colors_from_execution_status(set_state=True)
+        
+    def set_action_colors_from_execution_status(self, set_state=False):
+        if set_state:
+            self.status_indicator.set_state_success()
+                
+        for index, action in enumerate(self.action_sequence_builder.action_list):
+            success = action.log_entry.get('success', None)
+            if success == None:
+                self.checkbox_list.item(index).setBackground(QColor("white"))
+            elif success:
+                light_green = QColor(144, 238, 144)
+                self.checkbox_list.item(index).setBackground(light_green)
+            else:
+                self.checkbox_list.item(index).setBackground(QColor("red"))
+                if set_state:
+                    self.status_indicator.set_state_error()
 
     def set_widget_action_sequence_name(self, text):
         self.action_sequence_name_widget.setText("Process name: " + text)
@@ -437,14 +381,15 @@ class RsapApp(QMainWindow):
         self.scroll_area.setWidget(self.inner_widget)
         self.sub_layout.addWidget(apply_botton)
         self.sub_layout.addWidget(self.scroll_area)
-    
-    def set_service_meta_info_widget(self):
+
+    def set_service_meta_info_widget(self, active:bool):
         row = self.checkbox_list.currentRow()
 
         label_action_name = QLabel("Action Name:")
         self.action_name_edit = QLineEdit(self.action_sequence_builder.get_action_at_index(row).name)
         self.inner_layout.addWidget(label_action_name)
-        self.inner_layout.addWidget(self.action_name_edit)    
+        self.inner_layout.addWidget(self.action_name_edit)   
+        self.action_name_edit.setDisabled(not active) 
 
         # Set info for service client
         label_action_client_desc = QLabel(f"Service Client: ")
@@ -465,11 +410,13 @@ class RsapApp(QMainWindow):
         self.label_action_description = QTextEdit(f"{self.action_sequence_builder.get_action_at_index(row).description}")
         self.inner_layout.addWidget(label_action_description_desc)
         self.inner_layout.addWidget(self.label_action_description)
-
+        self.label_action_description.setDisabled(not active)
+        
         # Create a dropdown menu for selecting the error handling inputs
         label_error_handling_box = QLabel(f"Execution identifier: ")
         self.error_handling_box = NoScrollComboBox()
-
+        self.error_handling_box.setDisabled(not active)
+        
         box_values = ['None'] + self.action_sequence_builder.get_action_at_index(row).get_service_bool_fields()
         self.error_handling_box.addItems(box_values)
         # Set the default value when creating the qcombobox
@@ -487,22 +434,22 @@ class RsapApp(QMainWindow):
         self.init_actions_list()
         self.action_selected()
 
-    def action_selected(self):
+    def action_selected(self, active=True):
         row = self.checkbox_list.currentRow()
         self.clear_action_parameter_layout()
         self.clear_log_viewer()
-
+        
         if isinstance(self.action_sequence_builder.get_action_at_index(row), ServiceAction):
             self.handle_dict = None
             self.handle_dict = self.action_sequence_builder.get_copy_impl_srv_dict_at_index(row)
             self.clear_action_parameter_layout()
             self.clear_log_viewer()
-            self.set_service_meta_info_widget()
-            self.populateActionParameterWidgets(self.handle_dict)
+            self.set_service_meta_info_widget(active=active)
+            self.populateActionParameterWidgets(self.handle_dict, active=active)
 
         self.show_service_log(self.action_sequence_builder.get_action_at_index(row).log_entry)
 
-    def populateActionParameterWidgets(self, data, parent_key=None):
+    def populateActionParameterWidgets(self, data, parent_key=None, active=True):
         """
         This method populates the action parameter layout with the parameters of the selected action.
         """
@@ -514,12 +461,15 @@ class RsapApp(QMainWindow):
                 full_key = key
 
             if isinstance(value, OrderedDict):
-                self.populateActionParameterWidgets(value, full_key)
+                self.populateActionParameterWidgets(data=value, 
+                                                    parent_key=full_key, 
+                                                    active = active)
             else:
                 widget_with_button = RecomButton(full_key=full_key, 
                                                  initial_value=str(value), 
                                                  on_text_changed=self.updateDictionary, 
-                                                 on_button_clicked=self.get_recom_button_clicked)
+                                                 on_button_clicked=self.get_recom_button_clicked,
+                                                 active=active)
                 
                 self.inner_layout.addWidget(widget_with_button)
 
@@ -754,14 +704,6 @@ class RsapApp(QMainWindow):
             else:
                 self.text_output.append_red_text(f"Invalid input arguments")
                     
-    def set_gui_interactionable(self,set_to:bool)->None:
-        """
-        With this method gui interactions can be set to true/false. 
-        This is used when e.a. a action is running to prevent that the user can start parallel processes.
-        """
-        self.execute_step_button.setEnabled(set_to)
-        self.run_action_sequence_button.setEnabled(set_to)
-
     def delete_action_from_sequence(self):
         selected_function = self.checkbox_list.currentItem()
         current_row = self.checkbox_list.currentRow()
@@ -854,11 +796,41 @@ class RsapApp(QMainWindow):
         self.checkbox_list.setEnabled(not state)
 
     def select_action_in_execution(self, index):
-        self.service_node.get_logger().error(f"TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTt")
-        self.text_output.append_green_text(f"Started exectuion of sequence. Executing action: {index}")
         self.checkbox_list.setCurrentRow(index)
-        self.action_selected()
+        self.set_action_colors_from_execution_status()
+        self.action_selected(False)
 
+    def create_user_interaction_dialog(self):
+        add_user_interaction_dialog = AddUserInteractionDialog()
+        
+        if add_user_interaction_dialog.exec():
+            action_name, action_description, = add_user_interaction_dialog.get_values()
+            self.add_user_interaction_to_action_list(action_name=action_name,
+                                                     description=action_description)
+        else:
+            pass
+    
+    @pyqtSlot(str, object)   
+    def show_user_interaction_dialog(self, message: str, result_holder: dict):
+        # Create and show the user interaction dialog
+        dialog = UserInteractionActionDialog(message)
+        
+        dialog_result = dialog.exec() == QDialog.DialogCode.Accepted
+
+        # Update the result holder so the thread can proceed
+        result_holder["result"] = dialog_result
+        
+    def _init_user_interaction_signals(self):
+        """
+        Connects the signals for the user interaction actions if they are not already connected. This is needed because window must be shown in the main thread.
+        """
+        for ind, action in enumerate(self.action_sequence_builder.action_list):
+            if isinstance(action, UserInteractionAction):
+                action: UserInteractionAction
+                if action.open_user_interaction_signal.signal not in self.user_interaction_signals_list:
+                    self.user_interaction_signals_list.append(action.open_user_interaction_signal.signal)
+                    action.open_user_interaction_signal.signal.connect(self.show_user_interaction_dialog)
+                
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = RsapApp()

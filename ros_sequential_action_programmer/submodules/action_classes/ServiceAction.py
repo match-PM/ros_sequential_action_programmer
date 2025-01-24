@@ -153,7 +153,9 @@ class ServiceAction:
             if timer is not None:
                 timer.destroy()
             self.update_log_entry(srv_call_success, srv_start_time, srv_end_time)
-            self.node.get_logger().info(f"Service return: {self.service_res_dict}")
+            
+            #self.node.get_logger().info(f"Service return: {self.service_res_dict}")
+            
             return srv_call_success
 
     def client_executer_watchdog(self, node_name, future_obj):
@@ -367,6 +369,14 @@ class ServiceAction:
 
     def get_log_entry(self) -> dict:
         return self.log_entry
+    
+    def clear_log_entry(self) -> bool:
+        try:
+            self.log_entry = {}
+            return True
+        except Exception as e:
+            self.node.get_logger().error(str(e))
+            return False
 
     def __deepcopy__(self, memo):
         """

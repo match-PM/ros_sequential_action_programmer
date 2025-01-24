@@ -365,7 +365,7 @@ class RosSequentialActionProgrammer:
     def get_current_action_name(self) -> str:
         return self.get_action_at_index(self.current_action_index).get_action_name()
 
-    def execute_current_action(self, log_mode: int = LOG_NEVER) -> bool:
+    def execute_current_action(self, log_mode: int = LOG_NEVER, shift_action:bool = False) -> bool:
         """
         This function executes the current action. It returns a bool value for success indication.
         :param log_mode: The mode of the log. Can be either LOG_NEVER or LOG_AT_END.
@@ -398,6 +398,9 @@ class RosSequentialActionProgrammer:
             else:
                 raise Exception("Error executing action!")
 
+            if shift_action:
+                self.shift_to_next_action()
+                
             return success_exec
 
         except Exception as e:
@@ -415,17 +418,17 @@ class RosSequentialActionProgrammer:
         :param log_mode: The mode of the log. Can be either LOG_NEVER or LOG_AT_END.
         :return: Tuple of bool and int. The bool value indicates success, the int value indicates the index of the action when the method terminates.
         """
-
+        
+        self.clear_all_log_entries()
+        
         if index_start < len(self.action_list):
-            for index in range(len(self.action_list)):
-                self.current_action_index = index
-
-                self.signal_current_action.signal.emit(index)
-                
+            for ind in range(index_start, len(self.action_list)):
+                self.set_current_action(ind)
+                self.signal_current_action.signal.emit(ind)
                 success = self.execute_current_action(log_mode=log_mode)
                 if not success:
                     return False, self.current_action_index
-
+            self.set_current_action(0)
             return True, self.current_action_index
         else:
             return False, self.current_action_index
@@ -1018,5 +1021,21 @@ class RosSequentialActionProgrammer:
             self.node.get_logger().error("Invalid indicies given. Out of bounds")
             return False
 
+    def shift_to_next_action(self):
+        """
+        This function shifts the current action to the next action.
+        """
+        if self.current_action_index < len(self.action_list) - 1:
+            self.current_action_index += 1
+        else:
+            self.current_action_index = 0
+    
+    def clear_all_log_entries(self):
+        """
+        This function clears the log entries.
+        """
+        for action in self.action_list:
+            action.clear_log_entry()
+            
 if __name__ == "__main__":
     pass

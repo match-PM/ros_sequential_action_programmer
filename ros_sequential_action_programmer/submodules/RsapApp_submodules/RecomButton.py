@@ -3,16 +3,25 @@ from functools import partial
 
 
 class RecomButton(QWidget):
-    def __init__(self, full_key, initial_value, on_text_changed, on_button_clicked):
+    def __init__(self, 
+                 full_key, 
+                 initial_value, 
+                 on_text_changed, 
+                 on_button_clicked,
+                 active:bool):
+        
         super().__init__()
 
         label = QLabel(full_key)
         edit = QLineEdit(initial_value)
         edit.textChanged.connect(on_text_changed(full_key, edit))
-
+        
+        edit.setDisabled(not active)
+        
         button = QPushButton("+")
         button.clicked.connect(partial(on_button_clicked,full_key,edit))
-
+        button.setDisabled(not active)
+        
         label_layout = QHBoxLayout()
         edit_button_layout = QHBoxLayout()
 

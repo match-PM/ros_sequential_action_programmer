@@ -1,0 +1,14 @@
+{
+    "action_sequence_name": "pm_robot_relative_movement_demo",
+    "action_log": [
+        {
+            "8_UserInteraction": {
+                "description": "",
+                "start_time": "2025-01-24_23:55:10.703588",
+                "end_time": "2025-01-24_23:55:11.704785",
+                "execution_time": "0:00:01.001197",
+                "success": true
+            }
+        }
+    ]
+}
