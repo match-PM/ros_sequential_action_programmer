@@ -1,7 +1,7 @@
 import sys
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QPushButton, QMessageBox, QWidget, QDialog,
-    QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox, QSpinBox, QDoubleSpinBox, QLineEdit
+    QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox, QSpinBox, QDoubleSpinBox, QLineEdit, QComboBox
 )
 from PyQt6.QtCore import Qt
 
@@ -31,24 +31,41 @@ class DictionaryValueEditor(QWidget):
 
     def update_table(self):
         """Populate the table based on the current dictionary."""
-        self.table.setRowCount(len(self.dictionary))
-        for row, (key, value) in enumerate(self.dictionary.items()):
+        # Filter out keys starting with "_fields_" (case-insensitive)
+        filtered_items = {
+            key: value for key, value in self.dictionary.items()
+            if not key.lower().startswith("_fields_")
+        }
+
+        self.table.setRowCount(len(filtered_items))
+        for row, (key, value) in enumerate(filtered_items.items()):
             # Set key (read-only)
             key_item = QTableWidgetItem(str(key))
             key_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
             self.table.setItem(row, 0, key_item)
 
-            # Set value (type-aware widget)
+            # Create value widget or fallback item
             value_widget = self.create_widget_for_value(key, value)
-            self.table.setCellWidget(row, 1, value_widget)
+            if value_widget:
+                self.table.setCellWidget(row, 1, value_widget)
+            else:
+                # Fallback to QTableWidgetItem for unsupported types
+                value_item = QTableWidgetItem(str(value))
+                value_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+                self.table.setItem(row, 1, value_item)
+
+
 
     def create_widget_for_value(self, key, value):
         """Create a widget appropriate for the value's type."""
+        # Handle dropdown fields if a `_fields_<key>` key exists
+        field_key = f"_fields_{key.lower()}"
+        if field_key in self.dictionary and isinstance(self.dictionary[field_key], list):
+            return self.create_selector_widget(key, self.dictionary[field_key])
+
         if isinstance(value, bool):
             checkbox = QCheckBox()
             checkbox.setChecked(value)
-
-            # Update the dictionary directly when the checkbox is toggled
             checkbox.toggled.connect(lambda checked: self.update_value(key, checked))
             return checkbox
 
@@ -73,24 +90,30 @@ class DictionaryValueEditor(QWidget):
             return line_edit
 
         elif isinstance(value, dict):
-            button = QPushButton("Edit Nested Dictionary")
+            button = QPushButton("--Edit Configuration--")
             button.clicked.connect(lambda: self.open_nested_editor(key, value))
             return button
 
-        else:
-            value_item = QTableWidgetItem(str(value))
-            value_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
-            return value_item
+        # For unsupported types, return None (to fallback to QTableWidgetItem)
+        return None
 
+
+    def create_selector_widget(self, key, options):
+        """Create a dropdown widget for parameterized selection."""
+        combo_box = QComboBox()
+        combo_box.addItems(options)
+
+        # Set current value if it matches one of the options
+        current_value = self.dictionary.get(key, "")
+        if current_value in options:
+            combo_box.setCurrentText(current_value)
+
+        combo_box.currentTextChanged.connect(lambda selected: self.update_value(key, selected))
+        return combo_box
 
     def update_value(self, key, new_value):
         """Update the dictionary when a value changes."""
         self.dictionary[key] = new_value
-
-    def update_value_from_line_edit(self, key, widget):
-        """Update the dictionary with a new value from a QLineEdit."""
-        text = widget.text()
-        self.dictionary[key] = text
 
     def open_nested_editor(self, key, value):
         """Open a nested dictionary editor."""
@@ -107,7 +130,7 @@ class DictionaryValueEditor(QWidget):
 class NestedDictionaryEditor(QDialog):
     def __init__(self, dictionary, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Nested Dictionary Editor")
+        self.setWindowTitle("Configuration Editor")
         self.resize(500, 300)
 
         self.dictionary = dictionary
@@ -124,9 +147,9 @@ class NestedDictionaryEditor(QDialog):
         ok_button.clicked.connect(self.accept)
         layout.addWidget(ok_button)
 
-        cancel_button = QPushButton("Cancel")
-        cancel_button.clicked.connect(self.reject)
-        layout.addWidget(cancel_button)
+        #cancel_button = QPushButton("Cancel")
+        #cancel_button.clicked.connect(self.reject)
+        #layout.addWidget(cancel_button)
 
 
 class ConfigurableApp(QMainWindow):
@@ -178,12 +201,6 @@ class ConfigurableApp(QMainWindow):
             f"New Configuration:\n{self.config}",
             QMessageBox.StandardButton.Ok,
         )
-
-        if self.config.get("debug", False):
-            print("Debug mode enabled!")
-        else:
-            print("Debug mode disabled.")
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

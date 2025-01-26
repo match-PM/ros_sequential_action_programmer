@@ -17,13 +17,13 @@ class RsapConfig:
         
     def get_as_dict(self) -> dict:
         return {
-            'ros_log_levels': self.ros_log_levels.get_as_dict(),
-            'execution_logging': self.execution_log.get_as_dict()
+            'ros_log_levels': self.ros_log_levels._get_as_dict(),
+            'execution_logging': self.execution_log._get_as_dict()
         }
         
     def set_from_dict(self, config_dict: dict, save_to_file: bool = True):
-        self.ros_log_levels.set_from_dict(config_dict.get('ros_log_levels', {}))
-        self.execution_log.set_from_dict(config_dict.get('execution_logging', {}))
+        self.ros_log_levels._set_from_dict(config_dict.get('ros_log_levels', {}))
+        self.execution_log._set_from_dict(config_dict.get('execution_logging', {}))
         if save_to_file:
             self.save_config_to_file()
     
@@ -82,17 +82,45 @@ class ExecutionLog:
     LOG_ALWAYS = 2
     
     def __init__(self):
-        self.execution_log_mode = ExecutionLog.LOG_AT_END
+        self._execution_log_mode = ExecutionLog.LOG_NEVER
     
-    def get_as_dict(self) -> dict:
+    def _get_as_dict(self) -> dict:
         return {
-            'execution_log_mode': self.execution_log_mode
+            'execution_log_mode': self._get_state_as_string(self._execution_log_mode),
+            '_fields_execution_log_mode': self._get_states_as_list()
         }
     
-    def set_from_dict(self, log_dict: dict):
-        self.execution_log_mode = log_dict.get('execution_log_mode', ExecutionLog.LOG_AT_END)
+    def _set_from_dict(self, log_dict: dict):
+        self._execution_log_mode = self._get_state_from_string(log_dict.get('execution_log_mode', 'LOG_AT_END'))
     
-            
+    def _get_state_as_string(self, state:int)->str:
+        if state == ExecutionLog.LOG_NEVER:
+            return 'LOG_NEVER'
+        elif state == ExecutionLog.LOG_AT_END:
+            return 'LOG_AT_END'
+        elif state == ExecutionLog.LOG_ALWAYS:
+            return 'LOG_ALWAYS'
+        else:
+            return 'UNKNOWN'
+        
+    def _get_states_as_list(self)->list:
+        return [self._get_state_as_string(ExecutionLog.LOG_NEVER), 
+                self._get_state_as_string(ExecutionLog.LOG_AT_END),
+                self._get_state_as_string(ExecutionLog.LOG_ALWAYS)]
+    
+    def _get_state_from_string(self, state_str:str)->int:
+        if state_str == 'LOG_NEVER':
+            return ExecutionLog.LOG_NEVER
+        elif state_str == 'LOG_AT_END':
+            return ExecutionLog.LOG_AT_END
+        elif state_str == 'LOG_ALWAYS':
+            return ExecutionLog.LOG_ALWAYS
+        else:
+            return ExecutionLog.LOG_AT_END
+    
+    def get_execution_log_mode(self)->int:
+        return self._execution_log_mode
+    
 class RosLogLevels:
     def __init__(self) -> None:
         self._log_info = True
@@ -124,7 +152,7 @@ class RosLogLevels:
     def get_log_debug(self) -> bool:
         return self._log_debug
     
-    def get_as_dict(self) -> dict:
+    def _get_as_dict(self) -> dict:
         return {
             'log_info': self._log_info,
             'log_warn': self._log_warn,
@@ -132,7 +160,7 @@ class RosLogLevels:
             'log_debug': self._log_debug
         }
     
-    def set_from_dict(self, log_dict: dict):
+    def _set_from_dict(self, log_dict: dict):
         self._log_info = log_dict.get('log_info', True)
         self._log_warn = log_dict.get('log_warn', True)
         self._log_error = log_dict.get('log_error', True)

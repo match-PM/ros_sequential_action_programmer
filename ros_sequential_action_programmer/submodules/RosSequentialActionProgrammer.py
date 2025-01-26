@@ -387,6 +387,9 @@ class RosSequentialActionProgrammer:
             if (self.get_current_action_index() == len(self.action_list) - 1) and log_mode == ExecutionLog.LOG_AT_END:
                 self.save_action_sequence_log()
 
+            if log_mode == ExecutionLog.LOG_ALWAYS:
+                self.save_action_sequence_log()
+            
             if success_exec:
                 self.node.get_logger().info(
                     f"Action {self.get_current_action_name()} executed successfully!"

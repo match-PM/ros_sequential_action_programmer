@@ -839,7 +839,7 @@ class RsapApp(QMainWindow):
         """Open the configuration editor and handle changes."""
         config_editor = NestedDictionaryEditor(self.action_sequence_builder.config.get_as_dict(), self)
         result = config_editor.exec()
-
+        
         if result == QDialog.DialogCode.Accepted:
             result_config = config_editor.dictionary
             self.action_sequence_builder.config.set_from_dict(result_config)

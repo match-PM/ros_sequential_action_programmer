@@ -14,7 +14,7 @@ class RsapExecutionWorker(QRunnable):
 
     @pyqtSlot()
     def run(self):
-        success = self.action_sequence_builder.execute_current_action(log_mode=ExecutionLog.LOG_AT_END,
+        success = self.action_sequence_builder.execute_current_action(log_mode=self.action_sequence_builder.config.execution_log.get_execution_log_mode(),
                                                                       shift_action=True)
         self.signals.signal.emit()
 
@@ -27,5 +27,6 @@ class RsapExecutionRunWorker(QRunnable):
 
     @pyqtSlot()
     def run(self):
-        success, index = self.action_sequence_builder.execute_action_list(index_start=self.index)
+        success, index = self.action_sequence_builder.execute_action_list(index_start=self.index,
+                                                                          log_mode=self.action_sequence_builder.config.execution_log.get_execution_log_mode())
         self.signals.signal.emit()
