@@ -1,6 +1,6 @@
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread, pyqtSlot, QRunnable, QObject, QThreadPool
 
-from PyQt6.QtWidgets import QScrollArea, QDialog, QHBoxLayout, QInputDialog, QTreeWidget, QTreeWidgetItem, QApplication, QGridLayout, QFrame, QMainWindow, QListWidget, QListWidgetItem, QDoubleSpinBox, QWidget, QVBoxLayout, QPushButton, QCheckBox, QLineEdit, QComboBox, QTextEdit,QLabel,QSlider, QSpinBox, QFontDialog, QFileDialog
+from PyQt6.QtWidgets import QScrollArea, QMessageBox, QDialog, QHBoxLayout, QDialog, QInputDialog, QTreeWidget, QTreeWidgetItem, QApplication, QGridLayout, QFrame, QMainWindow, QListWidget, QListWidgetItem, QDoubleSpinBox, QWidget, QVBoxLayout, QPushButton, QCheckBox, QLineEdit, QComboBox, QTextEdit,QLabel,QSlider, QSpinBox, QFontDialog, QFileDialog
 from PyQt6.QtGui import QColor, QTextCursor, QFont, QAction
 import os
 from ament_index_python.packages import get_package_share_directory, PackageNotFoundError
@@ -12,7 +12,7 @@ import sys
 from collections import OrderedDict
 from rclpy.node import Node
 from datetime import datetime
-from ros_sequential_action_programmer.submodules.RosSequentialActionProgrammer import RosSequentialActionProgrammer, SET_IMPLICIT_SRV_DICT, LOG_AT_END, LOG_NEVER
+from ros_sequential_action_programmer.submodules.RosSequentialActionProgrammer import RosSequentialActionProgrammer, SET_IMPLICIT_SRV_DICT
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.PopupRecWindow import PopupRecWindow
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionSelectionMenu import ActionSelectionMenu
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AddServiceDialog import AddServiceDialog
@@ -29,7 +29,7 @@ from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robo
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AppTextWidget import AppTextOutput
 from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_vision import append_vision_widget_to_menu
 from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import append_jog_panel_to_menu
-
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.ConfigWindow import DictionaryValueEditor, NestedDictionaryEditor
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.NoScrollComboBox import NoScrollComboBox
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_widgets import ActionListWidget, ActionListItem
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.RecomButton import RecomButton
@@ -56,7 +56,6 @@ class RsapApp(QMainWindow):
         self.initUI()
         self.init_actions_list()
         self.save_as = False 
-        self.stop_execution = False
         #self.initialize_active_service_list()
         self.execution_running = False
         self.sub_window_list = []
@@ -161,7 +160,7 @@ class RsapApp(QMainWindow):
         menubar = self.menuBar()
         menubar.setStyleSheet("QMenuBar { font-size: 18px; }")
         file_menu = menubar.addMenu("File")
-        app_config_menu = menubar.addMenu("App Config")
+        app_config_menu = menubar.addMenu("Settings")
         pm_robot_tools_menu = menubar.addMenu("PM Robot Tools")
 
         # Create "New" action
@@ -169,10 +168,12 @@ class RsapApp(QMainWindow):
         new_action.triggered.connect(self.create_new_file)
         file_menu.addAction(new_action)
 
+        # Create "Open" action
         open_action = QAction("Open process", self)
         open_action.triggered.connect(self.open_process_file)
         file_menu.addAction(open_action)
-
+        
+        # Create "Save" action
         save_action = QAction("Save", self)
         save_action.triggered.connect(self.save_process)
         file_menu.addAction(save_action)
@@ -186,6 +187,9 @@ class RsapApp(QMainWindow):
         open_pm_robot_config.triggered.connect(partial(self.open_sub_window, PmRobotConfigWidget))
         pm_robot_tools_menu.addAction(open_pm_robot_config)
 
+        edit_configuration = QAction("Edit Configuration", self)
+        edit_configuration.triggered.connect(self.open_config_editor)
+        app_config_menu.addAction(edit_configuration)
         # open_pm_robot_tools = QAction("PM Robot Jog Panel", self)
         # open_pm_robot_tools.triggered.connect(partial(self.open_sub_window, PmDashboardApp))
         # pm_robot_tools_menu.addAction(open_pm_robot_tools)
@@ -331,7 +335,6 @@ class RsapApp(QMainWindow):
             return False
         
         success_set = self.action_sequence_builder.set_current_action(index)
-        success = False
 
         if success_set:
             _new_worker = RsapExecutionRunWorker(self.action_sequence_builder, index)
@@ -347,6 +350,7 @@ class RsapApp(QMainWindow):
         self.checkbox_list.setCurrentRow(self.action_sequence_builder.current_action_index)
         self.action_selected()
         self.set_action_colors_from_execution_status(set_state=True)
+        self.text_output.append_black_text("Execution finished!")
         
     def set_action_colors_from_execution_status(self, set_state=False):
         if set_state:
@@ -681,7 +685,7 @@ class RsapApp(QMainWindow):
             yaml.dump(recent_file_dict, file, default_flow_style=False)
 
     def stop_execution(self) -> None:
-        self.stop_execution = True
+        self.action_sequence_builder._stop_execution = True
 
     def add_service_to_action_list(self, service_name: str, service_client:str, service_type:str = None) -> None:
         #selected_client = self.service_combo_box.currentText()
@@ -771,18 +775,18 @@ class RsapApp(QMainWindow):
         except Exception as e:
             self.service_node.get_logger().error(f"Error opening sub window: {e}")
 
-    def print_ros_log(self, msg, Level):
+    def print_ros_log(self, msg, level):
         # INFO
-        if Level ==0:
+        if level == 20: 
             self.text_output.append_black_text("[INFO]" + msg)
         # WARN
-        if Level ==1:
+        if level == 30:
             self.text_output.append_orange_text("[WARN]" +msg)
         # ERROR
-        if Level ==2:
+        if level == 40:
             self.text_output.append_red_text("[ERROR]" +msg)
         # DEBUG
-        if Level ==3:
+        if level == 10:
             self.text_output.append_blue_text("[DEBUG]" +msg)
 
     def set_widget_activations(self, state):
@@ -830,7 +834,27 @@ class RsapApp(QMainWindow):
                 if action.open_user_interaction_signal.signal not in self.user_interaction_signals_list:
                     self.user_interaction_signals_list.append(action.open_user_interaction_signal.signal)
                     action.open_user_interaction_signal.signal.connect(self.show_user_interaction_dialog)
-                
+    
+    def open_config_editor(self):
+        """Open the configuration editor and handle changes."""
+        config_editor = NestedDictionaryEditor(self.action_sequence_builder.config.get_as_dict(), self)
+        result = config_editor.exec()
+
+        if result == QDialog.DialogCode.Accepted:
+            result_config = config_editor.dictionary
+            self.action_sequence_builder.config.set_from_dict(result_config)
+            #self.apply_config_changes(result_config)
+            self.text_output.append_green_text("Configuration updated!")
+
+    def apply_config_changes(self, dictionary: dict):
+        """Apply changes to the app based on the updated configuration."""
+        QMessageBox.information(
+            self,
+            "Configuration Updated",
+            f"New Configuration:\n{dictionary}",
+            QMessageBox.StandardButton.Ok,
+        ) 
+                    
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = RsapApp()

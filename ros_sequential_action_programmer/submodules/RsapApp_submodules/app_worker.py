@@ -1,6 +1,7 @@
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread, pyqtSlot, QRunnable, QObject, QThreadPool
-from ros_sequential_action_programmer.submodules.RosSequentialActionProgrammer import RosSequentialActionProgrammer, SET_IMPLICIT_SRV_DICT, LOG_AT_END, LOG_NEVER
-
+from ros_sequential_action_programmer.submodules.RosSequentialActionProgrammer import RosSequentialActionProgrammer, SET_IMPLICIT_SRV_DICT
+from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass
+from ros_sequential_action_programmer.submodules.rsap_modules.RsapConfig import ExecutionLog
 
 class RsapExecutionWorkerSignals(QObject):
     signal = pyqtSignal()
@@ -13,7 +14,7 @@ class RsapExecutionWorker(QRunnable):
 
     @pyqtSlot()
     def run(self):
-        success = self.action_sequence_builder.execute_current_action(log_mode=LOG_AT_END,
+        success = self.action_sequence_builder.execute_current_action(log_mode=ExecutionLog.LOG_AT_END,
                                                                       shift_action=True)
         self.signals.signal.emit()
 

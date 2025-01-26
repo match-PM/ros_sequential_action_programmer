@@ -12,7 +12,7 @@ from ros_sequential_action_programmer.submodules.rsap_modules.RsapConfig import 
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.rsap_signals import IncomingLogSignal, ExecutionStatusSignal, CurrentActionSignal
 from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI, TERMINAL
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
-
+from ros_sequential_action_programmer.submodules.rsap_modules.RsapConfig import ExecutionLog
 import json
 from datetime import datetime
 import os
@@ -31,9 +31,6 @@ SET = 1
 CHECK_COMPATIBILITY_ONLY = 0
 SET_IMPLICIT_SRV_DICT = 1
 SET_SRV_DICT = 2
-
-LOG_NEVER = 0
-LOG_AT_END = 1
 
 class RosSequentialActionProgrammer:
     def __init__(self, node: Node) -> None:
@@ -54,9 +51,10 @@ class RosSequentialActionProgrammer:
         self.action_sequence_log = {}
         self.action_log = []
         self.recommendations = RecomGenerator(node)
+        self.config = RsapConfig('ros_sequential_action_programmer', self.node.get_logger())
         self.log_subscription = self.node.create_subscription(Log, "/rosout", self.log_callback, 10, callback_group=self.callback_group_reentrant)
-        self.config = RsapConfig()
         self._init_signals()
+        self._stop_execution = False
 
     def initialize_service_list(self):
         """
@@ -75,25 +73,23 @@ class RosSequentialActionProgrammer:
         """
         Callback for log messages.
         """
-
-        #self.signal_incoming_log.signal.emit(f"{msg.name}:" + str(msg.level),3)
+        
         app_log = f"[{msg.name}]: {msg.msg}"
-
-        if self.config.ros_log_levels.get_log_info() == (msg.level == 20):
-            self.signal_incoming_log.signal.emit(app_log,0)
-            #self.node.get_logger().info(app_log)
-
-        elif self.config.ros_log_levels.get_log_warn() == (msg.level == 30):
-            self.signal_incoming_log.signal.emit(app_log,1)
-            #self.node.get_logger().warn(msg.msg)
-
-        elif self.config.ros_log_levels.get_log_error() == (msg.level == 40):
-            self.signal_incoming_log.signal.emit(app_log,2)
-            #self.node.get_logger().error(msg.msg)
-
-        elif self.config.ros_log_levels.get_log_debug() == (msg.level == 50):
-            self.signal_incoming_log.signal.emit(app_log,3)
-            #self.node.get_logger().debug(msg.msg)
+    
+        match msg.level:
+            case 10:
+                if self.config.ros_log_levels.get_log_debug():
+                    self.signal_incoming_log.signal.emit(app_log,10)
+            case 20:
+                if self.config.ros_log_levels.get_log_info():
+                    self.signal_incoming_log.signal.emit(app_log,20)
+            case 30:
+                if self.config.ros_log_levels.get_log_warn():
+                    self.signal_incoming_log.signal.emit(app_log,30)
+            case 40:
+                if self.config.ros_log_levels.get_log_error():
+                    self.signal_incoming_log.signal.emit(app_log,40)
+                    
 
     def get_active_services(self)->list[Tuple[str, list[str]]]:
         """
@@ -365,7 +361,7 @@ class RosSequentialActionProgrammer:
     def get_current_action_name(self) -> str:
         return self.get_action_at_index(self.current_action_index).get_action_name()
 
-    def execute_current_action(self, log_mode: int = LOG_NEVER, shift_action:bool = False) -> bool:
+    def execute_current_action(self, log_mode: int = ExecutionLog.LOG_NEVER, shift_action:bool = False) -> bool:
         """
         This function executes the current action. It returns a bool value for success indication.
         :param log_mode: The mode of the log. Can be either LOG_NEVER or LOG_AT_END.
@@ -388,7 +384,7 @@ class RosSequentialActionProgrammer:
                 action_log=self.get_current_action_log(),
             )
 
-            if (self.get_current_action_index() == len(self.action_list) - 1) and log_mode == LOG_AT_END:
+            if (self.get_current_action_index() == len(self.action_list) - 1) and log_mode == ExecutionLog.LOG_AT_END:
                 self.save_action_sequence_log()
 
             if success_exec:
@@ -410,7 +406,7 @@ class RosSequentialActionProgrammer:
         finally:
             self.signal_execution_status.signal.emit(False)
 
-    def execute_action_list(self, index_start: int, log_mode:int = LOG_NEVER) -> Tuple[bool, int]:
+    def execute_action_list(self, index_start: int, log_mode:int =ExecutionLog.LOG_NEVER) -> Tuple[bool, int]:
         """
         This function executes the action_list successifly starting at the start_index.
         It returns bool value for success indication and also the index of the action when the method terminates.
@@ -420,7 +416,7 @@ class RosSequentialActionProgrammer:
         """
         
         self.clear_all_log_entries()
-        
+        self._stop_execution = False
         if index_start < len(self.action_list):
             for ind in range(index_start, len(self.action_list)):
                 self.set_current_action(ind)
@@ -428,6 +424,9 @@ class RosSequentialActionProgrammer:
                 success = self.execute_current_action(log_mode=log_mode)
                 if not success:
                     return False, self.current_action_index
+                # check if stop_execution flag is set
+                if self._stop_execution:
+                    return True, self.current_action_index
             self.set_current_action(0)
             return True, self.current_action_index
         else:
@@ -1036,6 +1035,6 @@ class RosSequentialActionProgrammer:
         """
         for action in self.action_list:
             action.clear_log_entry()
-            
+                            
 if __name__ == "__main__":
     pass
