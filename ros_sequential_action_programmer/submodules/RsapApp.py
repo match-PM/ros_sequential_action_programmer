@@ -146,8 +146,12 @@ class RsapApp(QMainWindow):
         layout.addWidget(self.text_output,4,1,1,3)
 
         self.last_saved_label = QLabel('File not saved yet!')
-        layout.addWidget(self.last_saved_label,5,1,1,2)
+        layout.addWidget(self.last_saved_label,5,1,1,1)
 
+        self.clear_text_output_button = QPushButton("Clear")
+        self.clear_text_output_button.clicked.connect(self.text_output.clear)
+
+        layout.addWidget(self.clear_text_output_button,5,2,1,1)
         # # create sub layout for the function parameter widgetd
         self.sub_layout = QVBoxLayout()
 
