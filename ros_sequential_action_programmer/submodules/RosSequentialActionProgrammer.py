@@ -24,6 +24,7 @@ import yaml
 from yaml.loader import SafeLoader
 from ros_sequential_action_programmer.submodules.obj_dict_modules.dict_functions import convert_to_ordered_dict, get_key_value_pairs_from_dict
 from typing import Union
+import subprocess
 
 CHECK = 0
 SET = 1
@@ -1038,6 +1039,86 @@ class RosSequentialActionProgrammer:
         """
         for action in self.action_list:
             action.clear_log_entry()
-                            
+    
+    @staticmethod
+    def get_ros2_executables():
+        result = subprocess.run(["ros2", "pkg", "executables"], capture_output=True, text=True)
+        executables = result.stdout.strip().split("\n")
+        executables_list = []
+        current_package = None
+        reslt_dict = {}
+        for line in executables:
+           
+            if not line:
+                continue
+            
+            package, executable = line.split()
+            
+            print(f"Package: {package}")
+            print(f"Executable: {executable}")
+            
+            if current_package != package:
+                if current_package is not None:
+                    reslt_dict[current_package] = copy.copy(executables_list)
+                    
+                current_package = package
+                executables_list.clear()
+                executables_list.append(executable)
+            else:
+                executables_list.append(executable)
+
+        return reslt_dict
+    
+    @staticmethod
+        
+    def get_ros2_launch_executables():
+        try:
+            package_share_directory = get_package_share_directory('ros_sequential_action_programmer')
+            launch_file_path = package_share_directory + '/launch_files.yaml'
+            
+            with open(launch_file_path, 'r') as file:
+                FileData = yaml.safe_load(file)
+                                
+            result_dict = FileData
+            
+            return FileData
+            
+        except Exception as e:
+            print(print(e))
+            result_dict = None
+    
+    @staticmethod
+    def run_ros2_executable(package: str, 
+                            executable: str, 
+                            terminal: str = "gnome-terminal",
+                            launch_mode: bool = False):
+        """
+        Runs a ROS 2 executable in a new terminal window.
+
+        Args:
+            package (str): The name of the ROS 2 package.
+            executable (str): The name of the executable within the package.
+            terminal (str, optional): The terminal emulator to use (default: "gnome-terminal").
+        """
+        if launch_mode:
+            command = f"ros2 launch {package} {executable}"
+        else:
+            command = f"ros2 run {package} {executable}"
+        
+        if terminal == "gnome-terminal":
+            subprocess.Popen(["gnome-terminal", "--", "bash", "-c", f"{command}; exec bash"])
+        elif terminal == "x-terminal-emulator":
+            subprocess.Popen(["x-terminal-emulator", "-e", f"bash -c '{command}; exec bash'"])
+        elif terminal == "konsole":
+            subprocess.Popen(["konsole", "-e", f"bash -c '{command}; exec bash'"])
+        elif terminal == "xterm":
+            subprocess.Popen(["xterm", "-e", f"bash -c '{command}; exec bash'"])
+        else:
+            raise ValueError(f"Unsupported terminal: {terminal}")
+
+        return command
+
+    
 if __name__ == "__main__":
-    pass
+    res = RosSequentialActionProgrammer.get_ros2_launch_executables()
+    print(res)

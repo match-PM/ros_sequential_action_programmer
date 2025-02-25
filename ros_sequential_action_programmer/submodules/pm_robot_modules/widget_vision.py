@@ -19,7 +19,7 @@ import subprocess
 import os
 
 try:
-    from pm_vision_interfaces.srv import GetRunningAssistants, StartVisionAssistant, StopVisionAssistant
+    from pm_vision_interfaces.srv import ExecuteVision, StartVisionAssistant, StopVisionAssistant
     from pm_vision_manager.va_py_modules.vision_assistant_class import VisionProcessClass
 except:
     pass

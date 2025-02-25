@@ -23,6 +23,7 @@ setup(
         ('share/' + package_name, ['config/whitelist.yaml']),
         ('share/' + package_name, ['config/OpenAI_config.yaml']),
         ('share/' + package_name, ['config/path_definitions.yaml']),
+        ('share/' + package_name, ['config/launch_files.yaml']),
         ('share/' + package_name + '/launch', ['launch/rsap_app.launch.py']),
     ],
     install_requires=['setuptools'],

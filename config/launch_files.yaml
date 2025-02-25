@@ -1,0 +1,14 @@
+pm_robot_bringup: 
+  - 'pm_robot_sim_HW.launch.py'
+  - 'pm_robot_real_HW.launch.py' 
+  - 'pm_robot_unity_HW.launch.py'
+  - 'pm_robot_Unity_HW.launch.py'
+
+assembly_manager:
+  - 'assembly_manager.launch.py' 
+
+pm_vision_manager:
+  - 'pm_vision.launch.py'
+
+pm_launch_skills:
+  - 'pm_skills.launch.py' 

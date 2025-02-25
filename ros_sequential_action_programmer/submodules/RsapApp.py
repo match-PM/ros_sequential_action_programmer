@@ -23,16 +23,18 @@ from rosidl_runtime_py.get_interfaces import get_service_interfaces
 import ast
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.UserInteractionActionDialog import UserInteractionActionDialog
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.app_worker import RsapExecutionWorker, RsapExecutionRunWorker
-
-from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_config import PmRobotConfigWidget
-from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import PmDashboardApp
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AppTextWidget import AppTextOutput
-from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_vision import append_vision_widget_to_menu
-from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import append_jog_panel_to_menu
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.ConfigWindow import DictionaryValueEditor, NestedDictionaryEditor
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.NoScrollComboBox import NoScrollComboBox
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_widgets import ActionListWidget, ActionListItem
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.RecomButton import RecomButton
+
+try:
+    from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_config import PmRobotConfigWidget
+    from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import PmDashboardApp
+    from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import append_jog_panel_to_menu
+except Exception as e:
+    print(f"Error importing append_jog_panel_to_menu: {e}")
 
 # Change this later to be cleaner
 try:
@@ -76,6 +78,12 @@ class RsapApp(QMainWindow):
         
         self.setWindowTitle("Ros Sequential Action Programmer - RSAP")
         
+        self.ros_run_menu = ActionSelectionMenu(self)
+        self.ros_run_menu.action_menu_clb = self.run_ros_executable
+
+        self.ros_launch_menu = ActionSelectionMenu(self)
+        self.ros_launch_menu.action_menu_clb = self.run_ros_executable_launch
+                    
         # Create main container widget
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
@@ -166,7 +174,8 @@ class RsapApp(QMainWindow):
         file_menu = menubar.addMenu("File")
         app_config_menu = menubar.addMenu("Settings")
         pm_robot_tools_menu = menubar.addMenu("PM Robot Tools")
-
+        ros_menu = menubar.addMenu("ROS2 Functionalities")
+        
         # Create "New" action
         new_action = QAction("New process", self)
         new_action.triggered.connect(self.create_new_file)
@@ -191,6 +200,14 @@ class RsapApp(QMainWindow):
         open_pm_robot_config.triggered.connect(partial(self.open_sub_window, PmRobotConfigWidget))
         pm_robot_tools_menu.addAction(open_pm_robot_config)
 
+        executable_menu = QAction("ROS2 Run", self)
+        executable_menu.triggered.connect(self.show_ros_executable_menu)
+        ros_menu.addAction(executable_menu)
+        
+        executable_menu_launch = QAction("ROS2 Launch", self)
+        executable_menu_launch.triggered.connect(self.show_ros_executable_launch_menu)
+        ros_menu.addAction(executable_menu_launch)
+                
         edit_configuration = QAction("Edit Configuration", self)
         edit_configuration.triggered.connect(self.open_config_editor)
         app_config_menu.addAction(edit_configuration)
@@ -199,10 +216,14 @@ class RsapApp(QMainWindow):
         # pm_robot_tools_menu.addAction(open_pm_robot_tools)
 
         # Add vision manager to the menu, this will only be added if the package is found
-        append_vision_widget_to_menu(self, pm_robot_tools_menu, self.service_node)
+        #append_vision_widget_to_menu(self, pm_robot_tools_menu, self.service_node)
         
         # Add jog panel to the menu, this will only be added if the package is found
-        append_jog_panel_to_menu(self, pm_robot_tools_menu, self.service_node)
+        
+        try:
+            append_jog_panel_to_menu(self, pm_robot_tools_menu, self.service_node)
+        except Exception as e:
+            self.service_node.get_logger().warn(f"Error adding jog panel to menu: {e}")
 
         try:
             open_pm_robot_co_pilot = QAction("PM Co-Pilot", self)
@@ -254,8 +275,32 @@ class RsapApp(QMainWindow):
             }
         }
         self.action_menu.init_action_menu()
-        self.action_menu.showMenu()
+        self.action_menu.showMenu(use_button_pos=True)
 
+    def show_ros_executable_menu(self):
+        self.ros_run_menu.menu_dictionary = self.action_sequence_builder.get_ros2_executables()
+        self.ros_run_menu.init_action_menu()
+        self.ros_run_menu.showMenu()
+
+    def show_ros_executable_launch_menu(self):
+        self.ros_launch_menu.menu_dictionary = self.action_sequence_builder.get_ros2_launch_executables()
+        self.ros_launch_menu.init_action_menu()
+        self.ros_launch_menu.showMenu()
+            
+    def run_ros_executable(self, command_list:list[str]):
+        package = command_list[0]
+        executable = command_list[1]
+        command = self.action_sequence_builder.run_ros2_executable(package, executable, launch_mode=False)
+        
+        self.service_node.get_logger().info(f"Started command: '{command}' in a new terminal window.")
+
+    def run_ros_executable_launch(self, command_list:list[str]):
+        package = command_list[0]
+        executable = command_list[1]
+        command = self.action_sequence_builder.run_ros2_executable(package, executable, launch_mode=True)
+        
+        self.service_node.get_logger().info(f"Started command: '{command}' in a new terminal window.")
+                
     def append_selected_action_from_menu(self, menu_output:list[str]):
         #print(menu_output)
         if menu_output[0] == 'Services':

@@ -16,20 +16,21 @@ from tf2_ros import Buffer, TransformListener
 from copy import deepcopy, copy
 from geometry_msgs.msg import Vector3, Quaternion
 from importlib import import_module
-from sensor_msgs.msg._joint_state import JointState
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from rosidl_runtime_py.convert import message_to_ordereddict
 from ament_index_python.packages import PackageNotFoundError
 
 import time
 
-from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_joint_control import PmRobotJointControlWidget
-from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
-from ros_sequential_action_programmer.submodules.RsapApp_submodules.AppTextWidget import AppTextOutput
-from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_pneumatic import PmRobotPneumaticControlWidget
-from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_nozzle import PmRobotNozzleControlWidget
 try:
     from pm_moveit_interfaces.srv import MoveToPose
+    from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_joint_control import PmRobotJointControlWidget
+    from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
+    from ros_sequential_action_programmer.submodules.RsapApp_submodules.AppTextWidget import AppTextOutput
+    from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_pneumatic import PmRobotPneumaticControlWidget
+    from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_nozzle import PmRobotNozzleControlWidget
+    from sensor_msgs.msg._joint_state import JointState
+
 except ImportError:
     print("pm_moveit_interfaces not found")
     pass
@@ -65,7 +66,6 @@ def append_jog_panel_to_menu(mainWindow: QMainWindow, menu_bar:QMenu, node:Node)
 def create_jog_widget(main_window, node:Node):
     main_window.jog_panel = PmDashboardApp(node)
     main_window.jog_panel.show()
-
 
 
 

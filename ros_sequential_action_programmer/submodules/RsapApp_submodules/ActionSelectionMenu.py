@@ -51,9 +51,12 @@ class ActionSelectionMenu():
                 action.triggered.connect(menu_content)
                 menu.addAction(action)
 
-    def showMenu(self):
+    def showMenu(self,use_button_pos = False):
         # Display the menu at the cursor position
-        self.contextMenu.exec(self.mainwindow.mapToGlobal(self.mainwindow.sender().pos()))
+        if use_button_pos:
+            self.contextMenu.exec(self.mainwindow.mapToGlobal(self.mainwindow.sender().pos()))
+        else:
+            self.contextMenu.exec()
 
     def action_menu_clb(self, tree_list):
         print(tree_list)
