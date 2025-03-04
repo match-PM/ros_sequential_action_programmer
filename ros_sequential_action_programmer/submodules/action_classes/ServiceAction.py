@@ -99,7 +99,7 @@ class ServiceAction:
                 f"Error occured! Given service type does not exist (service_type: {self.service_type})!"
             )
 
-    def execute(self) -> bool:
+    def execute(self, get_interupt_method:Any = None) -> bool:
         if self.service_request and self.service_metaclass and self.service_type:
             # update srv request from dictionary
             self.update_srv_req_obj_from_dict()
@@ -124,7 +124,10 @@ class ServiceAction:
             node_name = self.get_node_name_from_client(client.srv_name)
             timer = None
             if node_name is not None:
-                timer = self.node.create_timer(timer_period_sec=1,callback=partial(self.client_executer_watchdog, node_name, self.future))
+                timer = self.node.create_timer(timer_period_sec=1,callback=partial(self.client_executer_watchdog, 
+                                                                                   node_name, 
+                                                                                   self.future,
+                                                                                   get_interupt_method))
             else:
                 self.node.get_logger().warn(f"Service execution watchdog for '{client.srv_name}' not available. Service client name does not adhere to the naming convention starting with the node name.")
 
@@ -158,8 +161,12 @@ class ServiceAction:
             
             return srv_call_success
 
-    def client_executer_watchdog(self, node_name, future_obj):
+    def client_executer_watchdog(self, node_name, future_obj, get_interupt_method):
         node_names = self.node.get_node_names()
+        if get_interupt_method is not None:
+            if get_interupt_method():
+                self.node.get_logger().info(f"Service Watchdog - Interupt method triggered! Aborting...")
+                future_obj.cancel()
 
         if node_name in node_names:
             self.node.get_logger().info(f"Service Watchdog - node '{node_name}' is still active!")

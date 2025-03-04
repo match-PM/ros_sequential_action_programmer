@@ -56,6 +56,13 @@ class RosSequentialActionProgrammer:
         self.log_subscription = self.node.create_subscription(Log, "/rosout", self.log_callback, 10, callback_group=self.callback_group_reentrant)
         self._init_signals()
         self._stop_execution = False
+        self._interupt_execution = False
+
+    def get_interrupt_execution(self)->bool:
+        return self._interupt_execution
+    
+    def set_interrupt_execution(self, value: bool):
+        self._interupt_execution = value
 
     def initialize_service_list(self):
         """
@@ -369,6 +376,8 @@ class RosSequentialActionProgrammer:
         """
 
         self.signal_execution_status.signal.emit(True)
+        # set the interrupt flag to False
+        self.set_interrupt_execution(False)
         try:
             # Set values from earlier service respones to this service request, might fail, if earlier call has not been executed
             
@@ -377,7 +386,7 @@ class RosSequentialActionProgrammer:
                 if not set_success:
                     raise Exception
 
-            success_exec = self.get_action_at_index(self.current_action_index).execute()
+            success_exec = self.get_action_at_index(self.current_action_index).execute(self.get_interrupt_execution)    # pass interrupt method to check if interruption is demanded
             # append action log to history
             self.append_action_log(
                 index=self.current_action_index,
@@ -422,7 +431,14 @@ class RosSequentialActionProgrammer:
         self.clear_all_log_entries()
         self._stop_execution = False
         if index_start < len(self.action_list):
-            for ind in range(index_start, len(self.action_list)):
+            ind = index_start
+
+            while ind < len(self.action_list) or self.config.execution_behavior.get_value():
+
+                # this is need for looping
+                if self.config.execution_behavior.get_value() and ind == len(self.action_list):
+                    ind = 0
+
                 self.set_current_action(ind)
                 self.signal_current_action.signal.emit(ind)
                 success = self.execute_current_action(log_mode=log_mode)
@@ -431,6 +447,18 @@ class RosSequentialActionProgrammer:
                 # check if stop_execution flag is set
                 if self._stop_execution:
                     return True, self.current_action_index
+                ind += 1
+
+            # for ind in range(index_start, len(self.action_list)):
+            #     self.set_current_action(ind)
+            #     self.signal_current_action.signal.emit(ind)
+            #     success = self.execute_current_action(log_mode=log_mode)
+            #     if not success:
+            #         return False, self.current_action_index
+            #     # check if stop_execution flag is set
+            #     if self._stop_execution:
+            #         return True, self.current_action_index
+
             self.set_current_action(0)
             return True, self.current_action_index
         else:

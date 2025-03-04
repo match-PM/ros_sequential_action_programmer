@@ -44,9 +44,9 @@ class UserInteractionAction():
         self.result_ready_signal = ResultReadySignal()
 
 
-    def execute(self) -> bool:
+    def execute(self, get_interupt_method = None) -> bool:
         exec_success = False
-
+        
         start_time = datetime.now()
 
         if self.interaction_mode == TERMINAL:

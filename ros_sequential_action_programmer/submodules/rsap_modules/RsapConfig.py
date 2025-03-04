@@ -9,6 +9,7 @@ class RsapConfig:
                  logger: RcutilsLogger=None) -> None:
         self.ros_log_levels = RosLogLevels()
         self.execution_log = ExecutionLog()
+        self.execution_behavior = ExecutionBehavior()
         self._package_name = package_name
         self.config_file_path = get_package_share_directory('ros_sequential_action_programmer')
         self.file_path = self.config_file_path + '/rsap_config.yaml'
@@ -18,12 +19,14 @@ class RsapConfig:
     def get_as_dict(self) -> dict:
         return {
             'ros_log_levels': self.ros_log_levels._get_as_dict(),
-            'execution_logging': self.execution_log._get_as_dict()
+            'execution_logging': self.execution_log._get_as_dict(),
+            'execution_behavior': self.execution_behavior._get_as_dict()
         }
         
     def set_from_dict(self, config_dict: dict, save_to_file: bool = True):
         self.ros_log_levels._set_from_dict(config_dict.get('ros_log_levels', {}))
         self.execution_log._set_from_dict(config_dict.get('execution_logging', {}))
+        self.execution_behavior._set_from_dict(config_dict.get('execution_behavior', {}))
         if save_to_file:
             self.save_config_to_file()
     
@@ -120,7 +123,22 @@ class ExecutionLog:
     
     def get_execution_log_mode(self)->int:
         return self._execution_log_mode
+
+class ExecutionBehavior:
+    def __init__(self) -> None:
+        self._loop_sequence = False
+
+    def _get_as_dict(self) -> dict:
+        return {
+            'loop_sequence': self._loop_sequence
+        }
     
+    def _set_from_dict(self, log_dict: dict):
+        self._loop_sequence = log_dict.get('loop_sequence', False)
+
+    def get_value(self) -> bool:
+        return self._loop_sequence
+
 class RosLogLevels:
     def __init__(self) -> None:
         self._log_info = True

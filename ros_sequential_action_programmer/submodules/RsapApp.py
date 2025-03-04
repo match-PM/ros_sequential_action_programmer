@@ -18,7 +18,10 @@ from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionSelect
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AddServiceDialog import AddServiceDialog
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AddUserInteractionDialog import AddUserInteractionDialog
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.StatusIndicator import StatusIndicator
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.UserDialog import UserDialog
+
 from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
+
 from rosidl_runtime_py.get_interfaces import get_service_interfaces
 import ast
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.UserInteractionActionDialog import UserInteractionActionDialog
@@ -128,6 +131,7 @@ class RsapApp(QMainWindow):
         layout.addLayout(toolbar_layout,1,0,alignment=Qt.AlignmentFlag.AlignTop)
 
         execute_layout = QHBoxLayout()
+        stop_execution_layout = QHBoxLayout()
         # Add combobox for vision pipline building
         self.checkbox_list = ActionListWidget()
         self.checkbox_list.itemClicked.connect(self.action_selected)
@@ -144,10 +148,16 @@ class RsapApp(QMainWindow):
         self.run_action_sequence_button.clicked.connect(self.run_action_sequence)
         execute_layout.addWidget(self.run_action_sequence_button)
         layout.addLayout(execute_layout,2,1)
+        layout.addLayout(stop_execution_layout,3,1)
+
 
         stop_execution_button = QPushButton("Stop Execution")
         stop_execution_button.clicked.connect(self.stop_execution)
-        layout.addWidget(stop_execution_button,3,1)
+        stop_execution_layout.addWidget(stop_execution_button)
+
+        interupt_execution_button = QPushButton("Interrupt Action")
+        interupt_execution_button.clicked.connect(self.interrupt_action)
+        stop_execution_layout.addWidget(interupt_execution_button)
 
         # add textbox for string output
         self.text_output = AppTextOutput()
@@ -735,6 +745,22 @@ class RsapApp(QMainWindow):
 
     def stop_execution(self) -> None:
         self.action_sequence_builder._stop_execution = True
+
+    def interrupt_action(self) -> None:
+        interupt_dialog = UserDialog(request_text="Do you want to interrupt the current action? This will interrupt the execution of the current action. However if the current action is a ros2 service call, the call might finish in the background!")
+        
+        if interupt_dialog.exec():
+            # action_name, action_description, = add_user_interaction_dialog.get_values()
+            # self.add_user_interaction_to_action_list(action_name=action_name,
+            #                                          description=action_description)
+            #self.service_node._logger.warn("Interruption requested! Interrupting action!")
+            self.text_output.append_red_text("Interruption requested! Interrupting action!")
+            self.action_sequence_builder.set_interrupt_execution(True)
+        else:
+            pass
+            #self.service_node._logger.info("Interruption aborted!")
+
+        
 
     def add_service_to_action_list(self, service_name: str, service_client:str, service_type:str = None) -> None:
         #selected_client = self.service_combo_box.currentText()
