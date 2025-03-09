@@ -263,6 +263,10 @@ class RosSequentialActionProgrammer:
             self.name = file_data["name"]
 
             for index, action in enumerate(file_data["action_list"]):
+                action_from_item = None
+                action:dict
+                #action_dict = dict(action)
+                #self.node.get_logger().info(f"Loading action {action['name']} at index {index}")
                 if action['action_type'] == 'ServiceAction':
                     service_client = action["service_client"]
 
@@ -287,14 +291,20 @@ class RosSequentialActionProgrammer:
                         if not set_success:
                             self.action_list.clear()
                             return False
+                        
                 elif action['action_type'] == 'UserInteractionAction':
                     action_from_item = UserInteractionAction(node=self.node,
                                                              interaction_mode = action['interaction_mode'],
                                                              name=action['name'],
                                                              action_text=action['action_text'])
                     self.action_list.append(action_from_item)
+                
+                if action_from_item is not None:
+                    action_from_item.set_breakpoint(action.get("has_breakpoint", False))
+                    action_from_item.set_active(action.get("is_active", True))    
                 else:
                     return False
+            
             return True
         else:
             return False
@@ -334,6 +344,9 @@ class RosSequentialActionProgrammer:
                     action_dict["action_text"] = action.action_text
                     action_dict["interaction_mode"] = action.interaction_mode
 
+                action_dict["has_breakpoint"] = action.has_breakpoint()
+                action_dict["is_active"] = action.is_active()
+                
                 if action_dict:
                     action_list.append(action_dict)
 
@@ -381,12 +394,20 @@ class RosSequentialActionProgrammer:
         try:
             # Set values from earlier service respones to this service request, might fail, if earlier call has not been executed
             
-            if isinstance(self.get_action_at_index(self.current_action_index),ServiceAction):
+            current_action = self.get_action_at_index(self.current_action_index)
+            
+            if isinstance(current_action, ServiceAction):
                 set_success = self.process_action_dict_at_index(self.current_action_index, SET_SRV_DICT)
                 if not set_success:
                     raise Exception
 
-            success_exec = self.get_action_at_index(self.current_action_index).execute(self.get_interrupt_execution)    # pass interrupt method to check if interruption is demanded
+            if not current_action.is_active():
+                self.node.get_logger().info(f"Action {self.get_current_action_name()} is not active!")
+                if shift_action:
+                    self.shift_to_next_action()
+                return True
+            
+            success_exec = current_action.execute(self.get_interrupt_execution)    # pass interrupt method to check if interruption is demanded
             # append action log to history
             self.append_action_log(
                 index=self.current_action_index,
@@ -432,7 +453,12 @@ class RosSequentialActionProgrammer:
         self._stop_execution = False
         if index_start < len(self.action_list):
             ind = index_start
-
+            
+            # This is needed if the start action has a breakpoint
+            breakpoint_override = False
+            if self.has_current_action_breakpoint():
+                breakpoint_override = True
+                
             while ind < len(self.action_list) or self.config.execution_behavior.get_value():
 
                 # this is need for looping
@@ -441,12 +467,20 @@ class RosSequentialActionProgrammer:
 
                 self.set_current_action(ind)
                 self.signal_current_action.signal.emit(ind)
+                
+                if self.has_current_action_breakpoint() and not breakpoint_override:
+                    self.node.get_logger().info(f"Breakpoint at {self.get_current_action_name()}!")
+                    return True, self.current_action_index
+                
                 success = self.execute_current_action(log_mode=log_mode)
                 if not success:
                     return False, self.current_action_index
                 # check if stop_execution flag is set
                 if self._stop_execution:
                     return True, self.current_action_index
+                
+                # reset breakpoint_override after first action
+                breakpoint_override = False
                 ind += 1
 
             # for ind in range(index_start, len(self.action_list)):
@@ -464,6 +498,12 @@ class RosSequentialActionProgrammer:
         else:
             return False, self.current_action_index
 
+    def has_current_action_breakpoint(self) -> bool:
+        """
+        Returns a bool value if the current action has a breakpoint.
+        """
+        return self.get_action_at_index(self.current_action_index).has_breakpoint()
+    
     def get_copy_srv_dict_at_index(self, index: int) -> collections.OrderedDict:
         """
         This method returns the service request as a OrderedDict.

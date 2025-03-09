@@ -1,6 +1,6 @@
 {
     "name": "pm_robot_relative_movement_demo",
-    "saved_at": "2025-01-24 22:55:04.263845",
+    "saved_at": "2025-03-09 21:57:52.472305",
     "action_list": [
         {
             "action_position": 0,
@@ -23,7 +23,9 @@
                     "w": 1.0
                 },
                 "execute_movement": true
-            }
+            },
+            "has_breakpoint": false,
+            "is_active": true
         },
         {
             "action_position": 1,
@@ -46,7 +48,9 @@
                     "w": 1.0
                 },
                 "execute_movement": true
-            }
+            },
+            "has_breakpoint": false,
+            "is_active": true
         },
         {
             "action_position": 2,
@@ -69,7 +73,9 @@
                     "w": 1.0
                 },
                 "execute_movement": true
-            }
+            },
+            "has_breakpoint": false,
+            "is_active": true
         },
         {
             "action_position": 3,
@@ -92,7 +98,9 @@
                     "w": 1.0
                 },
                 "execute_movement": true
-            }
+            },
+            "has_breakpoint": false,
+            "is_active": true
         },
         {
             "action_position": 4,
@@ -115,7 +123,9 @@
                     "w": 1.0
                 },
                 "execute_movement": true
-            }
+            },
+            "has_breakpoint": false,
+            "is_active": true
         },
         {
             "action_position": 5,
@@ -138,7 +148,9 @@
                     "w": 1.0
                 },
                 "execute_movement": true
-            }
+            },
+            "has_breakpoint": false,
+            "is_active": true
         },
         {
             "action_position": 6,
@@ -161,7 +173,9 @@
                     "w": 1.0
                 },
                 "execute_movement": true
-            }
+            },
+            "has_breakpoint": false,
+            "is_active": true
         },
         {
             "action_position": 7,
@@ -184,14 +198,18 @@
                     "w": 1.0
                 },
                 "execute_movement": true
-            }
+            },
+            "has_breakpoint": false,
+            "is_active": true
         },
         {
             "action_position": 8,
             "action_type": "UserInteractionAction",
             "name": "UserInteraction",
             "action_text": "",
-            "interaction_mode": 2
+            "interaction_mode": 2,
+            "has_breakpoint": false,
+            "is_active": false
         }
     ]
 }

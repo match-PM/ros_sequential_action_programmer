@@ -29,8 +29,8 @@ from ros_sequential_action_programmer.submodules.RsapApp_submodules.app_worker i
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AppTextWidget import AppTextOutput
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.ConfigWindow import DictionaryValueEditor, NestedDictionaryEditor
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.NoScrollComboBox import NoScrollComboBox
-from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_widgets import ActionListWidget, ActionListItem
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.RecomButton import RecomButton
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_widget_adv import ActionSequenceListWidget
 
 try:
     from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_config import PmRobotConfigWidget
@@ -59,7 +59,8 @@ class RsapApp(QMainWindow):
         self.load_recent_file()
         self._init_signal()
         self.initUI()
-        self.init_actions_list()
+        #self.init_actions_list()
+        self.action_list_widget.populate_list()
         self.save_as = False 
         #self.initialize_active_service_list()
         self.execution_running = False
@@ -133,11 +134,10 @@ class RsapApp(QMainWindow):
         execute_layout = QHBoxLayout()
         stop_execution_layout = QHBoxLayout()
         # Add combobox for vision pipline building
-        self.checkbox_list = ActionListWidget()
-        self.checkbox_list.itemClicked.connect(self.action_selected)
-        #self.checkbox_list.itemChanged.connect(self.set_function_states)
-        self.checkbox_list.CustDragSig.connect(self.on_action_drag_drop)
-        layout.addWidget(self.checkbox_list,1,1)
+        self.action_list_widget = ActionSequenceListWidget(self.action_sequence_builder)
+        self.action_list_widget.populate_list()
+        self.action_list_widget.itemClicked.connect(self.action_selected)
+        layout.addWidget(self.action_list_widget,1,1)
 
         self.execute_step_button = QPushButton("Step")
         self.execute_step_button.clicked.connect(self.execute_current_action)
@@ -342,7 +342,7 @@ class RsapApp(QMainWindow):
             pass
 
     def add_user_interaction_to_action_list(self,action_name:str, description:str):
-        pos_to_insert = self.checkbox_list.currentRow() + 1
+        pos_to_insert = self.action_list_widget.currentRow() + 1
 
         success = self.action_sequence_builder.append_user_interaction_to_action_list_at_index(index=pos_to_insert,
                                                                                                 action_name=action_name,
@@ -351,28 +351,16 @@ class RsapApp(QMainWindow):
         # Get the name of the service from the currently acive action, which is the newly added one
         if success:
             service_name =  self.action_sequence_builder.get_current_action_name()
-            function_checkbox = ActionListItem(f"{pos_to_insert}. {service_name}")
-            self.checkbox_list.insertItem(pos_to_insert,function_checkbox)
-            self.init_actions_list()
-            self.checkbox_list.setCurrentRow(pos_to_insert)
+            self.action_list_widget.populate_list()
             self.text_output.append(f"Inserted action: {service_name}")
             self.action_selected()
         else:
             self.text_output.append_red_text(f"Invalid input arguments")
-
-    def init_actions_list(self):
-        """
-        Updates the action list widget with the current actions from the action sequence.
-        """
-        self.checkbox_list.clear()
-        for index, action in enumerate(self.action_sequence_builder.action_list):
-            function_checkbox = ActionListItem(f"{index}. {action.name}")
-            self.checkbox_list.addItem(function_checkbox)
     
     def execute_current_action(self) -> bool:
         # connect the signals for the user interaction if not already connected
         self.pre_execution()
-        index = self.checkbox_list.currentRow()
+        index = self.action_list_widget.currentRow()
         # Return early if no function is selected
         if index == -1:
             return False
@@ -387,8 +375,8 @@ class RsapApp(QMainWindow):
     def run_action_sequence(self) -> bool:
         # connect the signals for the user interaction if not already connected
         self.pre_execution()
-
-        index = self.checkbox_list.currentRow()
+        
+        index = self.action_list_widget.currentRow()
         # Return early if no function is selected
         if index == -1:
             return False
@@ -406,7 +394,7 @@ class RsapApp(QMainWindow):
         self._init_user_interaction_signals()
     
     def post_execute(self):
-        self.checkbox_list.setCurrentRow(self.action_sequence_builder.current_action_index)
+        self.action_list_widget.setCurrentRow(self.action_sequence_builder.current_action_index)
         self.action_selected()
         self.set_action_colors_from_execution_status(set_state=True)
         self.text_output.append_black_text("Execution finished!")
@@ -418,12 +406,12 @@ class RsapApp(QMainWindow):
         for index, action in enumerate(self.action_sequence_builder.action_list):
             success = action.log_entry.get('success', None)
             if success == None:
-                self.checkbox_list.item(index).setBackground(QColor("white"))
+                self.action_list_widget.item(index).setBackground(QColor("white"))
             elif success:
                 light_green = QColor(144, 238, 144)
-                self.checkbox_list.item(index).setBackground(light_green)
+                self.action_list_widget.item(index).setBackground(light_green)
             else:
-                self.checkbox_list.item(index).setBackground(QColor("red"))
+                self.action_list_widget.item(index).setBackground(QColor("red"))
                 if set_state:
                     self.status_indicator.set_state_error()
 
@@ -437,17 +425,30 @@ class RsapApp(QMainWindow):
         self.inner_widget = QWidget()
         self.inner_layout = QVBoxLayout()
 
+        toggle_activation_button = QPushButton("De-/Activate Action")
+        toggle_activation_button.clicked.connect(self.toggle_action_activation)
+
         apply_botton = QPushButton("Apply Changes")
         apply_botton.clicked.connect(self.apply_changes_to_service)
 
         self.inner_widget.setLayout(self.inner_layout)
         self.scroll_area.setWidget(self.inner_widget)
+        self.sub_layout.addWidget(toggle_activation_button)
         self.sub_layout.addWidget(apply_botton)
         self.sub_layout.addWidget(self.scroll_area)
 
+    def toggle_action_activation(self):
+        index = self.action_list_widget.currentRow()
+        # if no line selected index will be -1
+        if index != -1:
+            self.action_sequence_builder.get_action_at_index(index).toggle_active()           
+            self.action_list_widget.populate_list()
+            self.action_list_widget.setCurrentRow(index)
+            self.action_selected()
+    
     def set_service_meta_info_widget(self, active:bool):
-        row = self.checkbox_list.currentRow()
-
+        row = self.action_list_widget.currentRow()
+        
         label_action_name = QLabel("Action Name:")
         self.action_name_edit = QLineEdit(self.action_sequence_builder.get_action_at_index(row).name)
         self.inner_layout.addWidget(label_action_name)
@@ -491,14 +492,8 @@ class RsapApp(QMainWindow):
         self.inner_layout.addWidget(label_error_handling_box)
         self.inner_layout.addWidget(self.error_handling_box)
 
-    def on_action_drag_drop(self):
-        self.action_sequence_builder.move_action_at_index_to_index(old_index=self.checkbox_list.drag_source_position,
-                                                            new_index=self.checkbox_list.currentRow())
-        self.init_actions_list()
-        self.action_selected()
-
     def action_selected(self, active=True):
-        row = self.checkbox_list.currentRow()
+        row = self.action_list_widget.currentRow()
         self.clear_action_parameter_layout()
         self.clear_log_viewer()
         
@@ -540,7 +535,7 @@ class RsapApp(QMainWindow):
         """
         This method is called when the user clicks the button to get recommendations for a specific parameter.
         """
-        index = self.checkbox_list.currentRow()
+        index = self.action_list_widget.currentRow()
         data = self.action_sequence_builder.get_recom_for_action_at_index_for_key(index=index, key=key)
         popup = PopupRecWindow(data)
         result = popup.exec()
@@ -551,7 +546,7 @@ class RsapApp(QMainWindow):
             print(f"Selected value: {selected_value}")
 
     def apply_changes_to_service(self):
-        index = self.checkbox_list.currentRow()
+        index = self.action_list_widget.currentRow()
         # if no line selected index will be -1
         if index != -1:
             # Apply error handler message
@@ -574,8 +569,8 @@ class RsapApp(QMainWindow):
             else:
                 self.text_output.append_red_text("Error occured changing changes!")
 
-            self.init_actions_list()
-            self.checkbox_list.setCurrentRow(index)
+            self.action_list_widget.populate_list()
+            self.action_list_widget.setCurrentRow(index)
             self.action_selected()
 
     def clear_action_parameter_layout(self):
@@ -639,16 +634,16 @@ class RsapApp(QMainWindow):
             success = self.action_sequence_builder.load_from_JSON(file_path)
             self.set_recent_file()
             if success:
-                self.init_actions_list()
+                self.action_list_widget.populate_list()
                 self.set_widget_action_sequence_name(self.action_sequence_builder.name)
                 self.text_output.append("File loaded!")
             else:
                 self.text_output.append("Error Opening File!")
-                self.init_actions_list()
+                self.action_list_widget.populate_list()
                 self.clear_action_parameter_layout()
 
         # Set the first row as the current process
-        self.checkbox_list.setCurrentRow(0)
+        self.action_list_widget.setCurrentRow(0)
         # Set the last saved timestap
         self.update_last_saved()
 
@@ -686,7 +681,8 @@ class RsapApp(QMainWindow):
 
         if not self.save_as and self.action_sequence_builder.name is not None:
             self.action_sequence_builder.action_list.clear()
-            self.init_actions_list()
+            #self.init_actions_list()
+            self.action_list_widget.populate_list()
 
         if file_name:
             # set action sequence name
@@ -728,7 +724,8 @@ class RsapApp(QMainWindow):
 
             process_file_path = yaml_content['recent_file'] 
             self.action_sequence_builder.load_from_JSON(process_file_path)
-        except:
+        except Exception as e:
+            self.service_node.get_logger().error(f"Error loading recent file: {e}")
             self.service_node.get_logger().warn("No recent file found! Skipping loading of recent file!")
 
     def set_recent_file(self):
@@ -763,8 +760,7 @@ class RsapApp(QMainWindow):
         
 
     def add_service_to_action_list(self, service_name: str, service_client:str, service_type:str = None) -> None:
-        #selected_client = self.service_combo_box.currentText()
-        pos_to_insert = self.checkbox_list.currentRow() + 1
+        pos_to_insert = self.action_list_widget.currentRow() + 1
 
         if service_client:
             success = self.action_sequence_builder.append_service_to_action_list_at_index(service_client=service_client, 
@@ -774,26 +770,25 @@ class RsapApp(QMainWindow):
             # Get the name of the service from the currently acive action, which is the newly added one
             if success:
                 service_name =  self.action_sequence_builder.get_current_action_name()
-                function_checkbox = ActionListItem(f"{pos_to_insert}. {service_name}")
-                self.checkbox_list.insertItem(pos_to_insert,function_checkbox)
-                self.init_actions_list()
-                self.checkbox_list.setCurrentRow(pos_to_insert)
+                
+                self.action_list_widget.populate_list()
+                self.action_list_widget.setCurrentRow(pos_to_insert)
                 self.text_output.append(f"Inserted action: {service_name}")
                 self.action_selected()
             else:
                 self.text_output.append_red_text(f"Invalid input arguments")
                     
     def delete_action_from_sequence(self):
-        selected_function = self.checkbox_list.currentItem()
-        current_row = self.checkbox_list.currentRow()
+        selected_function = self.action_list_widget.currentItem()
+        current_row = self.action_list_widget.currentRow()
         if selected_function:
             # Remove the function from the action list and the list
             del_success = self.action_sequence_builder.delete_action_at_index(current_row)
 
             if del_success:
                 self.text_output.append(f"Deleted action '{selected_function.text()}'")
-                self.init_actions_list()
-                self.checkbox_list.setCurrentRow(0)
+                self.action_list_widget.populate_list()
+                self.action_list_widget.setCurrentRow(0)
             else:
                 self.text_output.append(f"Error trying to delete action '{selected_function.text()}'")
         else:
@@ -828,13 +823,14 @@ class RsapApp(QMainWindow):
         self.log_widget.clear()
 
     def copy_and_insert_actions(self):
-        #index = self.checkbox_list.currentRow()
-        selected_indexes = self.checkbox_list.selectedIndexes()
+
+        selected_indexes = self.action_list_widget.selectedIndexes()
         selected_rows_indexes = [index.row() for index in selected_indexes]
         self.action_sequence_builder.copy_actions_from_index_list_and_insert(selected_rows_indexes)
         #self.action_sequence_builder.copy_action_at_index_and_insert(index)
-        self.init_actions_list()
-        self.checkbox_list.setCurrentRow(max(selected_rows_indexes)+1)
+        #self.init_actions_list()
+        self.action_list_widget.populate_list()
+        self.action_list_widget.setCurrentRow(max(selected_rows_indexes)+1)
         self.action_selected()
 
     def open_sub_window(self, window_class):
@@ -872,10 +868,13 @@ class RsapApp(QMainWindow):
         self.copy_and_insert_button.setEnabled(not state)
         self.delete_button.setEnabled(not state)
         self.open_action_menu_button.setEnabled(not state)
-        self.checkbox_list.setEnabled(not state)
+        self.action_list_widget.setEnabled(not state)
+        self.action_list_widget.setAcceptDrops(not state)
+        self.action_list_widget.setDragEnabled(not state)
+        self.action_list_widget.setDropIndicatorShown(not state)
 
     def select_action_in_execution(self, index):
-        self.checkbox_list.setCurrentRow(index)
+        self.action_list_widget.setCurrentRow(index)
         self.set_action_colors_from_execution_status()
         self.action_selected(False)
 

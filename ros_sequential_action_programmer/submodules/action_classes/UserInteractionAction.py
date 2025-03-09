@@ -43,7 +43,29 @@ class UserInteractionAction():
         self.open_user_interaction_signal = OpenUserInteractionSignal()
         self.result_ready_signal = ResultReadySignal()
 
+        self._has_breakpoint = False
+        self._is_active = True
 
+    def toggle_active(self):
+        self._is_active = not self._is_active
+        #self.node.get_logger().warn(f"Action '{self.name}' toggled active state. {self._is_active}")
+        
+    def toggle_breakpoint(self):
+        self._has_breakpoint = not self._has_breakpoint
+        #self.node.get_logger().warn(f"Action '{self.name}' toggled breakpoint state. {self._has_breakpoint}")
+        
+    def is_active(self):
+        return self._is_active
+    
+    def has_breakpoint(self):
+        return self._has_breakpoint
+    
+    def set_breakpoint(self, state: bool):
+        self._has_breakpoint = state
+        
+    def set_active(self, state: bool):
+        self._is_active = state
+            
     def execute(self, get_interupt_method = None) -> bool:
         exec_success = False
         
