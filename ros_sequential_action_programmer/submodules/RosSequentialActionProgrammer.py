@@ -849,6 +849,7 @@ class RosSequentialActionProgrammer:
                 input_impl_dict = convert_to_ordered_dict(input_impl_dict)
             #key_value_list: list = ServiceAction.get_key_value_pairs_from_dict(input_impl_dict)
             key_value_list: list = get_key_value_pairs_from_dict(input_impl_dict)
+            #self.node.get_logger().warn(f"TEST Input dict: {key_value_list}")
 
         # By default True, only if an setting or checking fails False is returned
         process_success = False
@@ -861,6 +862,7 @@ class RosSequentialActionProgrammer:
             for item in key_value_list:
                 # unfold key value pairs
                 for key, value in item.items():
+                    #self.node._logger.warn(f"TEST Processing {key} with value {value}, mode {mode}")
                     process_success = self.process_action_dicts_at_index_from_key(
                         index=index, key=key, value=value, mode=mode
                     )
@@ -895,36 +897,38 @@ class RosSequentialActionProgrammer:
 
             check_value = value
 
+            current_action = self.get_action_at_index(index)
+            
             if is_reference:
                 if mode == CHECK_COMPATIBILITY_ONLY or mode == SET_IMPLICIT_SRV_DICT:
-                    check_value = self.get_action_at_index(
-                        ref_index
-                    ).get_default_srv_res_value_from_key(key=ref_key)
+                    check_value = current_action.get_default_srv_res_value_from_key(key=ref_key)
                 else:
                     value = self.get_action_at_index(
                         ref_index
                     ).get_srv_res_value_from_key(key=ref_key)
 
             if mode == CHECK_COMPATIBILITY_ONLY:
-                if isinstance(self.get_action_at_index(index), ServiceAction):
-                    test_action = copy.deepcopy(self.get_action_at_index(index))
+                if isinstance(current_action, ServiceAction):
+                    test_action = copy.deepcopy(current_action)
                     set_success = test_action.set_srv_req_dict_value_from_key(
                         key, check_value
                     )
                     del test_action
 
             if mode == SET_IMPLICIT_SRV_DICT:
-                if isinstance(self.get_action_at_index(index), ServiceAction):
-                    test_action = copy.deepcopy(self.get_action_at_index(index))
+                if isinstance(current_action, ServiceAction):
+                    test_action = copy.deepcopy(current_action)
+                    #self.node._logger.warn(f"TEST HERE Setting {key} to {check_value}")
                     set_success = test_action.set_srv_req_dict_value_from_key(
                         key, check_value
                     )
                     del test_action
                     if set_success:
-                        set_success = self.get_action_at_index(index).set_srv_req_dict_value_from_key(path_key=key, new_value=value, override_to_implicit=True)
+                        set_success = current_action.set_srv_req_dict_value_from_key(path_key=key, new_value=value, override_to_implicit=True)
 
             if mode == SET_SRV_DICT:
-                if isinstance(self.get_action_at_index(index), ServiceAction):
+                if isinstance(current_action, ServiceAction):
+                    #self.node._logger.warn(f"Setting {key} to {value}")
                     set_success = self.get_action_at_index(
                         index
                     ).set_srv_req_dict_value_from_key(path_key=key, new_value=value)
@@ -932,7 +936,7 @@ class RosSequentialActionProgrammer:
             if not set_success:
                 if not mode == CHECK_COMPATIBILITY_ONLY:
                     self.node.get_logger().error(
-                        f"In {self.get_action_at_index(index).name}, failed at setting key '{str(key)}' to value: '{str(value)}' of type '{str(type(value))}'."
+                        f"In {current_action.name}, failed at setting key '{str(key)}' to value: '{str(value)}' of type '{str(type(value))}'."
                     )
                     if is_reference:
                         self.node.get_logger().error(

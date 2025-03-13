@@ -17,7 +17,11 @@ from typing import Union
 import re
 from typing import Tuple, Any
 
-
+def set_at_index(lst, index, value):
+    while len(lst) <= index:  # Expand list if needed
+        lst.append(None)
+    lst[index] = value
+    
 class ServiceAction:
     def __init__(self, node: Node, client: str, service_type: str = None, name=None) -> None:
         self.client = client
@@ -224,25 +228,37 @@ class ServiceAction:
             # if given key leads to an array entry
             if '[' in path_key and ']' in path_key:
                 value_is_list_entry = True
+                
+                #self.node.get_logger().warn(f"TEST List entry detected! '{path_key}'")
+                
                 list_path_key = re.sub(r'\[.*?\]', '', path_key)
-                self.node.get_logger().debug(f"New path {list_path_key}")
+                #self.node.get_logger().warn(f"TEST New path {list_path_key}")
                 index = self.get_last_index_value(path_key)
-                self.node.get_logger().debug(f"index is {index}")
+                #self.node.get_logger().warn(f"TEST index is {index}")
             else:
                 value_is_list_entry = False
 
             # in case the value leads to an list entry we will process
             if value_is_list_entry:
                 test_dict = copy.deepcopy(self.service_req_dict_implicit)
+                #self.node.get_logger().warn(f"TEST")
                 list_to_set = self.get_obj_value_from_key(test_dict, list_path_key)
-                self.node.get_logger().debug(f"List old '{str(list_to_set)}'")
-                self.node.get_logger().debug(f"test_dict old '{str(test_dict)}'")
+                #self.node.get_logger().warn(f"TEST List old '{str(list_to_set)}'")
+                #self.node.get_logger().warn(f"TEST test_dict old '{str(test_dict)}'")
 
                 if list_to_set is None:
                     self.node.get_logger().error(f"Error occured accessing list element '{list_path_key}' in dict!")
                     return False
                 
-                list_to_set[index] = new_value
+                #self.node.get_logger().warn(f"TEST21 {str(list_to_set)}")
+                #self.node.get_logger().warn(f"TEST22 {type(list_to_set)}")
+                #self.node.get_logger().warn(f"TEST24 {type(new_value)}")
+                if index == 0:
+                    list_to_set.clear()
+                set_at_index(list_to_set, index, new_value)
+                #list_to_set[index] = new_value     # this causes an error, as the list might be to short or empty
+                                
+                #self.node.get_logger().warn(f"TEST List new '{str(list_to_set)}' with value '{str(new_value)}'")
                 
                 if not override_to_implicit:
                     set_success = self.set_obj_value_from_key(self.service_req_dict, list_path_key, list_to_set)
