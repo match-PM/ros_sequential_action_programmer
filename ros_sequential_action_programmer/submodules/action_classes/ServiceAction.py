@@ -209,7 +209,9 @@ class ServiceAction:
         else:
             return  None
         
-    def set_srv_req_dict_value_from_key(self, path_key: str, new_value: any, override_to_implicit=False) -> bool:
+    def set_srv_req_dict_value_from_key(self, path_key: str, 
+                                        new_value: any, 
+                                        override_to_implicit=False) -> bool:
         """
         This function tries to set the value of the service request given the path_key to the value and a new value.
         Retuns false if key or value are incopatible with the service request.
@@ -253,29 +255,31 @@ class ServiceAction:
                 #self.node.get_logger().warn(f"TEST21 {str(list_to_set)}")
                 #self.node.get_logger().warn(f"TEST22 {type(list_to_set)}")
                 #self.node.get_logger().warn(f"TEST24 {type(new_value)}")
-                if index == 0:
-                    list_to_set.clear()
+
+                #if index == 0:
+                #    list_to_set.clear()
+
                 set_at_index(list_to_set, index, new_value)
                 #list_to_set[index] = new_value     # this causes an error, as the list might be to short or empty
                                 
                 #self.node.get_logger().warn(f"TEST List new '{str(list_to_set)}' with value '{str(new_value)}'")
                 
                 if not override_to_implicit:
-                    set_success = self.set_obj_value_from_key(self.service_req_dict, list_path_key, list_to_set)
+                    set_success = self.set_obj_value_from_key(self.service_req_dict, list_path_key, list_to_set, self.node.get_logger())
                     self.update_srv_req_obj_from_dict()
                 else:
-                    set_success = self.set_obj_value_from_key(self.service_req_dict_implicit, list_path_key, list_to_set)
+                    set_success = self.set_obj_value_from_key(self.service_req_dict_implicit, list_path_key, list_to_set, self.node.get_logger())
                 return set_success
             
             # Create a new service request object
             # Set test request with dict
-            self.node.get_logger().debug(f"Path key {str(path_key)}")
-            self.node.get_logger().debug(f"New value {str(new_value)}")
-            self.node.get_logger().debug(f"Value to set {str(value_to_set)}")
+            #self.node.get_logger().warn(f"Path key {str(path_key)}")
+            #self.node.get_logger().warn(f"New value {str(new_value)}")
+            #self.node.get_logger().warn(f"Value to set {str(value_to_set)}")
 
-            self.node.get_logger().debug(f"New value type {str(type(new_value))}")
-            self.node.get_logger().debug(f"Value to set type {str(type(value_to_set))}")
-            self.node.get_logger().debug(f"{str(type(value_to_set))}")
+            #self.node.get_logger().warn(f"New value type {str(type(new_value))}")
+            #self.node.get_logger().warn(f"Value to set type {str(type(value_to_set))}")
+            #self.node.get_logger().warn(f"{str(type(value_to_set))}")
 
             if isinstance(value_to_set, np.ndarray) and isinstance(new_value, list):
                 new_value = np.array(new_value)
@@ -283,10 +287,10 @@ class ServiceAction:
             if isinstance(value_to_set, array.array) and isinstance(new_value, list):
                 new_value = array.array("i", new_value)
 
-            self.node.get_logger().debug(f"New value type {str(type(new_value))}")
+            #self.node.get_logger().warn(f"New value type {str(type(new_value))}")
 
             if not isinstance(new_value, type(value_to_set)) and not override_to_implicit:
-                self.node.get_logger().debug(f"Given value '{new_value}' of type '{type(new_value)}' is incompatible for '{path_key}' of type '{type(value_to_set)}'!")
+                self.node.get_logger().warn(f"Given value '{new_value}' of type '{type(new_value)}' is incompatible for '{path_key}' of type '{type(value_to_set)}'!")
                 return False
 
             # If the path does not lead to an existing value
@@ -303,9 +307,10 @@ class ServiceAction:
                 #self.node.get_logger().debug(f"Set success {str((self.service_req_dict_implicit))}")
                 #self.node.get_logger().debug(f"Set success {str((set_success))}")
 
+            #self.node.get_logger().warn(f"TEST Set success {str((set_success))}")
             return set_success
-        except:
-            self.node.get_logger().debug("Error occured in set_srv_req_dict_value_from_key!")
+        except Exception as e:
+            self.node.get_logger().error(f"Error occured in set_srv_req_dict_value_from_key! {e}")
             return False
 
     def set_req_message_from_dict(self, dict: collections.OrderedDict) -> bool:
@@ -464,14 +469,17 @@ class ServiceAction:
             return None
 
     @staticmethod
-    def set_obj_value_from_key(obj: any, path_key: str, new_value: any) -> bool:
+    def set_obj_value_from_key(obj: any, 
+                               path_key: str, 
+                               new_value: any,
+                               logger = None) -> bool:
         """
         This function sets the new_value at the value to which the path_key leads to. The obj can be any object, dict, list
         Returns False if value cant be set
         """
         keys = path_key.split(".")
         current_value = obj
-
+        
         try:
             for key in keys[:-1]:
                 if isinstance(current_value, dict) and key in current_value:
@@ -479,15 +487,31 @@ class ServiceAction:
                 elif isinstance(current_value, list):
                     key = int(key)
                     current_value = current_value[key]
+                    #if logger is not None:
+                    #    logger.warn(f"TEST CURRENT VALUE {str(current_value)}")
                 elif hasattr(current_value, key):
                     current_value = getattr(current_value, key)
                 else:
                     return False
 
             last_key = keys[-1]
+
+            #if logger is not None:
+            #    logger.error(f"TEST CURRENT '{str(current_value)}' LAST KEY '{str(last_key)}' NEW VALUE '{str(new_value)}' PATH KEY '{str(path_key)}'")
+
+
             if isinstance(current_value, dict) and last_key in current_value:
                 current_value[last_key] = new_value
             elif isinstance(current_value, list):
+
+                if logger is not None:
+                    logger.warn(f"TEST CURRENT VALUE {str(current_value)}")
+
+                current_value.clear()
+
+                if logger is not None:
+                    logger.warn(f"TEST CURRENT VALUE {str(current_value)}")
+
                 last_key = int(last_key)
                 current_value[last_key] = new_value
             elif hasattr(current_value, last_key):
