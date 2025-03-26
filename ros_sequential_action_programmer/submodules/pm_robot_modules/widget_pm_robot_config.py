@@ -13,7 +13,12 @@ class ParallelGripperConfig():
         self.current_tool: str = self.config_value['use_tool']
         self.current_tool_jaw: str = self.config_value['use_jaw_type']
         self.tool_active: bool = self.config_value['use_paralell_gripper']
-
+        
+        if config_key == 'pm_robot_tool_parallel_gripper_1_jaw':
+            self.data_file_path = get_package_share_directory('pm_robot_description') + '/urdf/urdf_configs/parallel_gripper_1_jaw.yaml'
+        else:
+            self.data_file_path = get_package_share_directory('pm_robot_description') + '/urdf/urdf_configs/parallel_gripper_2_jaw.yaml'
+        
         self.available_tools = []
         _available_tools = self.config_value['available_tools']
         for tool in _available_tools:
@@ -51,6 +56,23 @@ class ParallelGripperConfig():
             if tool[0] == self.current_tool:
                 return tool[1]
         return []
+    
+    def get_current_tool(self)->str:
+        return self.current_tool
+    
+    def get_current_tool_tip(self)->str:
+        return self.current_tool_jaw
+    
+    def get_calibration_frame_dict_file_name(self)->str:
+        print(self.data_file_path)
+        try:
+            with open(self.data_file_path, 'r') as file:
+                
+                data = yaml.safe_load(file)
+                return data[self.current_tool][self.current_tool_jaw]['calibration_file_name']
+        except FileNotFoundError:
+            return None
+        return self.data_file_path
     
 class DispenserTipConfig():
     def __init__(self, config_key: str, config_value:dict) -> None:
@@ -97,6 +119,7 @@ class VacuumGripperConfig():
         self.current_tool = self.config_value['use_tool']
         self.current_tool_tip = self.config_value['use_tip']
         self.tool_active = self.config_value['use_vacuum_tool']
+        self.data_file_path = get_package_share_directory('pm_robot_description') + '/urdf/urdf_configs/schunk_vacuum_tools.yaml'
 
         self.available_tools = []
         _available_tools = self.config_value['availabe_tools']
@@ -124,6 +147,7 @@ class VacuumGripperConfig():
 
     def get_activate_status(self):
         return self.tool_active
+    
     def get_config(self):
         return self.config_value
     
@@ -135,6 +159,21 @@ class VacuumGripperConfig():
             if tool[0] == self.current_tool:
                 return tool[1]
         return []
+    
+    def get_current_tool(self)->str:
+        return self.current_tool
+    
+    def get_current_tool_tip(self)->str:
+        return self.current_tool_tip
+    
+    def get_calibration_frame_dict_file_name(self)->str:
+        try:
+            with open(self.data_file_path, 'r') as file:
+                data = yaml.safe_load(file)
+                return data[self.current_tool][self.current_tool_tip]['calibration_file_name']
+        except FileNotFoundError:
+            return None
+        return self.data_file_path
     
 #class ConfigApp():
 class PmRobotConfigWidget(QWidget):
