@@ -299,6 +299,7 @@ class ServiceAction:
             
             if not override_to_implicit:
                 set_success = self.set_obj_value_from_key(self.service_req_dict, path_key, new_value)
+                set_success = self.set_obj_value_from_key(self.service_req_dict_implicit, path_key, new_value)
                 #self.node.get_logger().debug(f"Set success {str((set_success))}")
                 self.update_srv_req_obj_from_dict()
             else:
