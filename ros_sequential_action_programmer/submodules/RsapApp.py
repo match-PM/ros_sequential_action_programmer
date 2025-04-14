@@ -31,7 +31,7 @@ from ros_sequential_action_programmer.submodules.RsapApp_submodules.ConfigWindow
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.NoScrollComboBox import NoScrollComboBox
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.RecomButton import RecomButton
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_widget_adv import ActionSequenceListWidget
-
+from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_calibration import append_calbiration_panel_to_menu
 try:
     from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_config import PmRobotConfigWidget
     from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import PmDashboardApp
@@ -244,6 +244,14 @@ class RsapApp(QMainWindow):
         except NameError as e:
             self.service_node.get_logger().error(f"Error adding PM Co-Pilot to menu: {e}")
 
+        try:
+            append_calbiration_panel_to_menu(self, pm_robot_tools_menu, self.service_node)
+        except ModuleNotFoundError as e:
+            self.service_node.get_logger().error(f"Error adding PM Robot Calibration Panel to menu: {e}")
+        except NameError as e:
+            self.service_node.get_logger().error(f"Error adding PM Robot Calibration Panel to menu: {e}")
+            
+                    
         self.log_layout = QVBoxLayout()
         self.log_widget = QTreeWidget(self)
         self.log_widget.setHeaderLabel("Log Viewer")
