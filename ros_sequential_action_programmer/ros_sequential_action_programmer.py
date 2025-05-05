@@ -9,6 +9,8 @@ from rosidl_runtime_py.set_message import set_message_fields
 from rosidl_runtime_py.utilities import get_message, get_service, get_interface
 from rqt_py_common import message_helpers
 from threading import Thread 
+from ament_index_python.packages import get_package_share_directory
+from PyQt6.QtGui import QIcon
 
 class RosSequentialActionProgrammerNode(Node):
 
@@ -23,7 +25,7 @@ def main(args=None):
     executor = MultiThreadedExecutor(num_threads=6) 
 
     app = QApplication(sys.argv)
-
+    app.setWindowIcon(QIcon(f"{get_package_share_directory('ros_sequential_action_programmer')}/app_icon.png"))
     rsap_node = RosSequentialActionProgrammerNode()
     executor.add_node(rsap_node)
 
