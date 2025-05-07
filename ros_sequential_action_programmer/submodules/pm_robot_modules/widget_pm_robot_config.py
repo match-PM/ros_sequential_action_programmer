@@ -28,12 +28,14 @@ class ParallelGripperConfig():
                 _available_tool_jaws.append(jaw)
             self.available_tools.append((tool['tool_name'], _available_tool_jaws)) 
 
-    def set_current_tool(self, tool:str, jaw:str):
-        self.current_tool = tool
-        self.current_tool_jaw = jaw
-        self.config_value['use_tool'] = tool
-        self.config_value['use_jaw_type'] = jaw
-    
+    def set_current_tool(self, tool:str = None, ext:str = None):
+        if tool is not None:
+            self.current_tool = tool
+            self.config_value['use_tool'] = tool
+        if ext is not None:
+            self.current_tool_jaw = ext
+            self.config_value['use_jaw_type'] = ext
+
     def activate(self):
         self.tool_active = True
         self.config_value['use_paralell_gripper'] = True
@@ -129,13 +131,13 @@ class VacuumGripperConfig():
                 _available_tool_tips.append(jaw)
             self.available_tools.append((tool['tool_name'], _available_tool_tips)) 
 
-    def set_current_tool(self, tool:str = None, tip:str = None):
+    def set_current_tool(self, tool:str = None, ext:str = None):
         if tool is not None:
             self.current_tool = tool
             self.config_value['use_tool'] = tool
-        if tip is not None:
-            self.current_tool_tip = tip
-            self.config_value['use_tip'] = tip
+        if ext is not None:
+            self.current_tool_tip = ext
+            self.config_value['use_tip'] = ext
     
     def activate(self):
         self.tool_active = True
@@ -368,14 +370,14 @@ class PmRobotConfigWidget(QWidget):
 
     def clb_tool_gripper_combobox_change(self, combobox:QComboBox, combobox_tip: QComboBox ,obj:Union[VacuumGripperConfig, ParallelGripperConfig]):
         obj.set_current_tool(tool=combobox.currentText())
-        obj.set_current_tool(tip=obj.get_first_extension_for_current_tool())
+        obj.set_current_tool(ext=obj.get_first_extension_for_current_tool())
         combobox_tip.clear()
         combobox_tip.addItems(obj.get_current_extension_list())
         combobox_tip.setCurrentText(obj.get_first_extension_for_current_tool())
         self.set_config()
 
     def clb_tip_gripper_combobox_change(self, combobox_tip: QComboBox ,obj:Union[VacuumGripperConfig, ParallelGripperConfig]):
-        obj.set_current_tool(tip=combobox_tip.currentText())
+        obj.set_current_tool(ext=combobox_tip.currentText())
         self.set_config()
 
     def clb_gonio_combobox_change(self, combobox:QComboBox, gonio:GonioConfig):
