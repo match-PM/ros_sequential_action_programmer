@@ -10,6 +10,7 @@ from geometry_msgs.msg import Pose
 from operator import attrgetter
 import rclpy
 from rclpy.node import Node
+from pm_msgs.srv import EmptyWithSuccess,PneumaticGetPosition
 
 
 
@@ -115,42 +116,67 @@ class PmRobotPneumaticControlWidget(QWidget):
             get_state_function()
 
     def check_is_state_forward(self, controller_name:str)->bool:
-        return True
+        if '1K' in controller_name or '2K' in controller_name:
+            controller_name = f'N{controller_name}'
+        
+        client_name = f'/pm_pneumatic_controller/{controller_name}/GetPosition'
+        _client = self.ros_node.create_client(PneumaticGetPosition, client_name)
+        if not _client.wait_for_service(timeout_sec=1.0):
+            self.logger.error(f"Service {client_name} not available")
+            return False
+        request = PneumaticGetPosition.Request()
+        response:PneumaticGetPosition.Response = _client.call(request)
+
+        _client.destroy()
+        
+        if response.position == -1:
+            return False
+        else:
+            return True
     
     def move_forward(self, controller_name:str)->bool:
-        client_name = controller_name + '_client'
-        # _client = self.ros_node.create_client(ServiceAction, 'client_name')
         
-        # if not _client.wait_for_service(timeout_sec=1.0):
-        #     self.logger.error(f"Service {client_name} not available")
-        #     return False
-        # request = ServiceAction.Request()
-        # request.action = 'forward'
-        # request.controller = controller_name
-        # future = _client.call_async(request)
-        # rclpy.spin_until_future_complete(self.ros_node, future)
-        # if future.result() is not None:
-        #     self.logger.warn(f"Moving forward: {controller_name}")
-        # _client.destroy()    
-        self.logger.warn(f"Moving forward: {controller_name}")
+        if '1K' in controller_name or '2K' in controller_name:
+            controller_name = f'N{controller_name}'
 
+        client_name = f'/pm_pneumatic_controller/{controller_name}/MoveForward'
+        _client = self.ros_node.create_client(EmptyWithSuccess, client_name)
+        self.logger.error(f"Call started {client_name}")
+        if not _client.wait_for_service(timeout_sec=1.0):
+            self.logger.error(f"Service {client_name} not available")
+            return False
+        
+        request = EmptyWithSuccess.Request()
+        response:EmptyWithSuccess.Response = _client.call(request)
+        _client.destroy()  
+        self.logger.error(f"Call finished {client_name}")
+        if not response.success:
+            self.logger.error(f"Failed to move forward.")
+            return False
+                  
         return True
     
     def move_backward(self, controller_name:str)->bool:
-        client_name = controller_name + '_client'
-        # _client = self.ros_node.create_client(ServiceAction, 'client_name')
-        
-        # if not _client.wait_for_service(timeout_sec=1.0):
-        #     self.logger.error(f"Service {client_name} not available")
-        #     return False
-        # request = ServiceAction.Request()
-        # request.action = 'forward'
-        # request.controller = controller_name
-        # future = _client.call_async(request)
-        # rclpy.spin_until_future_complete(self.ros_node, future)
-        # if future.result() is not None:
-        #     self.logger.warn(f"Moving forward: {controller_name}")
-        # _client.destroy()    
-        self.logger.warn(f"Moving forward: {controller_name}")
+
+        if '1K' in controller_name or '2K' in controller_name:
+            controller_name = f'N{controller_name}'
+    
+        client_name = f'/pm_pneumatic_controller/{controller_name}/MoveBackward'
+        _client = self.ros_node.create_client(EmptyWithSuccess, client_name)
+        if not _client.wait_for_service(timeout_sec=1.0):
+            self.logger.error(f"Service {client_name} not available")
+            return False
+        request = EmptyWithSuccess.Request()
+        response:EmptyWithSuccess.Response = _client.call(request)
+
+        _client.destroy()
+
+        if not response.success:
+            self.logger.error(f"Failed to move backward.")
+            return False
 
         return True
+    
+
+
+
