@@ -10,6 +10,7 @@ from geometry_msgs.msg import Pose
 from operator import attrgetter
 import rclpy
 from rclpy.node import Node
+from pm_msgs.srv import EmptyWithSuccess, NozzleGetPosition
 
 
 
@@ -134,21 +135,21 @@ class PmRobotNozzleControlWidget(QWidget):
         
         #self.logger.warn(f"Get state button clicked {controller_name}")
         state = self.get_current_state(controller_name)
-        if state == -1:  
+        if state == "Vacuum":  
             enable_vac_button.setEnabled(False)
             enable_pres_button.setEnabled(True)
             turn_off_button.setEnabled(True)
             enable_vac_button.setStyleSheet("background-color: green")
             enable_pres_button.setStyleSheet("background-color: grey")
             turn_off_button.setStyleSheet("background-color: grey")
-        elif state == 1:
+        elif state == "Pressure":
             enable_vac_button.setEnabled(True)
             enable_pres_button.setEnabled(False)
             turn_off_button.setEnabled(True)
             enable_vac_button.setStyleSheet("background-color: grey")
             enable_pres_button.setStyleSheet("background-color: green")
             turn_off_button.setStyleSheet("background-color: grey")
-        elif state == 0:
+        elif state == "Off":
             enable_vac_button.setEnabled(True)
             enable_pres_button.setEnabled(True)
             turn_off_button.setEnabled(False)
@@ -160,63 +161,57 @@ class PmRobotNozzleControlWidget(QWidget):
         for get_state_function in self.get_state_functions:
             get_state_function()
 
-    def get_current_state(self, controller_name:str)->int:
-        return 1
+    def get_current_state(self, controller_name:str)->str:
+        client_name = f"/pm_nozzle_controller/{controller_name}/GetPosition"
+
+        client = self.ros_node.create_client(NozzleGetPosition, client_name)
+        if not client.wait_for_service(timeout_sec=1.0):
+            self.logger.error(f"Service {client_name} not available")
+            return False
+        
+        request = NozzleGetPosition.Request()
+        response:NozzleGetPosition.Response = client.call(request)
+
+        client.destroy()
+
+        # response.position is -1, 0 or 1
+        return ["Off", "Pressure", "Vacuum"][response.position]
     
     def enable_pressure(self, controller_name:str)->bool:
-        client_name = controller_name + '_client'
-        # _client = self.ros_node.create_client(ServiceAction, 'client_name')
+        if not self.do_call(controller_name, "Pressure"):
+            self.logger.error(f"Failed to enable pressure.")
+            return False
         
-        # if not _client.wait_for_service(timeout_sec=1.0):
-        #     self.logger.error(f"Service {client_name} not available")
-        #     return False
-        # request = ServiceAction.Request()
-        # request.action = 'forward'
-        # request.controller = controller_name
-        # future = _client.call_async(request)
-        # rclpy.spin_until_future_complete(self.ros_node, future)
-        # if future.result() is not None:
-        #     self.logger.warn(f"Moving forward: {controller_name}")
-        # _client.destroy()    
-        self.logger.warn(f"Moving forward: {controller_name}")
-
         return True
 
     def enable_vacuum(self, controller_name:str)->bool:
-        client_name = controller_name + '_client'
-        # _client = self.ros_node.create_client(ServiceAction, 'client_name')
+        if not self.do_call(controller_name, "Vacuum"):
+            self.logger.error(f"Failed to enable vacuum.")
+            return False
         
-        # if not _client.wait_for_service(timeout_sec=1.0):
-        #     self.logger.error(f"Service {client_name} not available")
-        #     return False
-        # request = ServiceAction.Request()
-        # request.action = 'forward'
-        # request.controller = controller_name
-        # future = _client.call_async(request)
-        # rclpy.spin_until_future_complete(self.ros_node, future)
-        # if future.result() is not None:
-        #     self.logger.warn(f"Moving forward: {controller_name}")
-        # _client.destroy()    
-        self.logger.warn(f"Moving forward: {controller_name}")
-
         return True
 
     def turn_off(self, controller_name:str)->bool:
-        client_name = controller_name + '_client'
-        # _client = self.ros_node.create_client(ServiceAction, 'client_name')
+        if not self.do_call(controller_name, "TurnOff"):
+            self.logger.error(f"Failed to turn off.")
+            return False
         
-        # if not _client.wait_for_service(timeout_sec=1.0):
-        #     self.logger.error(f"Service {client_name} not available")
-        #     return False
-        # request = ServiceAction.Request()
-        # request.action = 'forward'
-        # request.controller = controller_name
-        # future = _client.call_async(request)
-        # rclpy.spin_until_future_complete(self.ros_node, future)
-        # if future.result() is not None:
-        #     self.logger.warn(f"Moving forward: {controller_name}")
-        # _client.destroy()    
-        self.logger.warn(f"Moving forward: {controller_name}")
-
         return True
+    
+    def do_call(self, controller_name:str, endpoint:str)->bool:
+        client_name = f'/pm_nozzle_controller/{controller_name}/{endpoint}'
+
+        client = self.ros_node.create_client(EmptyWithSuccess, client_name)
+        self.logger.error(f"Call started {client_name}")
+        if not client.wait_for_service(timeout_sec=1.0):
+            self.logger.error(f"Service {client_name} not available")
+            return False
+        
+        request = EmptyWithSuccess.Request()
+        response:EmptyWithSuccess.Response = client.call(request)
+        client.destroy()
+
+        self.logger.error(f"Call finished {client_name}")
+        
+        return response.success
             
