@@ -21,7 +21,7 @@ class UpdateValuesSignal(QObject):
     gui_update_target_values_signal = pyqtSignal(object)
 
 class JointJogControl():
-    EXEC_DURATION = 1
+    EXEC_DURATION = 0.5
     def __init__(self, ros_node: Node, joint_names: list, action_name:str, joint_topic:str, robot_state_publisher:str) -> None:
         self.node = ros_node
         self.joint_names = joint_names
@@ -165,8 +165,7 @@ class JointJogControl():
         point = JointTrajectoryPoint()
         point.positions = self.target_joint_values
         self.node.get_logger().debug(f"Sending target values {self.target_joint_values}")
-        point.velocities = [0.0] * len(self.joint_names)
-        point.time_from_start = Duration(sec=self.EXEC_DURATION, nanosec=0)  # Time from start for this point
+        point.time_from_start = float_to_ros_duration(self.EXEC_DURATION)  # Time from start for this point
         trajectory_msg.points.append(point)
         # Publish the trajectory
         goal = FollowJointTrajectory.Goal()
@@ -196,3 +195,8 @@ class JointJogControl():
         if result.error_code == FollowJointTrajectory.Result.SUCCESSFUL:
             self.node.get_logger().info("Goal succeeded!")
             #self.set_current_joint_values(self.target_joint_values)
+
+def float_to_ros_duration(time_float):
+    secs = int(time_float)
+    nsecs = int((time_float - secs) * 1e9)
+    return Duration(sec=secs, nanosec=nsecs)

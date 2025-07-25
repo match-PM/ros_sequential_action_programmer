@@ -7,6 +7,7 @@ from rclpy.node import Node
 from copy import deepcopy, copy
 from rosidl_runtime_py.convert import message_to_ordereddict
 import math
+import re
 
 from ros_sequential_action_programmer.submodules.pm_robot_modules.joint_controller_class import JointJogControl
 
@@ -73,9 +74,11 @@ class PmRobotJointControlWidget(QWidget):
 
 
     def add_jog_widgets_for_instance(self, joint_control_instance:JointJogControl, incement_list:list, unit:str):
+        controller_name = re.sub(r"\/pm_robot_([a-z_]+)\/follow_joint_trajectory", r"\1", joint_control_instance._action_name)
+        controller_name = controller_name.replace("_", " ").title()
 
         joint_instance_layout = QVBoxLayout()
-        controller_label = QLabel(joint_control_instance._action_name)
+        controller_label = QLabel(controller_name)
         controller_label.setFont(self.font_label_2)
         controller_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         controller_group_box = QGroupBox()
