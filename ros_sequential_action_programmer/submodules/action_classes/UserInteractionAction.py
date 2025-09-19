@@ -9,6 +9,7 @@ import numpy as np
 from PyQt6.QtWidgets import  QDialog
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.UserInteractionActionDialog import UserInteractionActionDialog
 from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass
+from typing import Tuple, Any
 from PyQt6.QtCore import Qt, QByteArray, pyqtSignal, QObject, QThread
 
 class UserInteractionModes():
@@ -25,14 +26,20 @@ class OpenUserInteractionSignal(QObject):
 class ResultReadySignal(QObject):
     """Signal to notify that the execution of the sequence has been started."""
     signal = pyqtSignal(bool)
-        
-class UserInteractionAction():
+
+
+class UserInteractionAction(ActionBaseClass):
 
     MODES = UserInteractionModes()
 
-    def __init__(self, node: Node, interaction_mode: int, name:str ='UserInteraction', action_text:str = "") -> None:
+    def __init__(self, node: Node, 
+                 interaction_mode: int, 
+                 name:str ='UserInteraction', 
+                 action_text:str = "",
+                 description:str="") -> None:
         #super().__init__(node)
-    
+        super().__init__(node, name, description)
+
         self.node = node
         self.name = name
         self.action_text = action_text
@@ -40,32 +47,12 @@ class UserInteractionAction():
         if name == "":
             self.name = 'UserInteraction'
         self.log_entry={}
+        description = ""
+        
         self.open_user_interaction_signal = OpenUserInteractionSignal()
         self.result_ready_signal = ResultReadySignal()
 
-        self._has_breakpoint = False
-        self._is_active = True
 
-    def toggle_active(self):
-        self._is_active = not self._is_active
-        #self.node.get_logger().warn(f"Action '{self.name}' toggled active state. {self._is_active}")
-        
-    def toggle_breakpoint(self):
-        self._has_breakpoint = not self._has_breakpoint
-        #self.node.get_logger().warn(f"Action '{self.name}' toggled breakpoint state. {self._has_breakpoint}")
-        
-    def is_active(self):
-        return self._is_active
-    
-    def has_breakpoint(self):
-        return self._has_breakpoint
-    
-    def set_breakpoint(self, state: bool):
-        self._has_breakpoint = state
-        
-    def set_active(self, state: bool):
-        self._is_active = state
-            
     def execute(self, get_interupt_method = None) -> bool:
         exec_success = False
         
@@ -105,6 +92,15 @@ class UserInteractionAction():
             QThread.msleep(100)
             
         return result_holder["result"]
+    
+    def get_type_indicator(self)->str:
+        return "UserInteractionAction"
+    
+    def get_interaction_text(self)->str:
+        return self.action_text
+    
+    def set_interaction_text(self, new_text:str):
+        self.action_text = new_text
         
     def update_log_entry(self, success: bool, start_time: datetime, end_time: datetime, additional_text:str = ""):
         #self.log_entry={}
@@ -116,18 +112,7 @@ class UserInteractionAction():
 
     def get_log_entry(self) -> dict:
         return self.log_entry
-    
-    def get_action_name(self)-> str:
-        return self.name
-    
-    def set_action_name(self, new_name:str) -> bool:
-        try:
-            self.name = new_name
-            return True
-        except Exception as e:
-            self.node.get_logger().error(str(e))
-            return False
-        
+            
     def __deepcopy__(self, memo):
         """
         deepcopy of this class is not possible without this mehtod definition
@@ -136,10 +121,3 @@ class UserInteractionAction():
         
         return new_instance
     
-    def clear_log_entry(self) -> bool:
-        try:
-            self.log_entry = {}
-            return True
-        except Exception as e:
-            self.node.get_logger().error(str(e))
-            return False

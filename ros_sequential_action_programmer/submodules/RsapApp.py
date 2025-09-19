@@ -21,7 +21,7 @@ from ros_sequential_action_programmer.submodules.RsapApp_submodules.StatusIndica
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.UserDialog import UserDialog
 
 from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
-
+from ros_sequential_action_programmer.submodules.action_classes.RosActionAction import RosActionAction
 from rosidl_runtime_py.get_interfaces import get_service_interfaces
 import ast
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.UserInteractionActionDialog import UserInteractionActionDialog
@@ -31,12 +31,15 @@ from ros_sequential_action_programmer.submodules.RsapApp_submodules.ConfigWindow
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.NoScrollComboBox import NoScrollComboBox
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.RecomButton import RecomButton
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_widget_adv import ActionSequenceListWidget
-from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_calibration import append_calbiration_panel_to_menu
-from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_config import PmRobotConfigWidget
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_widgets import ActionListWidget, ActionListItem
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionParameterLayout import ActionParameterLayout
 
 try:
     from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import PmDashboardApp
     from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import append_jog_panel_to_menu
+    from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_calibration import append_calbiration_panel_to_menu
+    from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_config import PmRobotConfigWidget
+
 except Exception as e:
     print(f"Error importing append_jog_panel_to_menu: {e}")
 
@@ -172,13 +175,13 @@ class RsapApp(QMainWindow):
 
         layout.addWidget(self.clear_text_output_button,5,2,1,1)
         # # create sub layout for the function parameter widgetd
-        self.sub_layout = QVBoxLayout()
+        self.action_parameter_layout = QVBoxLayout()
 
         #add a textlabel to the sublayout
         action_parameters_label = QLabel('Action parameters:')
         action_parameters_label.setFont(font)
-        self.sub_layout.addWidget(action_parameters_label)
-
+        self.action_parameter_layout.addWidget(action_parameters_label)
+        
         # Create a menu bar
         menubar = self.menuBar()
         menubar.setStyleSheet("QMenuBar { font-size: 18px; }")
@@ -206,10 +209,13 @@ class RsapApp(QMainWindow):
         save_as_action = QAction("Save process as", self)
         save_as_action.triggered.connect(self.save_process_as)
         file_menu.addAction(save_as_action)
-       
-        open_pm_robot_config = QAction("PM Robot Config", self)
-        open_pm_robot_config.triggered.connect(partial(self.open_sub_window, PmRobotConfigWidget))
-        pm_robot_tools_menu.addAction(open_pm_robot_config)
+        
+        try:
+            open_pm_robot_config = QAction("PM Robot Config", self)
+            open_pm_robot_config.triggered.connect(partial(self.open_sub_window, PmRobotConfigWidget))
+            pm_robot_tools_menu.addAction(open_pm_robot_config)
+        except:
+            pass
 
         executable_menu = QAction("ROS2 Run", self)
         executable_menu.triggered.connect(self.show_ros_executable_menu)
@@ -259,10 +265,10 @@ class RsapApp(QMainWindow):
         self.log_layout.addWidget(self.log_widget)
 
         #add sublayout to app layout
-        layout.addLayout(self.sub_layout,1,2,Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(self.action_parameter_layout,1,2,Qt.AlignmentFlag.AlignTop)
         
         layout.addLayout(self.log_layout,1,3)
-        self.create_service_parameter_layout()
+        #self.create_service_parameter_layout()
         central_widget.setLayout(layout)
         self.setGeometry(100, 100, 1800, 1200)
         self.execute_step_button.setEnabled(True)
@@ -285,6 +291,16 @@ class RsapApp(QMainWindow):
                 'Memorised Clients wht':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.get_memorized_client_whitelist()),
                 'Available Service Types':  get_service_interfaces(),
             },
+            'Actions':{
+                'Empty':  ['New'],
+                'Active Clients blk':  ['New'],
+                'Active Clients':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.list_of_active_ros_action_clients),
+                'Active Clients wht':  ['New'],
+                'Memorised Clients blk':  ['New'],
+                'Memorised Clients ':  ['New'],
+                'Memorised Clients wht':  ['New'],
+                'Available Service Types':  ['New'],
+            },
             'Skills': ['TBD1','TBD2','TBD3'],
             'Other': {
                 'Conditions': {
@@ -294,7 +310,7 @@ class RsapApp(QMainWindow):
             }
         }
         self.action_menu.init_action_menu()
-        self.action_menu.showMenu(use_button_pos=True)
+        self.action_menu.showMenu()
 
     def show_ros_executable_menu(self):
         self.ros_run_menu.menu_dictionary = self.action_sequence_builder.get_ros2_executables()
@@ -320,6 +336,27 @@ class RsapApp(QMainWindow):
         
         self.service_node.get_logger().info(f"Started command: '{command}' in a new terminal window.")
                 
+    # def append_selected_action_from_menu(self, menu_output:list[str]):
+    #     #print(menu_output)
+    #     if menu_output[0] == 'Services':
+    #         #print((menu_output[1]))
+    #         if 'Clients' in menu_output[1] and 'Active' in menu_output[1]:
+    #             self.append_service_dialog(service_client=menu_output[-1])
+    #         elif 'Clients' in menu_output[1] and 'Memorised' in menu_output[1]:
+    #             self.append_service_dialog(service_client = menu_output[-1],
+    #                                        serivce_type=self.action_sequence_builder.get_srv_type_from_memorized_client(menu_output[-1]))
+    #         elif 'Type' in menu_output[1]:
+    #             self.append_service_dialog(serivce_type = f"{menu_output[-2]}/{menu_output[-1]}")
+    #         elif menu_output[-1] == 'New':
+    #             self.append_service_dialog()
+    #     elif menu_output[0]=='Other':
+    #         if menu_output[-1] == 'User Interaction':
+    #             self.append_user_interaction_dialog()
+    #     else:
+    #         self.text_output.append("This is not implemented yet!")
+    #         self.service_node.get_logger().warn("This is not implemented yet!")
+
+
     def append_selected_action_from_menu(self, menu_output:list[str]):
         #print(menu_output)
         if menu_output[0] == 'Services':
@@ -333,12 +370,24 @@ class RsapApp(QMainWindow):
                 self.append_service_dialog(serivce_type = f"{menu_output[-2]}/{menu_output[-1]}")
             elif menu_output[-1] == 'New':
                 self.append_service_dialog()
+        elif menu_output[0] == 'Actions':
+            if 'Clients' in menu_output[1] and 'Active' in menu_output[1]:
+                self.append_ros_action_service_dialog(type_action='action',client=menu_output[-1])
+            elif 'Clients' in menu_output[1] and 'Memorised' in menu_output[1]:
+                self.append_ros_action_service_dialog(type_action='action',client=menu_output[-1],
+                                           type=self.action_sequence_builder.get_srv_type_from_memorized_client(menu_output[-1]))
+            #elif 'Type' in menu_output[1]:
+            #    self.append_ros_action_service_dialog(serivce_type = f"{menu_output[-2]}/{menu_output[-1]}")
+            #elif menu_output[-1] == 'New':
+            #    self.append_ros_action_service_dialog()
+
         elif menu_output[0]=='Other':
             if menu_output[-1] == 'User Interaction':
                 self.append_user_interaction_dialog()
         else:
             self.text_output.append("This is not implemented yet!")
             self.service_node.get_logger().warn("This is not implemented yet!")
+
 
     def append_user_interaction_dialog(self):
         add_user_interaction_dialog = AddUserInteractionDialog()
@@ -428,117 +477,166 @@ class RsapApp(QMainWindow):
         self.action_sequence_name_widget.setText("Process name: " + text)
         self.action_sequence_name_widget.setToolTip(self.action_sequence_builder.action_file_path)
 
-    def create_service_parameter_layout(self):
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        self.inner_widget = QWidget()
-        self.inner_layout = QVBoxLayout()
+    # def create_service_parameter_layout(self):
+    #     self.scroll_area = QScrollArea()
+    #     self.scroll_area.setWidgetResizable(True)
+    #     self.inner_widget = QWidget()
+    #     self.inner_layout = QVBoxLayout()
 
-        toggle_activation_button = QPushButton("De-/Activate Action")
-        toggle_activation_button.clicked.connect(self.toggle_action_activation)
+    #     toggle_activation_button = QPushButton("De-/Activate Action")
+    #     toggle_activation_button.clicked.connect(self.toggle_action_activation)
 
-        apply_botton = QPushButton("Apply Changes")
-        apply_botton.clicked.connect(self.apply_changes_to_service)
+    #     apply_botton = QPushButton("Apply Changes")
+    #     apply_botton.clicked.connect(self.apply_changes_to_action)
 
-        self.inner_widget.setLayout(self.inner_layout)
-        self.scroll_area.setWidget(self.inner_widget)
-        self.sub_layout.addWidget(toggle_activation_button)
-        self.sub_layout.addWidget(apply_botton)
-        self.sub_layout.addWidget(self.scroll_area)
+    #     self.inner_widget.setLayout(self.inner_layout)
+    #     self.scroll_area.setWidget(self.inner_widget)
+    #     self.action_parameter_layout.addWidget(toggle_activation_button)
+    #     self.action_parameter_layout.addWidget(apply_botton)
+    #     self.action_parameter_layout.addWidget(self.scroll_area)
 
-    def toggle_action_activation(self):
-        index = self.action_list_widget.currentRow()
-        # if no line selected index will be -1
-        if index != -1:
-            self.action_sequence_builder.get_action_at_index(index).toggle_active()           
-            self.action_list_widget.populate_list()
-            self.action_list_widget.setCurrentRow(index)
-            self.action_selected()
+    # def toggle_action_activation(self):
+    #     index = self.action_list_widget.currentRow()
+    #     # if no line selected index will be -1
+    #     if index != -1:
+    #         self.action_sequence_builder.get_action_at_index(index).toggle_active()           
+    #         self.action_list_widget.populate_list()
+    #         self.action_list_widget.setCurrentRow(index)
+    #         self.action_selected()
     
-    def set_service_meta_info_widget(self, active:bool):
-        row = self.action_list_widget.currentRow()
+    # def set_service_meta_info_widget(self, active:bool):
+    #     row = self.action_list_widget.currentRow()
         
-        label_action_name = QLabel("Action Name:")
-        self.action_name_edit = QLineEdit(self.action_sequence_builder.get_action_at_index(row).name)
-        self.inner_layout.addWidget(label_action_name)
-        self.inner_layout.addWidget(self.action_name_edit)   
-        self.action_name_edit.setDisabled(not active) 
+    #     label_action_name = QLabel("Action Name:")
+    #     self.action_name_edit = QLineEdit(self.action_sequence_builder.get_action_at_index(row).name)
+    #     self.inner_layout.addWidget(label_action_name)
+    #     self.inner_layout.addWidget(self.action_name_edit)   
+    #     self.action_name_edit.setDisabled(not active) 
 
-        # Set info for service client
-        label_action_client_desc = QLabel(f"Service Client: ")
-        label_action_client = QLineEdit(f"{self.action_sequence_builder.get_action_at_index(row).client}")
-        label_action_client.setReadOnly(True)
-        self.inner_layout.addWidget(label_action_client_desc)
-        self.inner_layout.addWidget(label_action_client)
+    #     # Set info for service client
+    #     label_action_client_desc = QLabel(f"Service Client: ")
+    #     label_action_client = QLineEdit(f"{self.action_sequence_builder.get_action_at_index(row).client}")
+    #     label_action_client.setReadOnly(True)
+    #     self.inner_layout.addWidget(label_action_client_desc)
+    #     self.inner_layout.addWidget(label_action_client)
 
-        # Set info for service type
-        label_action_service_desc = QLabel(f"Service Type: ")
-        label_action_service_type = QLineEdit(f"{self.action_sequence_builder.get_action_at_index(row).service_type}")
-        label_action_service_type.setReadOnly(True)
-        self.inner_layout.addWidget(label_action_service_desc)
-        self.inner_layout.addWidget(label_action_service_type)
+    #     # Set info for service type
+    #     label_action_service_desc = QLabel(f"Service Type: ")
+    #     label_action_service_type = QLineEdit(f"{self.action_sequence_builder.get_action_at_index(row).service_type}")
+    #     label_action_service_type.setReadOnly(True)
+    #     self.inner_layout.addWidget(label_action_service_desc)
+    #     self.inner_layout.addWidget(label_action_service_type)
 
-        # Set info for service type
-        label_action_description_desc = QLabel(f"Description: ")
-        self.label_action_description = QTextEdit(f"{self.action_sequence_builder.get_action_at_index(row).description}")
-        self.inner_layout.addWidget(label_action_description_desc)
-        self.inner_layout.addWidget(self.label_action_description)
-        self.label_action_description.setDisabled(not active)
+    #     # Set info for service type
+    #     label_action_description_desc = QLabel(f"Description: ")
+    #     self.label_action_description = QTextEdit(f"{self.action_sequence_builder.get_action_at_index(row).description}")
+    #     self.inner_layout.addWidget(label_action_description_desc)
+    #     self.inner_layout.addWidget(self.label_action_description)
+    #     self.label_action_description.setDisabled(not active)
         
-        # Create a dropdown menu for selecting the error handling inputs
-        label_error_handling_box = QLabel(f"Execution identifier: ")
-        self.error_handling_box = NoScrollComboBox()
-        self.error_handling_box.setDisabled(not active)
+    #     # Create a dropdown menu for selecting the error handling inputs
+    #     label_error_handling_box = QLabel(f"Execution identifier: ")
+    #     self.error_handling_box = NoScrollComboBox()
+    #     self.error_handling_box.setDisabled(not active)
         
-        box_values = ['None'] + self.action_sequence_builder.get_action_at_index(row).get_service_bool_fields()
-        self.error_handling_box.addItems(box_values)
-        # Set the default value when creating the qcombobox
-        currently_set_error_handler = self.action_sequence_builder.get_action_at_index(row).get_service_bool_identifier()
-        if currently_set_error_handler is None:
-            currently_set_error_handler = "None"
+    #     box_values = ['None'] + self.action_sequence_builder.get_action_at_index(row).get_service_bool_fields()
+    #     self.error_handling_box.addItems(box_values)
+    #     # Set the default value when creating the qcombobox
+    #     currently_set_error_handler = self.action_sequence_builder.get_action_at_index(row).get_success_identifier()
+    #     if currently_set_error_handler is None:
+    #         currently_set_error_handler = "None"
 
-        self.error_handling_box.setCurrentIndex(box_values.index(currently_set_error_handler))
-        self.inner_layout.addWidget(label_error_handling_box)
-        self.inner_layout.addWidget(self.error_handling_box)
+    #     self.error_handling_box.setCurrentIndex(box_values.index(currently_set_error_handler))
+    #     self.inner_layout.addWidget(label_error_handling_box)
+    #     self.inner_layout.addWidget(self.error_handling_box)
 
     def action_selected(self, active=True):
         row = self.action_list_widget.currentRow()
         self.clear_action_parameter_layout()
         self.clear_log_viewer()
+
+        action = self.action_sequence_builder.get_action_at_index(row)
         
-        if isinstance(self.action_sequence_builder.get_action_at_index(row), ServiceAction):
-            self.handle_dict = None
-            self.handle_dict = self.action_sequence_builder.get_copy_impl_srv_dict_at_index(row)
-            self.clear_action_parameter_layout()
-            self.clear_log_viewer()
-            self.set_service_meta_info_widget(active=active)
-            self.populateActionParameterWidgets(self.handle_dict, active=active)
+        self.current_action_parameter_widget = ActionParameterLayout(action, logger=self.service_node.get_logger())
+        self.action_parameter_layout.addWidget(self.current_action_parameter_widget)
+        self.current_action_parameter_widget.on_action_changed(self.action_parameter_changed)
 
         self.show_service_log(self.action_sequence_builder.get_action_at_index(row).log_entry)
 
-    def populateActionParameterWidgets(self, data, parent_key=None, active=True):
-        """
-        This method populates the action parameter layout with the parameters of the selected action.
-        """
-        # iterate through the dict
-        for key, value in data.items():
-            if parent_key is not None:
-                full_key = parent_key + '.' + key
-            else:
-                full_key = key
+    def action_parameter_changed(self):
+        row = self.action_list_widget.currentRow()
+        self.service_node.get_logger().warn("Action changed:")
+        self.action_list_widget.populate_list()
+        self.action_list_widget.setCurrentRow(row)
+        self.action_selected()
+        
 
-            if isinstance(value, OrderedDict):
-                self.populateActionParameterWidgets(data=value, 
-                                                    parent_key=full_key, 
-                                                    active = active)
-            else:
-                widget_with_button = RecomButton(full_key=full_key, 
-                                                 initial_value=str(value), 
-                                                 on_text_changed=self.updateDictionary, 
-                                                 on_button_clicked=self.get_recom_button_clicked,
-                                                 active=active)
+    # def set_ros_action_meta_info_widget(self):
+    #     row = self.action_list_widget.currentRow()
+
+    #     label_action_name = QLabel("Action Name:")
+    #     self.action_name_edit = QLineEdit(self.action_sequence_builder.get_action_at_index(row).name)
+    #     self.inner_layout.addWidget(label_action_name)
+    #     self.inner_layout.addWidget(self.action_name_edit)    
+
+    #     # Set info for service client
+    #     label_action_client_desc = QLabel(f"Action Client: ")
+    #     label_action_client = QLineEdit(f"{self.action_sequence_builder.get_action_at_index(row).client}")
+    #     label_action_client.setReadOnly(True)
+    #     self.inner_layout.addWidget(label_action_client_desc)
+    #     self.inner_layout.addWidget(label_action_client)
+        
+    #     # Set info for service type
+    #     label_action_service_desc = QLabel(f"Action Type: ")
+    #     label_action_service_type = QLineEdit(f"{self.action_sequence_builder.get_action_at_index(row).action_type}")
+    #     label_action_service_type.setReadOnly(True)
+    #     self.inner_layout.addWidget(label_action_service_desc)
+    #     self.inner_layout.addWidget(label_action_service_type)
+
+    #     # Set info for service type
+    #     label_action_description_desc = QLabel(f"Description: ")
+    #     self.label_action_description = QTextEdit(f"{self.action_sequence_builder.get_action_at_index(row).description}")
+    #     self.inner_layout.addWidget(label_action_description_desc)
+    #     self.inner_layout.addWidget(self.label_action_description)
+
+    #     # Create a dropdown menu for selecting the error handling inputs
+    #     label_error_handling_box = QLabel(f"Execution identifier: ")
+    #     self.error_handling_box = NoScrollComboBox()
+
+    #     #box_values = ['None'] + self.action_sequence_builder.get_action_at_index(row).get_service_bool_fields()
+    #     #self.error_handling_box.addItems(box_values)
+    #     # Set the default value when creating the qcombobox
+    #     #currently_set_error_handler = self.action_sequence_builder.get_action_at_index(row).get_service_bool_identifier()
+    #     #if currently_set_error_handler is None:
+    #     #    currently_set_error_handler = "None"
+
+    #     #self.error_handling_box.setCurrentIndex(box_values.index(currently_set_error_handler))
+    #     #self.inner_layout.addWidget(label_error_handling_box)
+    #     #self.inner_layout.addWidget(self.error_handling_box)
+        
+    # def populateActionParameterWidgets(self, data, parent_key=None, active=True):
+    #     """
+    #     This method populates the action parameter layout with the parameters of the selected action.
+    #     """
+    #     # iterate through the dict
+    #     for key, value in data.items():
+    #         if parent_key is not None:
+    #             full_key = parent_key + '.' + key
+    #         else:
+    #             full_key = key
+
+    #         if isinstance(value, OrderedDict):
+    #             self.populateActionParameterWidgets(data=value, 
+    #                                                 parent_key=full_key, 
+    #                                                 active = active)
+    #         else:
+    #             widget_with_button = RecomButton(full_key=full_key, 
+    #                                              initial_value=str(value), 
+    #                                              on_text_changed=self.updateDictionary, 
+    #                                              on_button_clicked=self.get_recom_button_clicked,
+    #                                              active=active)
                 
-                self.inner_layout.addWidget(widget_with_button)
+    #             self.inner_layout.addWidget(widget_with_button)
 
     def get_recom_button_clicked(self, key, widget:QLineEdit):
         """
@@ -554,77 +652,101 @@ class RsapApp(QMainWindow):
             widget.setText(selected_value)
             print(f"Selected value: {selected_value}")
 
-    def apply_changes_to_service(self):
-        index = self.action_list_widget.currentRow()
-        # if no line selected index will be -1
-        if index != -1:
-            # Apply error handler message
-            error_identifier = self.error_handling_box.currentText()
-            if error_identifier == 'None':
-                error_identifier = None
+    # def apply_changes_to_action(self):
+    #     index = self.action_list_widget.currentRow()
+        
+    #     current_action = self.action_sequence_builder.get_action_at_index(index)
+        
+    #     # if no line selected index will be -1
+    #     if index != -1:
+    #         # Apply error handler message
+    #         error_identifier = self.error_handling_box.currentText()
+    #         if error_identifier == 'None':
+    #             error_identifier = None
 
-            # set the error identifier
-            set_error_identifier_success = self.action_sequence_builder.get_action_at_index(index).set_service_bool_identifier(error_identifier)
+    #         # set the error identifier
+    #         set_error_identifier_success = current_action.set_success_identifier(error_identifier)
             
-            # Set the action description text
-            self.action_sequence_builder.get_action_at_index(index).description = self.label_action_description.toPlainText()
+    #         # Set the action description text
+    #         current_action.description = self.label_action_description.toPlainText()
 
-            # Apply values to service request dict
-            self.action_sequence_builder.get_action_at_index(index).name = self.action_name_edit.text()
-            set_success = self.action_sequence_builder.process_action_dict_at_index(index=index,mode=SET_IMPLICIT_SRV_DICT, input_impl_dict=self.handle_dict)
+    #         # Apply values to service request dict
+    #         current_action.name = self.action_name_edit.text()
+    #         set_success = self.action_sequence_builder.process_action_dict_at_index(index=index,mode=SET_IMPLICIT_SRV_DICT, input_impl_dict=self.handle_dict)
 
-            if set_success and set_error_identifier_success:
-                self.text_output.append("Success changing values!")
-            else:
-                self.text_output.append_red_text("Error occured changing changes!")
+    #         if set_success and set_error_identifier_success:
+    #             self.text_output.append("Success changing values!")
+    #         else:
+    #             self.text_output.append_red_text("Error occured changing changes!")
 
-            self.action_list_widget.populate_list()
-            self.action_list_widget.setCurrentRow(index)
-            self.action_selected()
+    #         self.action_list_widget.populate_list()
+    #         self.action_list_widget.setCurrentRow(index)
+    #         self.action_selected()
 
     def clear_action_parameter_layout(self):
         """
         This method clears the action parameter layout.
         """
-        if self.inner_layout is not None:
-            while self.inner_layout.count():
-                item = self.inner_layout.takeAt(0)
+        if self.action_parameter_layout is not None:
+            while self.action_parameter_layout.count():
+                item = self.action_parameter_layout.takeAt(0)
                 widget = item.widget()
                 if widget:
                     widget.deleteLater()
                 else:
                     self.clear_action_parameter_layout(item.layout())
+                    
+    # def updateDictionary(self, key, edit):
+    #     def handleTextChange(text):
+    #         try:
+    #             keys = key.split('.')
+    #             current_dict = self.handle_dict
+    #             for k in keys[:-1]:
+    #                 current_dict = current_dict[k]
 
-    def updateDictionary(self, key, edit):
-        def handleTextChange(text):
-            try:
-                keys = key.split('.')
-                current_dict = self.handle_dict
-                for k in keys[:-1]:
-                    current_dict = current_dict[k]
+    #             # Convert the input text to the appropriate data type
+    #             value = text
+    #             if '.' in text and all(part.replace('.', '').lstrip('-').isdigit() for part in text.split('.', 1)):
+    #                 # Modified condition to allow negative floats
+    #                 value = float(text)
+    #             elif text.lstrip('-').isdigit():
+    #                 value = int(text)
+    #             elif text == 'True':
+    #                 value = True
+    #             elif text == 'False':
+    #                 value = False
+    #             elif text[0] == '[' and text[-1] == ']':
+    #                 value = ast.literal_eval(text)
+    #             elif text == 'None':
+    #                 value = None
 
-                # Convert the input text to the appropriate data type
-                value = text
-                if '.' in text and all(part.replace('.', '').lstrip('-').isdigit() for part in text.split('.', 1)):
-                    # Modified condition to allow negative floats
-                    value = float(text)
-                elif text.lstrip('-').isdigit():
-                    value = int(text)
-                elif text == 'True':
-                    value = True
-                elif text == 'False':
-                    value = False
-                elif text[0] == '[' and text[-1] == ']':
-                    value = ast.literal_eval(text)
-                elif text == 'None':
-                    value = None
+    #             current_dict[keys[-1]] = value
+    #         except ValueError:
+    #             pass
 
-                current_dict[keys[-1]] = value
-            except ValueError:
-                pass
+    #     return handleTextChange
 
-        return handleTextChange
+                
+    def add_ros_action_to_action_list(self, action_name: str, action_client:str, action_type:str = None) -> None:
 
+        pos_to_insert = self.action_list_widget.currentRow() + 1
+
+        if action_client:
+            success = self.action_sequence_builder.append_ros_action_to_action_list_at_index(action_client = action_client, 
+                                                                                    index = pos_to_insert, 
+                                                                                    action_type = action_type,
+                                                                                    action_name = action_name)
+            # Get the name of the service from the currently acive action, which is the newly added one
+            if success:
+                action_name =  self.action_sequence_builder.get_current_action_name()
+                self.action_list_widget.populate_list()
+                self.action_list_widget.setCurrentRow(pos_to_insert)
+                self.text_output.append(f"Inserted action: {action_name}")
+                self.action_selected()
+            else:
+                self.text_output.append_red_text(f"Invalid input arguments")
+                
+                
     def open_process_file(self):
         """
         This method opens a file dialog to select a process file to open.
@@ -711,10 +833,24 @@ class RsapApp(QMainWindow):
         add_service_dialog = AddServiceDialog(service_name, service_client, serivce_type)
         
         if add_service_dialog.exec():
-            service_name, service_client, service_type = add_service_dialog.get_values()
+            service_name, service_client, type = add_service_dialog.get_values()
             self.add_service_to_action_list(service_name=service_name,
                                             service_client=service_client,
-                                            service_type=service_type)
+                                            service_type=type)
+        else:
+            pass
+
+    def append_ros_action_service_dialog(self, type_action: str, name: str = None, client:str= None, type:str = None)->None:
+        """
+        type should be either 'action' or 'service'
+        """
+        add_action_dialog = AddServiceDialog(name, client, type)
+        
+        if add_action_dialog.exec():
+            name, client, type = add_action_dialog.get_values()
+            self.add_ros_action_to_action_list(action_name = name,
+                                            action_client = client,
+                                            action_type = type)
         else:
             pass
 
@@ -766,7 +902,6 @@ class RsapApp(QMainWindow):
             pass
             #self.service_node._logger.info("Interruption aborted!")
 
-        
 
     def add_service_to_action_list(self, service_name: str, service_client:str, service_type:str = None) -> None:
         pos_to_insert = self.action_list_widget.currentRow() + 1

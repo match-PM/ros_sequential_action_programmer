@@ -36,7 +36,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'ros_sequential_action_programmer = ros_sequential_action_programmer.ros_sequential_action_programmer:main'
+            'ros_sequential_action_programmer = ros_sequential_action_programmer.ros_sequential_action_programmer:main',
+            'example_node = ros_sequential_action_programmer.example_node:main'
         ],
     },
 )

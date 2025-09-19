@@ -12,6 +12,9 @@
         "/home/niklas/ros2_ws/install/pm_msgs/local/lib/python3.10/dist-packages",
         "/home/niklas/ros2_ws/install/pm_moveit_interfaces/local/lib/python3.10/dist-packages",
         "/home/niklas/ros2_ws/install/influxDB_ros_logger/lib/python3.10/site-packages",
+        "/home/usuario/install/ros_sequential_action_programmer/local/lib/python3.10/dist-packages",
+        "/home/usuario/ros2_ws_nt/install/ros_sequential_action_programmer/lib/python3.10/site-packages",
+
         "/opt/ros/humble/lib/python3.10/site-packages",
         "/opt/ros/humble/local/lib/python3.10/dist-packages"
     ],
@@ -30,5 +33,6 @@
         "/home/niklas/ros2_ws/install/influxDB_ros_logger/lib/python3.10/site-packages",
         "/opt/ros/humble/lib/python3.10/site-packages",
         "/opt/ros/humble/local/lib/python3.10/dist-packages"
-    ]
+    ],
+    "ros.distro": "humble"
 }

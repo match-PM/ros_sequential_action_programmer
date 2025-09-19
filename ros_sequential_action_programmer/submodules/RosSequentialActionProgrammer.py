@@ -6,11 +6,15 @@ from rosidl_runtime_py.utilities import get_message, get_service, get_interface
 from ament_index_python.packages import get_package_share_directory
 from rqt_py_common import message_helpers
 from rcl_interfaces.msg import Log
+
 from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
+from ros_sequential_action_programmer.submodules.action_classes.RosActionAction import RosActionAction
+from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI, TERMINAL
+from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass
+
 from ros_sequential_action_programmer.submodules.action_classes.RecomGenerator import RecomGenerator
 from ros_sequential_action_programmer.submodules.rsap_modules.RsapConfig import RsapConfig
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.rsap_signals import IncomingLogSignal, ExecutionStatusSignal, CurrentActionSignal
-from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI, TERMINAL
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from ros_sequential_action_programmer.submodules.rsap_modules.RsapConfig import ExecutionLog
 import json
@@ -49,6 +53,7 @@ class RosSequentialActionProgrammer:
         self.callback_group_reentrant = ReentrantCallbackGroup()
         self.callback_group_exclusive = MutuallyExclusiveCallbackGroup()
         self.initialize_service_list()
+        self.initialize_ros_action_list()
         self.action_sequence_log = {}
         self.action_log = []
         self.recommendations = RecomGenerator(node)
@@ -99,12 +104,23 @@ class RosSequentialActionProgrammer:
                     self.signal_incoming_log.signal.emit(app_log,40)
                     
 
+    def initialize_ros_action_list(self):
+        self.list_of_active_ros_actions = rclpy.action.get_action_names_and_types(self.node)
+        self.list_of_active_ros_action_clients = [item[0] for item in self.list_of_active_ros_actions]
+        self._list_of_ros_action_types = [item[1] for item in self.list_of_active_ros_actions]
+        
     def get_active_services(self)->list[Tuple[str, list[str]]]:
         """
         Returns a list of active services as a tuple of client and service type.
         """
         return self.list_of_active_services
 
+    def get_active_ros_actions(self)->list[Tuple[str, list[str]]]:
+        """
+        Returns a list of active ros actions as a tuple of client and service type.
+        """
+        return self.list_of_active_ros_actions
+    
     def get_service_type_for_client(self, service_client) -> str:
         """
         Returns the service type of a clients as a string.
@@ -169,6 +185,33 @@ class RosSequentialActionProgrammer:
         else:
             return False
 
+    def append_ros_action_to_action_list_at_index(
+        self,
+        action_client: str,
+        index: int,
+        action_type: str = None,
+        action_name=None) -> bool:
+        
+        if not action_type:
+            #action_type = self.get_action_type_for_client(action_client)
+            pass
+
+        if not index > len(self.action_list):
+            new_action = RosActionAction(
+                    node=self.node,
+                    client=action_client,
+                    action_type=action_type,
+                    name=action_name)
+            if new_action.get_init_success():
+                self.action_list.insert(index, new_action)
+
+                self.current_action_index = index
+                self.node.get_logger().info(f"Inserted Ros Action for {action_client} at {index}")
+                return True
+            else:
+                self.node.get_logger().error(f"Action client: '{action_client}' with action_type '{action_type}' could not be appended!")
+                return False
+            
     def append_user_interaction_to_action_list_at_index(
         self,
         index: int,
@@ -263,10 +306,6 @@ class RosSequentialActionProgrammer:
             self.name = file_data["name"]
 
             for index, action in enumerate(file_data["action_list"]):
-                action_from_item = None
-                action:dict
-                #action_dict = dict(action)
-                #self.node.get_logger().info(f"Loading action {action['name']} at index {index}")
                 if action['action_type'] == 'ServiceAction':
                     service_client = action["service_client"]
 
@@ -275,11 +314,12 @@ class RosSequentialActionProgrammer:
                                                     service_type=action["service_type"],
                                                     name=action["name"])
                     if action_from_item.get_init_success():
-                        set_success = action_from_item.set_service_bool_identifier(
-                            action["error_identifier"]
-                        )
-                        action_from_item.description = action["description"]
+                        set_success = action_from_item.set_success_identifier(action["error_identifier"])
+
+                        action_from_item.set_description(action["description"])
+
                         if not set_success:
+                            self.node.get_logger().error(f"Test1!")
                             return False
 
                         self.action_list.append(action_from_item)
@@ -290,6 +330,7 @@ class RosSequentialActionProgrammer:
                         )
                         if not set_success:
                             self.action_list.clear()
+                            self.node.get_logger().error(f"Test2!")
                             return False
                         
                 elif action['action_type'] == 'UserInteractionAction':
@@ -298,13 +339,29 @@ class RosSequentialActionProgrammer:
                                                              name=action['name'],
                                                              action_text=action['action_text'])
                     self.action_list.append(action_from_item)
-                
-                if action_from_item is not None:
-                    action_from_item.set_breakpoint(action.get("has_breakpoint", False))
-                    action_from_item.set_active(action.get("is_active", True))    
+                    action_from_item.set_description(action["description"])
+                    
+                elif action['action_type'] == 'RosActionAction':
+
+                    action_from_item = RosActionAction(node=self.node,
+                                                    client=action["ros_action_client"],
+                                                    action_type=action["ros_action_type"],
+                                                    name=action["name"])
+                    
+                    if action_from_item.get_init_success():
+                        action_from_item.set_description(action["description"])
+                        self.action_list.append(action_from_item)
+                        set_success = self.process_action_dict_at_index(index=index,
+                                                                        mode=SET_IMPLICIT_SRV_DICT,
+                                                                        input_impl_dict=action["action_request"])   
+                        if not set_success:
+                            self.action_list.clear()
+                            return False
                 else:
+                    self.node.get_logger().error(f"Action type '{action['action_type']}' not supported!")
                     return False
-            
+                
+            self.node.get_logger().error(f"SUCCEEESS!")
             return True
         else:
             return False
@@ -324,26 +381,33 @@ class RosSequentialActionProgrammer:
             action_list = []
             for index, action in enumerate(self.action_list):
                 action_dict = {}
+                                
+                action_dict["name"] = action.get_name()
+                action_dict["description"] = action.get_description()
+                self.node.get_logger().error(f'desc{action_dict["description"]}')
+
+                action_dict["action_type"] = action.get_type_indicator()
+                action_dict["action_position"] = index
+
                 if isinstance(action, ServiceAction):
-                    action_dict["action_position"] = index
-                    action_dict["action_type"] = 'ServiceAction'
-                    action_dict["name"] = action.get_action_name()
+                    action: ServiceAction
                     action_dict["service_client"] = action.client
                     action_dict["service_type"] = action.service_type
                     action_dict["error_identifier"] = action.service_success_key
-                    action_dict["description"] = action.description
-                    
                     action_dict["service_request"] = json.loads(
-                        json.dumps(action.service_req_dict_implicit)
+                        json.dumps(action.request_dict_implicit)
                     )
                 elif isinstance(action, UserInteractionAction):
                     action: UserInteractionAction
-                    action_dict["action_position"] = index
-                    action_dict["action_type"] = 'UserInteractionAction'
-                    action_dict["name"] = action.get_action_name()
                     action_dict["action_text"] = action.action_text
                     action_dict["interaction_mode"] = action.interaction_mode
 
+                elif isinstance(action, RosActionAction):
+                    action: RosActionAction
+                    action_dict["ros_action_client"] = action.client
+                    action_dict["ros_action_type"] = action.action_type
+                    action_dict["action_request"] = json.loads(json.dumps(action.request_dict_implicit))
+                    
                 action_dict["has_breakpoint"] = action.has_breakpoint()
                 action_dict["is_active"] = action.is_active()
                 
@@ -357,11 +421,11 @@ class RosSequentialActionProgrammer:
                 self.node.get_logger().info("Saved!")
                 return True
             except FileNotFoundError as e:
-                print(e)
+                self.node.get_logger().error(f"{e}")
                 self.node.get_logger().error("Directory does not exist!")
                 return False
             except Exception as e:
-                print(e)
+                self.node.get_logger().error(f"{e}")
                 self.node.get_logger().error("Saving file failed!")
                 return False
         else:
@@ -380,7 +444,7 @@ class RosSequentialActionProgrammer:
             return False
 
     def get_current_action_name(self) -> str:
-        return self.get_action_at_index(self.current_action_index).get_action_name()
+        return self.get_action_at_index(self.current_action_index).get_name()
 
     def execute_current_action(self, log_mode: int = ExecutionLog.LOG_NEVER, shift_action:bool = False) -> bool:
         """
@@ -434,7 +498,7 @@ class RosSequentialActionProgrammer:
             return success_exec
 
         except Exception as e:
-            #self.node.get_logger().debug(f"Error {e}!")           
+            self.node.get_logger().error(f"Error {e}!")           
             self.node.get_logger().error(f"Error executing {self.get_current_action_name()}!")
             return False
         finally:
@@ -511,7 +575,7 @@ class RosSequentialActionProgrammer:
         :param index: The index of the action.
         """
         try:
-            return_value = copy.deepcopy(self.action_list[index].service_req_dict)
+            return_value = copy.deepcopy(self.action_list[index].request_dict)
             return return_value
         except Exception as e:
             return None
@@ -524,7 +588,7 @@ class RosSequentialActionProgrammer:
         """
         try:
             return_value = copy.deepcopy(
-                self.get_action_at_index(index).service_req_dict_implicit
+                self.get_action_at_index(index).request_dict_implicit
             )
             return return_value
         except Exception as e:
@@ -803,10 +867,10 @@ class RosSequentialActionProgrammer:
         compatible_list = []
         for ind in range(0, index):
 
-            if self.get_action_at_index(ind).service_res_dict is None:
-                dict_to_process = self.get_action_at_index(ind).default_service_res_dict
+            if self.get_action_at_index(ind).response_dict is None:
+                dict_to_process = self.get_action_at_index(ind).default_response_dict
             else:
-                dict_to_process = self.get_action_at_index(ind).service_res_dict
+                dict_to_process = self.get_action_at_index(ind).response_dict
             
             key_value_list: list = get_key_value_pairs_from_dict(dict_to_process)
 
@@ -841,8 +905,8 @@ class RosSequentialActionProgrammer:
         # because it is the implicit, there might be references to earlier service responses.
         if input_impl_dict is None:
             # key_value_list: list = ServiceAction.get_key_value_pairs_from_dict(
-            #     self.action_list[index].service_req_dict_implicit)
-            key_value_list: list = get_key_value_pairs_from_dict(self.action_list[index].service_req_dict_implicit)
+            #     self.action_list[index].request_dict_implicit)
+            key_value_list: list = get_key_value_pairs_from_dict(self.action_list[index].request_dict_implicit)
             
         else:
             if not isinstance(input_impl_dict, OrderedDict):
@@ -910,7 +974,7 @@ class RosSequentialActionProgrammer:
             if mode == CHECK_COMPATIBILITY_ONLY:
                 if isinstance(current_action, ServiceAction):
                     test_action = copy.deepcopy(current_action)
-                    set_success = test_action.set_srv_req_dict_value_from_key(
+                    set_success = test_action.set_request_dict_value_from_key(
                         key, check_value
                     )
                     del test_action
@@ -919,19 +983,19 @@ class RosSequentialActionProgrammer:
                 if isinstance(current_action, ServiceAction):
                     test_action = copy.deepcopy(current_action)
                     #self.node._logger.warn(f"TEST HERE Setting {key} to {check_value}")
-                    set_success = test_action.set_srv_req_dict_value_from_key(
+                    set_success = test_action.set_request_dict_value_from_key(
                         key, check_value
                     )
                     del test_action
                     if set_success:
-                        set_success = current_action.set_srv_req_dict_value_from_key(path_key=key, new_value=value, override_to_implicit=True)
+                        set_success = current_action.set_request_dict_value_from_key(path_key=key, new_value=value, override_to_implicit=True)
 
             if mode == SET_SRV_DICT:
                 if isinstance(current_action, ServiceAction):
                     #self.node._logger.warn(f"Setting {key} to {value}")
                     set_success = self.get_action_at_index(
                         index
-                    ).set_srv_req_dict_value_from_key(path_key=key, new_value=value)
+                    ).set_request_dict_value_from_key(path_key=key, new_value=value)
 
             if not set_success:
                 if not mode == CHECK_COMPATIBILITY_ONLY:
@@ -945,8 +1009,10 @@ class RosSequentialActionProgrammer:
                 return False
 
             return set_success
-        except:
+        except Exception as e:
             self.node.get_logger().error("Failed here")
+            self.node.get_logger().error(f"{e}")
+
             return False
 
     def check_for_reference(self, input_value: any) -> tuple[bool, bool, int, str]:

@@ -36,18 +36,18 @@ class ServiceCalls:
         :param srv_values: A dictionary containing service values.
         """
         if self.init_service_action(srv_values["service_name"],srv_values["service_type"]):
-            print(self.service_action.service_req_dict_implicit)
+            print(self.service_action.request_dict_implicit)
 
             success_set_values = self.set_srv_values(srv_values)
 
-            print(self.service_action.service_req_dict)
+            print(self.service_action.request_dict)
             print(success_set_values)
 
             success_execute = self.service_action.execute()
-            service_response = self.service_action.service_res_dict
+            response = self.service_action.service_res_dict
             print(success_execute)    
 
-            return success_execute, service_response
+            return success_execute, response
         else:
             return False
 

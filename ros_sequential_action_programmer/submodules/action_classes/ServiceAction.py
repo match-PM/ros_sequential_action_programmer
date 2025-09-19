@@ -14,7 +14,7 @@ import numpy as np
 from functools import partial
 from ros_sequential_action_programmer.submodules.obj_dict_modules.dict_functions import flatten_dict_to_list, is_string_in_dict
 from typing import Union
-import re
+from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass
 from typing import Tuple, Any
 
 def set_at_index(lst, index, value):
@@ -22,30 +22,19 @@ def set_at_index(lst, index, value):
         lst.append(None)
     lst[index] = value
     
-class ServiceAction:
-    def __init__(self, node: Node, client: str, service_type: str = None, name=None) -> None:
+class ServiceAction(ActionBaseClass):
+    def __init__(self, node: Node, client: str, service_type: str = None, name=None,description="") -> None:
+        super().__init__(node, name, description)
         self.client = client
         self.service_type = service_type
         self.node = node
-        self.service_request = None
-        self.service_req_dict = None
+ 
         self.service_metaclass = None
-
-        self.default_service_res_dict = None
-        self.service_response = None
-        self.service_res_dict = None
-        self.empty_service_response = None
+        self.response = None
 
         self.service_res_bool_messages = []
         self.service_success_key = None
 
-        self.service_req_dict_implicit = None
-        self.log_entry = {}
-        
-        self._has_breakpoint = False
-        self._is_active = True
-
-        self.description = ""
         if name is None:
             self.name = self.client
         else:
@@ -58,40 +47,12 @@ class ServiceAction:
         
         self.init_service()
         self.init_service_res_bool_messages()
-
-    def toggle_active(self):
-        self._is_active = not self._is_active
-        #self.node.get_logger().warn(f"Action '{self.name}' toggled active state. {self._is_active}")
-        
-    def toggle_breakpoint(self):
-        self._has_breakpoint = not self._has_breakpoint
-        #self.node.get_logger().warn(f"Action '{self.name}' toggled breakpoint state. {self._has_breakpoint}")
-        
-    def is_active(self):
-        return self._is_active
-    
-    def has_breakpoint(self):
-        return self._has_breakpoint
-    
-    def set_breakpoint(self, state: bool):
-        self._has_breakpoint = state
-        
-    def set_active(self, state: bool):
-        self._is_active = state
     
     def get_init_success(self)-> bool:
         return self.valid
     
-    def get_action_name(self)-> str:
-        return self.name
-    
-    def set_action_name(self, new_name:str) -> bool:
-        try:
-            self.name = new_name
-            return True
-        except Exception as e:
-            self.node.get_logger().error(str(e))
-            return False
+    def get_type_indicator(self)->str:
+        return "ServiceAction"
     
     def check_for_valid_inputs(self) -> bool:
         list_of_active_services = self.node.get_service_names_and_types()
@@ -114,12 +75,13 @@ class ServiceAction:
         
     def init_service(self):
         try:
-            self.service_request = self.get_service_request(self.service_type)
-            self.empty_service_response = self.get_empthy_service_response()
-            self.default_service_res_dict = message_to_ordereddict(self.empty_service_response)
-            self.service_req_dict = message_to_ordereddict(self.service_request)
+            self.request = self.get_service_request(self.service_type)
+            self.empty_response = self.get_empthy_service_response()
+            self.default_response_dict = message_to_ordereddict(self.empty_response)
+            self.request_dict = message_to_ordereddict(self.request)
             self.service_metaclass = self.get_service_metaclass()
-            self.service_req_dict_implicit = copy.deepcopy(self.service_req_dict)
+            self.request_dict_implicit = copy.deepcopy(self.request_dict)
+            self.default_request = copy.deepcopy(self.request)
         except Exception as e:
             print(e)
             self.node.get_logger().fatal(
@@ -127,9 +89,9 @@ class ServiceAction:
             )
 
     def execute(self, get_interupt_method:Any = None) -> bool:
-        if self.service_request and self.service_metaclass and self.service_type:
+        if self.request and self.service_metaclass and self.service_type:
             # update srv request from dictionary
-            self.update_srv_req_obj_from_dict()
+            self.update_request_obj_from_dict()
 
             client = self.node.create_client(self.service_metaclass, self.client)
             
@@ -137,7 +99,7 @@ class ServiceAction:
             
             if not client.wait_for_service(timeout_sec=2.0):
                 self.node.get_logger().error(f"Client {self.client} not available, aborting...")
-                self.service_res_dict = collections.OrderedDict([("Error", "Client not available")])
+                self.response_dict = collections.OrderedDict([("Error", "Client not available")])
                 srv_call_success = False
                 srv_end_time = datetime.now()
                 self.update_log_entry(srv_call_success, srv_start_time, srv_end_time,additional_text='Client not available! Exited with error!')
@@ -146,7 +108,7 @@ class ServiceAction:
             self.node.get_logger().info(f"Executing '{self.name}'...")
             srv_start_time = datetime.now()
             # Call the service
-            self.future = client.call_async(self.service_request)
+            self.future = client.call_async(self.request)
 
             node_name = self.get_node_name_from_client(client.srv_name)
             timer = None
@@ -164,11 +126,11 @@ class ServiceAction:
             success_val_from_srv_res = None
 
             if not self.future.cancelled():
-                self.service_response = self.future.result()
+                self.response = self.future.result()
                 # update srv response dict
-                self.service_res_dict = message_to_ordereddict(self.service_response)
+                self.response_dict = message_to_ordereddict(self.response)
                 # get service success value if it is set
-                success_val_from_srv_res = self.get_obj_value_from_key(self.service_response, self.service_success_key)
+                success_val_from_srv_res = self.get_obj_value_from_key(self.response, self.service_success_key)
 
                 if success_val_from_srv_res is not None:
                     srv_call_success = success_val_from_srv_res
@@ -184,7 +146,7 @@ class ServiceAction:
                 timer.destroy()
             self.update_log_entry(srv_call_success, srv_start_time, srv_end_time)
             
-            #self.node.get_logger().info(f"Service return: {self.service_res_dict}")
+            #self.node.get_logger().info(f"Service return: {self.response_dict}")
             
             return srv_call_success
 
@@ -209,133 +171,9 @@ class ServiceAction:
         else:
             return  None
         
-    def set_srv_req_dict_value_from_key(self, path_key: str, 
-                                        new_value: any, 
-                                        override_to_implicit=False) -> bool:
-        """
-        This function tries to set the value of the service request given the path_key to the value and a new value.
-        Retuns false if key or value are incopatible with the service request.
-        E.a. path_key = 'Foo.Fuu.Faa' (str)
-        """
-        if path_key is None:
-            return False
-
-        if new_value is None:
-            return False
-
-        try:
-            test_request = self.get_service_request(self.service_type)
-            value_to_set = self.get_obj_value_from_key(test_request, path_key)
-
-            # if given key leads to an array entry
-            if '[' in path_key and ']' in path_key:
-                value_is_list_entry = True
-                
-                #self.node.get_logger().warn(f"TEST List entry detected! '{path_key}'")
-                
-                list_path_key = re.sub(r'\[.*?\]', '', path_key)
-                #self.node.get_logger().warn(f"TEST New path {list_path_key}")
-                index = self.get_last_index_value(path_key)
-                #self.node.get_logger().warn(f"TEST index is {index}")
-            else:
-                value_is_list_entry = False
-
-            # in case the value leads to an list entry we will process
-            if value_is_list_entry:
-                test_dict = copy.deepcopy(self.service_req_dict_implicit)
-                #self.node.get_logger().warn(f"TEST")
-                list_to_set = self.get_obj_value_from_key(test_dict, list_path_key)
-                #self.node.get_logger().warn(f"TEST List old '{str(list_to_set)}'")
-                #self.node.get_logger().warn(f"TEST test_dict old '{str(test_dict)}'")
-
-                if list_to_set is None:
-                    self.node.get_logger().error(f"Error occured accessing list element '{list_path_key}' in dict!")
-                    return False
-                
-                #self.node.get_logger().warn(f"TEST21 {str(list_to_set)}")
-                #self.node.get_logger().warn(f"TEST22 {type(list_to_set)}")
-                #self.node.get_logger().warn(f"TEST24 {type(new_value)}")
-
-                #if index == 0:
-                #    list_to_set.clear()
-
-                set_at_index(list_to_set, index, new_value)
-                #list_to_set[index] = new_value     # this causes an error, as the list might be to short or empty
-                                
-                #self.node.get_logger().warn(f"TEST List new '{str(list_to_set)}' with value '{str(new_value)}'")
-                
-                if not override_to_implicit:
-                    set_success = self.set_obj_value_from_key(self.service_req_dict, list_path_key, list_to_set, self.node.get_logger())
-                    self.update_srv_req_obj_from_dict()
-                else:
-                    set_success = self.set_obj_value_from_key(self.service_req_dict_implicit, list_path_key, list_to_set, self.node.get_logger())
-                return set_success
-            
-            # Create a new service request object
-            # Set test request with dict
-            #self.node.get_logger().warn(f"Path key {str(path_key)}")
-            #self.node.get_logger().warn(f"New value {str(new_value)}")
-            #self.node.get_logger().warn(f"Value to set {str(value_to_set)}")
-
-            #self.node.get_logger().warn(f"New value type {str(type(new_value))}")
-            #self.node.get_logger().warn(f"Value to set type {str(type(value_to_set))}")
-            #self.node.get_logger().warn(f"{str(type(value_to_set))}")
-
-            if isinstance(value_to_set, np.ndarray) and isinstance(new_value, list):
-                new_value = np.array(new_value)
-
-            if isinstance(value_to_set, array.array) and isinstance(new_value, list):
-                new_value = array.array("i", new_value)
-
-            #self.node.get_logger().warn(f"New value type {str(type(new_value))}")
-
-            if not isinstance(new_value, type(value_to_set)) and not override_to_implicit:
-                self.node.get_logger().warn(f"Given value '{new_value}' of type '{type(new_value)}' is incompatible for '{path_key}' of type '{type(value_to_set)}'!")
-                return False
-
-            # If the path does not lead to an existing value
-            if value_to_set is None:
-                return False
-            
-            if not override_to_implicit:
-                set_success = self.set_obj_value_from_key(self.service_req_dict, path_key, new_value)
-                set_success = self.set_obj_value_from_key(self.service_req_dict_implicit, path_key, new_value)
-                #self.node.get_logger().debug(f"Set success {str((set_success))}")
-                self.update_srv_req_obj_from_dict()
-            else:
-                #self.node.get_logger().debug(f"Set success {str((self.service_req_dict_implicit))}")
-                set_success = self.set_obj_value_from_key(self.service_req_dict_implicit, path_key, new_value)
-                #self.node.get_logger().debug(f"Set success {str((self.service_req_dict_implicit))}")
-                #self.node.get_logger().debug(f"Set success {str((set_success))}")
-
-            #self.node.get_logger().warn(f"TEST Set success {str((set_success))}")
-            return set_success
-        except Exception as e:
-            self.node.get_logger().error(f"Error occured in set_srv_req_dict_value_from_key! {e}")
-            return False
-
-    def set_req_message_from_dict(self, dict: collections.OrderedDict) -> bool:
-        """
-        This mehtod sets the request message from a given ordereddict.
-        It first tries if the dict is a valid dict before setting it.
-        """
-        try:
-            # Create a new service request object
-            test_request = self.get_service_request(self.service_type)
-            # Set test request with dict
-            set_message_fields(test_request, dict)
-
-            # if the function above does not fail, its a valid input dict. We can set it
-            self.service_req_dict = dict
-
-            self.update_srv_req_obj_from_dict()
-            return True
-        except:
-            return False
-
     def get_empthy_service_response(self):
-        service_response = get_service(self.service_type).Response()
-        return service_response
+        response = get_service(self.service_type).Response()
+        return response
 
     def get_service_metaclass(self):
         service = get_service(self.service_type)
@@ -360,8 +198,8 @@ class ServiceAction:
                     if isinstance(value, bool):
                         bool_list.append(full_key)
 
-        if self.default_service_res_dict is not None:
-            check_for_bool_values(self.default_service_res_dict, self.service_res_bool_messages)
+        if self.default_response_dict is not None:
+            check_for_bool_values(self.default_response_dict, self.service_res_bool_messages)
         else:
             self.node.get_logger().warn("Init of default service response not possible")
 
@@ -371,39 +209,27 @@ class ServiceAction:
         """
         return self.service_res_bool_messages
 
-    def get_service_bool_identifier(self):
-        """
-        Returns the currently set service execution identifier
-        """
-        return self.service_success_key
 
-    def set_service_bool_identifier(self, identifier: str) -> bool:
-        """
-        Sets the current service execution identifier
-        """
-        self.service_success_key = identifier
-        return True
+    # def set_service_request(self, request: any):
+    #     """
+    #     Warning: The method doesn not check for valid inputs.
+    #     This method set the service request object of the class from the input parameter request.
+    #     It also updates the request dict.
+    #     """
+    #     self.request = request
+    #     self.request_dict = message_to_ordereddict(self.request)
 
-    def set_service_request(self, service_request: any):
-        """
-        Warning: The method doesn not check for valid inputs.
-        This method set the service request object of the class from the input parameter service_request.
-        It also updates the request dict.
-        """
-        self.service_request = service_request
-        self.service_req_dict = message_to_ordereddict(self.service_request)
+    # def update_srv_req_obj_from_dict(self):
+    #     """Update the ros service message from the dict"""
+    #     set_message_fields(self.request, self.request_dict)
 
-    def update_srv_req_obj_from_dict(self):
-        """Update the ros service message from the dict"""
-        set_message_fields(self.service_request, self.service_req_dict)
+    # def get_srv_res_value_from_key(self, key: str) -> any:
+    #     return self.get_obj_value_from_key(obj=self.request_dict, path_key=key)
 
-    def get_srv_res_value_from_key(self, key: str) -> any:
-        return self.get_obj_value_from_key(obj=self.service_res_dict, path_key=key)
-
-    def get_default_srv_res_value_from_key(self, key: str) -> any:
-        return self.get_obj_value_from_key(
-            obj=self.default_service_res_dict, path_key=key
-        )
+    # def get_default_srv_res_value_from_key(self, key: str) -> any:
+    #     return self.get_obj_value_from_key(
+    #         obj=self.default_service_res_dict, path_key=key
+    #     )
 
     def update_log_entry(self, success: bool, start_time: datetime, end_time: datetime,additional_text:str = ""):
         self.log_entry["service_client"] = self.client
@@ -413,8 +239,8 @@ class ServiceAction:
         )
         self.log_entry["srv_end_time"] = str(end_time.strftime("%Y-%m-%d_%H:%M:%S.%f"))
         self.log_entry["execution_time"] = str(end_time - start_time)
-        self.log_entry["srv_request"] = json.loads(json.dumps(self.service_req_dict))
-        self.log_entry["srv_response"] = json.loads(json.dumps(self.service_res_dict))
+        self.log_entry["srv_request"] = json.loads(json.dumps(self.request_dict))
+        self.log_entry["srv_response"] = json.loads(json.dumps(self.request_dict))
         if not additional_text == '':
             self.log_entry["message"] = str(additional_text)
         self.log_entry["success"] = success
@@ -422,13 +248,13 @@ class ServiceAction:
     def get_log_entry(self) -> dict:
         return self.log_entry
     
-    def clear_log_entry(self) -> bool:
-        try:
-            self.log_entry = {}
-            return True
-        except Exception as e:
-            self.node.get_logger().error(str(e))
-            return False
+    # def clear_log_entry(self) -> bool:
+    #     try:
+    #         self.log_entry = {}
+    #         return True
+    #     except Exception as e:
+    #         self.node.get_logger().error(str(e))
+    #         return False
 
     def __deepcopy__(self, memo):
         """
@@ -437,18 +263,19 @@ class ServiceAction:
         new_instance = ServiceAction(
             client=self.client, service_type=self.service_type, node=self.node
         )
-        new_instance.service_req_dict = copy.deepcopy(self.service_req_dict)
-        new_instance.service_response = copy.deepcopy(self.service_response)
-        new_instance.service_request = copy.deepcopy(self.service_request)
-        new_instance.service_req_dict = copy.deepcopy(self.service_req_dict)
-        new_instance.service_res_dict = copy.deepcopy(self.service_res_dict)
+        new_instance.request_dict
+        new_instance.request_dict = copy.deepcopy(self.request_dict)
+        new_instance.response = copy.deepcopy(self.response)
+        new_instance.request = copy.deepcopy(self.request)
+        new_instance.request_dict = copy.deepcopy(self.request_dict)
+        new_instance.request_dict = copy.deepcopy(self.request_dict)
         new_instance.log_entry = copy.deepcopy(self.log_entry)
         new_instance.service_res_bool_messages = copy.deepcopy(
             self.service_res_bool_messages
         )
         new_instance.service_success_key = copy.deepcopy(self.service_success_key)
-        new_instance.service_req_dict_implicit = copy.deepcopy(
-            self.service_req_dict_implicit
+        new_instance.request_dict_implicit = copy.deepcopy(
+            self.request_dict_implicit
         )
 
         return new_instance
@@ -456,16 +283,16 @@ class ServiceAction:
     @staticmethod
     def get_service_request(service_type):
         try:
-            service_request = get_service(service_type).Request()
-            return service_request
+            request = get_service(service_type).Request()
+            return request
         except Exception:
             return None
 
     @staticmethod
     def get_service_response(service_type):
         try:
-            service_request = get_service(service_type).Response()
-            return service_request
+            request = get_service(service_type).Response()
+            return request
         except Exception:
             return None
 
@@ -533,6 +360,131 @@ class ServiceAction:
             return int(matches[-1])
         else:
             return None
+    
+    
+    # def set_srv_req_dict_value_from_key(self, path_key: str, 
+    #                                     new_value: any, 
+    #                                     override_to_implicit=False) -> bool:
+    #     """
+    #     This function tries to set the value of the service request given the path_key to the value and a new value.
+    #     Retuns false if key or value are incopatible with the service request.
+    #     E.a. path_key = 'Foo.Fuu.Faa' (str)
+    #     """
+    #     if path_key is None:
+    #         return False
+
+    #     if new_value is None:
+    #         return False
+
+    #     try:
+    #         test_request = self.get_service_request(self.service_type)
+    #         value_to_set = self.get_obj_value_from_key(test_request, path_key)
+
+    #         # if given key leads to an array entry
+    #         if '[' in path_key and ']' in path_key:
+    #             value_is_list_entry = True
+                
+    #             #self.node.get_logger().warn(f"TEST List entry detected! '{path_key}'")
+                
+    #             list_path_key = re.sub(r'\[.*?\]', '', path_key)
+    #             #self.node.get_logger().warn(f"TEST New path {list_path_key}")
+    #             index = self.get_last_index_value(path_key)
+    #             #self.node.get_logger().warn(f"TEST index is {index}")
+    #         else:
+    #             value_is_list_entry = False
+
+    #         # in case the value leads to an list entry we will process
+    #         if value_is_list_entry:
+    #             test_dict = copy.deepcopy(self.request_dict_implicit)
+    #             #self.node.get_logger().warn(f"TEST")
+    #             list_to_set = self.get_obj_value_from_key(test_dict, list_path_key)
+    #             #self.node.get_logger().warn(f"TEST List old '{str(list_to_set)}'")
+    #             #self.node.get_logger().warn(f"TEST test_dict old '{str(test_dict)}'")
+
+    #             if list_to_set is None:
+    #                 self.node.get_logger().error(f"Error occured accessing list element '{list_path_key}' in dict!")
+    #                 return False
+                
+    #             #self.node.get_logger().warn(f"TEST21 {str(list_to_set)}")
+    #             #self.node.get_logger().warn(f"TEST22 {type(list_to_set)}")
+    #             #self.node.get_logger().warn(f"TEST24 {type(new_value)}")
+
+    #             #if index == 0:
+    #             #    list_to_set.clear()
+
+    #             set_at_index(list_to_set, index, new_value)
+    #             #list_to_set[index] = new_value     # this causes an error, as the list might be to short or empty
+                                
+    #             #self.node.get_logger().warn(f"TEST List new '{str(list_to_set)}' with value '{str(new_value)}'")
+                
+    #             if not override_to_implicit:
+    #                 set_success = self.set_obj_value_from_key(self.request_dict, list_path_key, list_to_set, self.node.get_logger())
+    #                 self.update_srv_req_obj_from_dict()
+    #             else:
+    #                 set_success = self.set_obj_value_from_key(self.request_dict_implicit, list_path_key, list_to_set, self.node.get_logger())
+    #             return set_success
+            
+    #         # Create a new service request object
+    #         # Set test request with dict
+    #         #self.node.get_logger().warn(f"Path key {str(path_key)}")
+    #         #self.node.get_logger().warn(f"New value {str(new_value)}")
+    #         #self.node.get_logger().warn(f"Value to set {str(value_to_set)}")
+
+    #         #self.node.get_logger().warn(f"New value type {str(type(new_value))}")
+    #         #self.node.get_logger().warn(f"Value to set type {str(type(value_to_set))}")
+    #         #self.node.get_logger().warn(f"{str(type(value_to_set))}")
+
+    #         if isinstance(value_to_set, np.ndarray) and isinstance(new_value, list):
+    #             new_value = np.array(new_value)
+
+    #         if isinstance(value_to_set, array.array) and isinstance(new_value, list):
+    #             new_value = array.array("i", new_value)
+
+    #         #self.node.get_logger().warn(f"New value type {str(type(new_value))}")
+
+    #         if not isinstance(new_value, type(value_to_set)) and not override_to_implicit:
+    #             self.node.get_logger().warn(f"Given value '{new_value}' of type '{type(new_value)}' is incompatible for '{path_key}' of type '{type(value_to_set)}'!")
+    #             return False
+
+    #         # If the path does not lead to an existing value
+    #         if value_to_set is None:
+    #             return False
+            
+    #         if not override_to_implicit:
+    #             set_success = self.set_obj_value_from_key(self.request_dict, path_key, new_value)
+    #             set_success = self.set_obj_value_from_key(self.request_dict_implicit, path_key, new_value)
+    #             #self.node.get_logger().debug(f"Set success {str((set_success))}")
+    #             self.update_srv_req_obj_from_dict()
+    #         else:
+    #             #self.node.get_logger().debug(f"Set success {str((self.request_dict_implicit))}")
+    #             set_success = self.set_obj_value_from_key(self.request_dict_implicit, path_key, new_value)
+    #             #self.node.get_logger().debug(f"Set success {str((self.request_dict_implicit))}")
+    #             #self.node.get_logger().debug(f"Set success {str((set_success))}")
+
+    #         #self.node.get_logger().warn(f"TEST Set success {str((set_success))}")
+    #         return set_success
+    #     except Exception as e:
+    #         self.node.get_logger().error(f"Error occured in set_srv_req_dict_value_from_key! {e}")
+    #         return False
+
+    # def set_req_message_from_dict(self, dict: collections.OrderedDict) -> bool:
+    #     """
+    #     This mehtod sets the request message from a given ordereddict.
+    #     It first tries if the dict is a valid dict before setting it.
+    #     """
+    #     try:
+    #         # Create a new service request object
+    #         test_request = self.get_service_request(self.service_type)
+    #         # Set test request with dict
+    #         set_message_fields(test_request, dict)
+
+    #         # if the function above does not fail, its a valid input dict. We can set it
+    #         self.request_dict = dict
+
+    #         self.update_srv_req_obj_from_dict()
+    #         return True
+    #     except:
+    #         return False
     
     #@staticmethod
     # def get_obj_value_from_key(obj: any, path_key: str) -> any:
