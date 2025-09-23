@@ -110,26 +110,28 @@ from rclpy.action import ActionServer, GoalResponse, CancelResponse
 
 from std_srvs.srv import SetBool
 from example_interfaces.action import Fibonacci
-
+from nav_msgs.srv import GetPlan
 
 class SimpleServiceAndActionNode(Node):
-    """ROS 2 node with:
-       - a simple SetBool service
-       - a Fibonacci action server
-    """
-
     def __init__(self):
         super().__init__('simple_service_and_action_node')
 
-        # ---- Service: SetBool ----
-        # Client sends a single boolean. We just toggle an internal flag.
+        # ---- Service 1: SetBool ----
         self._flag = False
-        self._srv = self.create_service(
+        self._srv_toggle = self.create_service(
             SetBool,
             'toggle_flag',
             self.toggle_flag_callback
         )
         self.get_logger().info('Service "toggle_flag" ready.')
+
+        # ---- Service 2: GetPlan (multi-field request) ----
+        self._srv_plan = self.create_service(
+            GetPlan,
+            'get_plan_demo',
+            self.get_plan_callback
+        )
+        self.get_logger().info('Service "get_plan_demo" ready.')
 
         # ---- Action: Fibonacci ----
         self._action_server = ActionServer(
@@ -142,13 +144,28 @@ class SimpleServiceAndActionNode(Node):
         )
         self.get_logger().info('Action server "fibonacci" ready.')
 
-    # ---------- Service callback ----------
+    # ---------- Service callbacks ----------
     def toggle_flag_callback(self, request, response):
-        """Set or clear the internal flag."""
         self._flag = request.data
         response.success = True
         response.message = f'Flag is now {"ON" if self._flag else "OFF"}'
         self.get_logger().info(response.message)
+        return response
+
+    def get_plan_callback(self, request, response):
+        """
+        Dummy implementation of GetPlan.
+        It simply returns a Path starting at 'start' and ending at 'goal'.
+        """
+        self.get_logger().info(
+            f"Received GetPlan request: tolerance={request.tolerance}"
+        )
+        # Just create a path with the start and goal
+        from nav_msgs.msg import Path
+        path = Path()
+        path.header.frame_id = request.start.header.frame_id
+        path.poses = [request.start, request.goal]
+        response.plan = path
         return response
 
     # ---------- Action callbacks ----------
@@ -188,7 +205,6 @@ class SimpleServiceAndActionNode(Node):
         return result
 
     async def _sleep(self, seconds):
-        """Non-blocking sleep helper."""
         done = rclpy.task.Future()
         timer = self.create_timer(seconds, lambda: done.set_result(True))
         await done
@@ -205,7 +221,6 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()

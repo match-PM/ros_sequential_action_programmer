@@ -17,6 +17,8 @@ from typing import Union
 from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass
 from typing import Tuple, Any
 
+from rosidl_parser.definition import BasicType, Array, AbstractNestedType, NamespacedType
+
 def set_at_index(lst, index, value):
     while len(lst) <= index:  # Expand list if needed
         lst.append(None)
@@ -27,7 +29,6 @@ class ServiceAction(ActionBaseClass):
         super().__init__(node, name, description)
         self.client = client
         self.service_type = service_type
-        self.node = node
  
         self.service_metaclass = None
         self.response = None
@@ -277,9 +278,102 @@ class ServiceAction(ActionBaseClass):
         new_instance.request_dict_implicit = copy.deepcopy(
             self.request_dict_implicit
         )
+        new_instance.set_name(f"{self.get_name()}_copy")
 
         return new_instance
     
+    def get_request_type(self):
+        # slt = self.service_metaclass.Request.__slots__
+        # #slt = ""
+        # type = self.service_metaclass.Request.SLOT_TYPES
+        # #type = (get_message_slot_types(self.service_metaclass.Request))
+        # self.node.get_logger().warn(f"slt: {slt}, type: {type}")
+        
+        #self.node.get_logger().warn(f"slt: {slt}, type: {type}")
+
+        type_dict = self.field_type_map_recursive_with_msg_type(self.service_metaclass.Request)
+        self.node.get_logger().warn(f"dict: {type_dict}")
+        
+        return type_dict
+        
+    def field_type_map_recursive(self, msg_cls):
+        """
+        Return a dict mapping field_name -> type or nested dict for ROS 2 message class.
+        Recursively breaks down nested messages into their base types.
+        """
+        from rosidl_runtime_py import message_to_ordereddict
+
+        # create a dummy instance of the message
+        instance = msg_cls()
+
+        result = {}
+        for name in instance.__slots__:
+            field_val = getattr(instance, name)
+            field_type = type(field_val)
+
+            if hasattr(field_val, '__slots__'):
+                # nested message: recurse
+                result[name.lstrip('_')] = self.field_type_map_recursive(field_type)
+            elif isinstance(field_val, list):
+                # list of primitives or nested messages
+                if len(field_val) > 0 and hasattr(field_val[0], '__slots__'):
+                    result[name.lstrip('_')] = [self.field_type_map_recursive(type(field_val[0]))]
+                else:
+                    # primitive list
+                    result[name.lstrip('_')] = [type(field_val[0]).__name__] if field_val else []
+            else:
+                # primitive type
+                result[name.lstrip('_')] = field_type.__name__
+
+        return result
+        
+        
+    def field_type_map_recursive_with_msg_type(self, msg_cls):
+        """
+        Return a dict mapping field_name -> type info for ROS 2 message class.
+        Nested messages are represented as:
+            { "type": "<package/msg/Type>", "fields": { ... } }
+        Primitives are returned as their ROS type strings.
+        """
+        # create a dummy instance
+        instance = msg_cls()
+
+        result = {}
+        for name in instance.__slots__:
+            field_val = getattr(instance, name)
+            field_name = name.lstrip('_')
+            field_type = type(field_val)
+
+            if hasattr(field_val, '__slots__'):
+                # nested message: include its type and recursively its fields
+                type_str = f"{field_val.__class__.__module__.split('.')[0]}/" \
+                        f"{field_val.__class__.__name__}"
+                result[field_name] = {
+                    "type": type_str,
+                    "fields": self.field_type_map_recursive_with_msg_type(field_type)
+                }
+            elif isinstance(field_val, list):
+                # list of primitives or nested messages
+                if len(field_val) > 0 and hasattr(field_val[0], '__slots__'):
+                    type_str = f"{field_val[0].__class__.__module__.split('.')[0]}/" \
+                            f"{field_val[0].__class__.__name__}"
+                    result[field_name] = {
+                        "type": type_str,
+                        "fields": self.field_type_map_recursive_with_msg_type(type(field_val[0])),
+                        "is_array": True
+                    }
+                else:
+                    # primitive list
+                    result[field_name] = {
+                        "type": type(field_val[0]).__name__ if field_val else "unknown",
+                        "is_array": True
+                    }
+            else:
+                # primitive type
+                result[field_name] = {"type": field_type.__name__}
+
+        return result
+
     @staticmethod
     def get_service_request(service_type):
         try:

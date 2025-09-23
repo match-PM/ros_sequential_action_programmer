@@ -11,6 +11,8 @@ from ros_sequential_action_programmer.submodules.RsapApp_submodules.UserInteract
 from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass
 from typing import Tuple, Any
 from PyQt6.QtCore import Qt, QByteArray, pyqtSignal, QObject, QThread
+from collections import OrderedDict
+
 
 class UserInteractionModes():
     TERMINAL = 1
@@ -28,6 +30,10 @@ class ResultReadySignal(QObject):
     signal = pyqtSignal(bool)
 
 
+class UserInteractionActionData():
+    def __init__(self, text: str) -> None:
+        self.interaction_text:str
+        
 class UserInteractionAction(ActionBaseClass):
 
     MODES = UserInteractionModes()
@@ -42,8 +48,11 @@ class UserInteractionAction(ActionBaseClass):
 
         self.node = node
         self.name = name
-        self.action_text = action_text
         self.interaction_mode = interaction_mode
+        
+        self.request_dict = OrderedDict([('interaction_text', action_text)])
+        self.request = UserInteractionActionData(action_text)
+        
         if name == "":
             self.name = 'UserInteraction'
         self.log_entry={}
@@ -59,14 +68,14 @@ class UserInteractionAction(ActionBaseClass):
         start_time = datetime.now()
 
         if self.interaction_mode == TERMINAL:
-            self.node.get_logger().info(self.action_text)
+            self.node.get_logger().info(self.request.interaction_text)
             self.node.get_logger().info("Enter y/n and press enter to proceed! Waiting for user interaction...")
             user_input = input("Enter something: ")
             if user_input == 'y':
                 exec_success = True
 
         elif self.interaction_mode == GUI:
-            result = self.request_user_interaction(self.action_text)
+            result = self.request_user_interaction(self.request.interaction_text)
             exec_success = result
             # self.node.get_logger().error("User interaction successful10000!")
             # user_dialog = UserInteractionActionDialog(self.action_text)
@@ -83,6 +92,14 @@ class UserInteractionAction(ActionBaseClass):
    
         return exec_success
     
+    def get_request_type(self):
+        type_dict = {'interaction_text': {'type': 'str'}}
+        return type_dict
+    
+    def set_request_from_request_dict(self)-> bool:
+        self.request.interaction_text = self.request_dict['interaction_text']
+        return True
+    
     def request_user_interaction(self, messsage:str)->bool:
         result_holder = {"result": None}
         
@@ -97,14 +114,14 @@ class UserInteractionAction(ActionBaseClass):
         return "UserInteractionAction"
     
     def get_interaction_text(self)->str:
-        return self.action_text
+        return self.request.interaction_text
     
     def set_interaction_text(self, new_text:str):
-        self.action_text = new_text
+        self.request.interaction_text = new_text
         
     def update_log_entry(self, success: bool, start_time: datetime, end_time: datetime, additional_text:str = ""):
         #self.log_entry={}
-        self.log_entry["description"] = self.action_text
+        self.log_entry["description"] = self.request.interaction_text
         self.log_entry["start_time"] = str(start_time.strftime("%Y-%m-%d_%H:%M:%S.%f"))
         self.log_entry["end_time"] = str(end_time.strftime("%Y-%m-%d_%H:%M:%S.%f"))
         self.log_entry["execution_time"] = str(end_time - start_time)
@@ -117,7 +134,11 @@ class UserInteractionAction(ActionBaseClass):
         """
         deepcopy of this class is not possible without this mehtod definition
         """
-        new_instance = UserInteractionAction(node=self.node, interaction_mode=self.interaction_mode, name=f"{self.name}_copy", action_text=self.action_text)
-        
+        new_instance = UserInteractionAction(node=self.node, 
+                                             interaction_mode=self.interaction_mode, 
+                                             name=f"{self.name}_copy", 
+                                             action_text=self.request.interaction_text)
+        new_instance.set_name(f"{self.get_name()}_copy")
+
         return new_instance
     

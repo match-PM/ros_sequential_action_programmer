@@ -399,7 +399,7 @@ class RosSequentialActionProgrammer:
                     )
                 elif isinstance(action, UserInteractionAction):
                     action: UserInteractionAction
-                    action_dict["action_text"] = action.action_text
+                    action_dict["action_text"] = action.request.interaction_text
                     action_dict["interaction_mode"] = action.interaction_mode
 
                 elif isinstance(action, RosActionAction):

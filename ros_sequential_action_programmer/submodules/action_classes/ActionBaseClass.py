@@ -19,6 +19,9 @@ from typing import Tuple, Any
 from ros_sequential_action_programmer.submodules.obj_dict_modules.obj_functions import get_obj_value_from_key, set_obj_value_from_key, get_last_index_value
 from typing import Tuple, Any
 
+from rosidl_parser.definition import BasicType, Array, AbstractNestedType
+from collections import OrderedDict
+
 
 class ActionBaseClass:
     def __init__(self, node: Node,name:str,description:str) -> None:
@@ -35,8 +38,6 @@ class ActionBaseClass:
         self.request_dict = None
         self.default_request = None
 
-
-
         self.log_entry = {}
         
         self._has_breakpoint = False
@@ -45,6 +46,9 @@ class ActionBaseClass:
 
     def get_name(self)-> str:
         return self.name
+    
+    def get_request_dict(self):
+        return self.request_dict
     
     def set_name(self, new_name:str) -> bool:
         try:
@@ -113,6 +117,14 @@ class ActionBaseClass:
     def get_description(self)->str:
         return self._description
     
+    def set_request_dict(self, request_dict:OrderedDict):
+        self.request_dict = request_dict
+        self.request_dict_implicit = request_dict
+    
+    def set_request_from_request_dict(self)-> bool:
+        #return "NotImplemented"
+        return True
+
     def set_request_dict_value_from_key(self, path_key: str, new_value: any, override_to_implicit=False) -> bool:
         """
         This function tries to set the value of the service request given the path_key to the value and a new value.
@@ -217,7 +229,9 @@ class ActionBaseClass:
     def get_response_value_from_key(self, key: str) -> any:
         return get_obj_value_from_key(obj=self.response_dict, path_key=key)
     
-
+    def clear_log_entry(self):
+        self.log_entry = {}
+        
     def set_service_request(self, request: any):
         """
         Warning: The method doesn not check for valid inputs.
@@ -226,3 +240,6 @@ class ActionBaseClass:
         """
         self.request = request
         self.request_dict = message_to_ordereddict(self.request)
+        
+    def get_request_type(self):
+        pass
