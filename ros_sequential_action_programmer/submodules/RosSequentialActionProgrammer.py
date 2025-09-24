@@ -11,6 +11,7 @@ from ros_sequential_action_programmer.submodules.action_classes.ServiceAction im
 from ros_sequential_action_programmer.submodules.action_classes.RosActionAction import RosActionAction
 from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI, TERMINAL
 from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass
+from ros_sequential_action_programmer.submodules.rsap_modules.errors import ActionInitializationError, SetActionRequestError
 
 from ros_sequential_action_programmer.submodules.action_classes.RecomGenerator import RecomGenerator
 from ros_sequential_action_programmer.submodules.rsap_modules.RsapConfig import RsapConfig
@@ -168,22 +169,22 @@ class RosSequentialActionProgrammer:
             service_type = self.get_service_type_for_client(service_client)
 
         if not index > len(self.action_list):
-            new_action = ServiceAction(
-                    node=self.node,
-                    client=service_client,
-                    service_type=service_type,
-                    name=service_name)
-            if new_action.get_init_success():
+            try:
+                new_action = ServiceAction(
+                        node=self.node,
+                        client=service_client,
+                        service_type=service_type,
+                        name=service_name)
+                
                 self.action_list.insert(index, new_action)
-
                 self.current_action_index = index
                 self.node.get_logger().info(f"Inserted Service for {service_client} at {index}")
                 return True
-            else:
-                self.node.get_logger().error(f"Service client: '{service_client}' with srv_type '{service_type}' could not be appended!")
+            
+            except ActionInitializationError as e:
+                self.node.get_logger().error(f"Service client: '{service_client}' with srv_type '{service_type}' could not be appended! {e}")
                 return False
-        else:
-            return False
+
 
     def append_ros_action_to_action_list_at_index(
         self,
@@ -197,19 +198,21 @@ class RosSequentialActionProgrammer:
             pass
 
         if not index > len(self.action_list):
-            new_action = RosActionAction(
-                    node=self.node,
-                    client=action_client,
-                    action_type=action_type,
-                    name=action_name)
-            if new_action.get_init_success():
+            try:
+                new_action = RosActionAction(
+                        node=self.node,
+                        client=action_client,
+                        action_type=action_type,
+                        name=action_name)
+                
                 self.action_list.insert(index, new_action)
 
                 self.current_action_index = index
                 self.node.get_logger().info(f"Inserted Ros Action for {action_client} at {index}")
                 return True
-            else:
-                self.node.get_logger().error(f"Action client: '{action_client}' with action_type '{action_type}' could not be appended!")
+
+            except ActionInitializationError as e:
+                self.node.get_logger().error(f"Service client: '{service_client}' with srv_type '{service_type}' could not be appended! {e}")
                 return False
             
     def append_user_interaction_to_action_list_at_index(
@@ -300,71 +303,66 @@ class RosSequentialActionProgrammer:
         except Exception as e:
             self.node.get_logger().error(f"Error opening file '{file_path}'!")
 
-        if file_data:
-            self.action_file_path = file_path
-            self.folder_path = os.path.dirname(file_path)
-            self.name = file_data["name"]
+        if not file_data:
+            return False
+            
+        self.action_file_path = file_path
+        self.folder_path = os.path.dirname(file_path)
+        self.name = file_data["name"]
 
-            for index, action in enumerate(file_data["action_list"]):
-                if action['action_type'] == 'ServiceAction':
-                    service_client = action["service_client"]
+        for index, action_dict in enumerate(file_data["action_list"]):
+            try:
+                action_dict:dict
+                _request = action_dict.get("request",{})
+                if _request == {}:
+                    _request = action_dict.get("service_request",{})
+                _description = action_dict["description"]
+                _name = action_dict["name"]
+                _type = action_dict['action_type']
+                
+                if _type == 'ServiceAction':
+                    _service_client = action_dict["service_client"]
+                    _service_type = action_dict["service_type"]
 
                     action_from_item = ServiceAction(node=self.node,
-                                                    client=service_client,
-                                                    service_type=action["service_type"],
-                                                    name=action["name"])
-                    if action_from_item.get_init_success():
-                        set_success = action_from_item.set_success_identifier(action["error_identifier"])
-
-                        action_from_item.set_description(action["description"])
-
-                        if not set_success:
-                            self.node.get_logger().error(f"Test1!")
-                            return False
-
-                        self.action_list.append(action_from_item)
-                        set_success = self.process_action_dict_at_index(
-                            index=index,
-                            mode=SET_IMPLICIT_SRV_DICT,
-                            input_impl_dict=action["service_request"],
-                        )
-                        if not set_success:
-                            self.action_list.clear()
-                            self.node.get_logger().error(f"Test2!")
-                            return False
-                        
-                elif action['action_type'] == 'UserInteractionAction':
-                    action_from_item = UserInteractionAction(node=self.node,
-                                                             interaction_mode = action['interaction_mode'],
-                                                             name=action['name'],
-                                                             action_text=action['action_text'])
+                                                    client=_service_client,
+                                                    service_type=_service_type,
+                                                    name=_name)
+                    
+                    set_success = action_from_item.set_success_identifier(action_dict["error_identifier"])
+                    action_from_item.set_description(_description)
+                    action_from_item.set_request_from_dict(_request)
                     self.action_list.append(action_from_item)
-                    action_from_item.set_description(action["description"])
-                    
-                elif action['action_type'] == 'RosActionAction':
 
-                    action_from_item = RosActionAction(node=self.node,
-                                                    client=action["ros_action_client"],
-                                                    action_type=action["ros_action_type"],
-                                                    name=action["name"])
+                elif _type == 'UserInteractionAction':
+                    action_from_item = UserInteractionAction(node=self.node,
+                                                            interaction_mode = action_dict['interaction_mode'],
+                                                            name=_name,
+                                                            action_text=action_dict['action_text'])
+                    action_from_item.set_description(_description)
+                    self.action_list.append(action_from_item)
                     
-                    if action_from_item.get_init_success():
-                        action_from_item.set_description(action["description"])
-                        self.action_list.append(action_from_item)
-                        set_success = self.process_action_dict_at_index(index=index,
-                                                                        mode=SET_IMPLICIT_SRV_DICT,
-                                                                        input_impl_dict=action["action_request"])   
-                        if not set_success:
-                            self.action_list.clear()
-                            return False
+                elif _type == 'RosActionAction':
+                    _ros_action_client = action_dict["ros_action_client"]
+                    _ros_action_type = action_dict["ros_action_type"]
+                    action_from_item = RosActionAction(node = self.node,
+                                                    client = _ros_action_client,
+                                                    action_type = _ros_action_type,
+                                                    name = _name)
+                    
+                    action_from_item.set_description(_description)
+                    action_from_item.set_request_from_dict(_request)
+                    self.action_list.append(action_from_item)
+
                 else:
-                    self.node.get_logger().error(f"Action type '{action['action_type']}' not supported!")
-                    return False
+                    self.node.get_logger().error(f"Action type '{_type}' not supported!")
+                    continue
                 
-            self.node.get_logger().error(f"SUCCEEESS!")
-            return True
-        else:
-            return False
+            except (ActionInitializationError,SetActionRequestError) as e:
+                self.node.get_logger().error(f"{e}. Skipping loading this action")
+            
+        self.node.get_logger().error(f"SUCCEEESS!")
+        return True
 
     def save_to_JSON(self) -> bool:
         """
@@ -394,19 +392,19 @@ class RosSequentialActionProgrammer:
                     action_dict["service_client"] = action.client
                     action_dict["service_type"] = action.service_type
                     action_dict["error_identifier"] = action.service_success_key
-                    action_dict["service_request"] = json.loads(
-                        json.dumps(action.request_dict_implicit)
-                    )
+                    action_dict["request"] = json.loads(json.dumps(action.get_request_as_ordered_dict()))
+                    
                 elif isinstance(action, UserInteractionAction):
                     action: UserInteractionAction
                     action_dict["action_text"] = action.request.interaction_text
                     action_dict["interaction_mode"] = action.interaction_mode
+                    action_dict["request"] = json.loads(json.dumps(action.get_request_as_ordered_dict()))
 
                 elif isinstance(action, RosActionAction):
                     action: RosActionAction
                     action_dict["ros_action_client"] = action.client
                     action_dict["ros_action_type"] = action.action_type
-                    action_dict["action_request"] = json.loads(json.dumps(action.request_dict_implicit))
+                    action_dict["request"] = json.loads(json.dumps(action.get_request_as_ordered_dict()))
                     
                 action_dict["has_breakpoint"] = action.has_breakpoint()
                 action_dict["is_active"] = action.is_active()
@@ -460,10 +458,10 @@ class RosSequentialActionProgrammer:
             
             current_action = self.get_action_at_index(self.current_action_index)
             
-            if isinstance(current_action, ServiceAction):
-                set_success = self.process_action_dict_at_index(self.current_action_index, SET_SRV_DICT)
-                if not set_success:
-                    raise Exception
+            #if isinstance(current_action, ServiceAction):
+                # set_success = self.process_action_dict_at_index(self.current_action_index, SET_SRV_DICT)
+                # if not set_success:
+                #     raise Exception
 
             if not current_action.is_active():
                 self.node.get_logger().info(f"Action {self.get_current_action_name()} is not active!")
@@ -568,42 +566,42 @@ class RosSequentialActionProgrammer:
         """
         return self.get_action_at_index(self.current_action_index).has_breakpoint()
     
-    def get_copy_srv_dict_at_index(self, index: int) -> collections.OrderedDict:
-        """
-        This method returns the service request as a OrderedDict.
-        The dict will be copied so changes to the OrderedDict will not apply to the process action_list.
-        :param index: The index of the action.
-        """
-        try:
-            return_value = copy.deepcopy(self.action_list[index].request_dict)
-            return return_value
-        except Exception as e:
-            return None
+    # def get_copy_srv_dict_at_index(self, index: int) -> collections.OrderedDict:
+    #     """
+    #     This method returns the service request as a OrderedDict.
+    #     The dict will be copied so changes to the OrderedDict will not apply to the process action_list.
+    #     :param index: The index of the action.
+    #     """
+    #     try:
+    #         return_value = copy.deepcopy(self.action_list[index].request_dict)
+    #         return return_value
+    #     except Exception as e:
+    #         return None
 
-    def get_copy_impl_srv_dict_at_index(self, index: int) -> collections.OrderedDict:
-        """
-        This method returns the service request as a OrderedDict.
-        The dict will be copied so changes to the OrderedDict will not apply to the process action_list.
-        :param index: The index of the action.
-        """
-        try:
-            return_value = copy.deepcopy(
-                self.get_action_at_index(index).request_dict_implicit
-            )
-            return return_value
-        except Exception as e:
-            return None
+    # def get_copy_impl_srv_dict_at_index(self, index: int) -> collections.OrderedDict:
+    #     """
+    #     This method returns the service request as a OrderedDict.
+    #     The dict will be copied so changes to the OrderedDict will not apply to the process action_list.
+    #     :param index: The index of the action.
+    #     """
+    #     try:
+    #         return_value = copy.deepcopy(
+    #             self.get_action_at_index(index).request_dict_implicit
+    #         )
+    #         return return_value
+    #     except Exception as e:
+    #         return None
 
-    def set_service_req_from_dict_at_index(self, index: int, dict: collections.OrderedDict
-    ) -> bool:
-        """
-        Tries to set the service request of the service at index. Returns bool for success.
-        """
-        try:
-            set_success = self.action_list[index].set_req_message_from_dict(dict)
-            return set_success
-        except:
-            return False
+    # def set_service_req_from_dict_at_index(self, index: int, dict: collections.OrderedDict
+    # ) -> bool:
+    #     """
+    #     Tries to set the service request of the service at index. Returns bool for success.
+    #     """
+    #     try:
+    #         set_success = self.action_list[index].set_req_message_from_dict(dict)
+    #         return set_success
+    #     except:
+    #         return False
 
     def get_service_responses_list(self) -> list[collections.OrderedDict]:
         """
@@ -730,7 +728,6 @@ class RosSequentialActionProgrammer:
             self.node.get_logger().error(e)
             self.node.get_logger().error(f"Error opening blacklist. Check formatting of '{blacklist_path}'!")
 
-
     def get_all_service_req_res_dict(self, list_of_clients):
         """
         This function returns all dict of service request and responses. 
@@ -838,182 +835,182 @@ class RosSequentialActionProgrammer:
                 return service_type
         return None
 
-    def get_recom_for_action_at_index_for_key(self, index: int, key: str) -> list:
-        # this may be doubled with the loop a bit further down
-        possible_list = self.get_possible_srv_res_fields_at_index(
-            index=index, target_key=key
-        )
-        self.recommendations.append_to_recommendation(
-            {"Service Responses": possible_list}
-        )
-        custom_recom_list = []
-        for category in self.recommendations.get_recommendations():
-            for cat_key, cat_list in category.items():
-                list_of_items = []
-                for item in cat_list:
-                    set_possible = self.process_action_dicts_at_index_from_key(
-                        index=index, key=key, value=item, mode=CHECK_COMPATIBILITY_ONLY
-                    )
-                    if set_possible:
-                        list_of_items.append(item)
-                if list_of_items:
-                    custom_recom_list.append({str(cat_key): list_of_items})
-        return custom_recom_list
+    # def get_recom_for_action_at_index_for_key(self, index: int, key: str) -> list:
+    #     # this may be doubled with the loop a bit further down
+    #     possible_list = self.get_possible_srv_res_fields_at_index(
+    #         index=index, target_key=key
+    #     )
+    #     self.recommendations.append_to_recommendation(
+    #         {"Service Responses": possible_list}
+    #     )
+    #     custom_recom_list = []
+    #     for category in self.recommendations.get_recommendations():
+    #         for cat_key, cat_list in category.items():
+    #             list_of_items = []
+    #             for item in cat_list:
+    #                 set_possible = self.process_action_dicts_at_index_from_key(
+    #                     index=index, key=key, value=item, mode=CHECK_COMPATIBILITY_ONLY
+    #                 )
+    #                 if set_possible:
+    #                     list_of_items.append(item)
+    #             if list_of_items:
+    #                 custom_recom_list.append({str(cat_key): list_of_items})
+    #     return custom_recom_list
 
-    def get_possible_srv_res_fields_at_index(self, index: int, target_key: str) -> list:
-        """
-        Returns a list of valid keys from the service at the index index that are compatible with an given value described by a targed key.
-        """
-        compatible_list = []
-        for ind in range(0, index):
+    # def get_possible_srv_res_fields_at_index(self, index: int, target_key: str) -> list:
+    #     """
+    #     Returns a list of valid keys from the service at the index index that are compatible with an given value described by a targed key.
+    #     """
+    #     compatible_list = []
+    #     for ind in range(0, index):
 
-            if self.get_action_at_index(ind).response_dict is None:
-                dict_to_process = self.get_action_at_index(ind).default_response_dict
-            else:
-                dict_to_process = self.get_action_at_index(ind).response_dict
+    #         if self.get_action_at_index(ind).response_dict is None:
+    #             dict_to_process = self.get_action_at_index(ind).default_response_dict
+    #         else:
+    #             dict_to_process = self.get_action_at_index(ind).response_dict
             
-            key_value_list: list = get_key_value_pairs_from_dict(dict_to_process)
+    #         key_value_list: list = get_key_value_pairs_from_dict(dict_to_process)
 
-            for item in key_value_list:
-                # unfold key value pairs
-                for key, value in item.items():
-                    compatible = self.process_action_dicts_at_index_from_key(
-                        index=index,
-                        key=target_key,
-                        value=value,
-                        mode=CHECK_COMPATIBILITY_ONLY,
-                    )
-                    if compatible:
-                        compatible_list.append(
-                            f"service_response.{ind}-{self.get_action_at_index(ind).name}.{key}"
-                        )
-        return compatible_list
+    #         for item in key_value_list:
+    #             # unfold key value pairs
+    #             for key, value in item.items():
+    #                 compatible = self.process_action_dicts_at_index_from_key(
+    #                     index=index,
+    #                     key=target_key,
+    #                     value=value,
+    #                     mode=CHECK_COMPATIBILITY_ONLY,
+    #                 )
+    #                 if compatible:
+    #                     compatible_list.append(
+    #                         f"service_response.{ind}-{self.get_action_at_index(ind).name}.{key}"
+    #                     )
+    #     return compatible_list
 
-    def process_action_dict_at_index(
-        self, index: int, mode: int, input_impl_dict=None
-    ) -> bool:
+    # def process_action_dict_at_index(
+    #     self, index: int, mode: int, input_impl_dict=None
+    # ) -> bool:
         
-        """
-        This function provides functionality to check/set input_dict for the dict of a action at index specified by the key.
-        Use constants CHECK_COMPATIBILITY_ONLY (=0) or SET_IMPLICIT_SRV_DICT (=1) SET_SRV_DICT (=2).
-        This function can do three things:
-        1. CHECK_COMPATIBILITY_ONLY - Check if the given dict is applicable to the dict of an action at index specified by the key (the dict can also contain references to another action output dict. It checks for compatibility with the default values)
-        2. SET_IMPLICIT_SRV_DICT - Set the implicit dictionary of an action at index to the given dict (The dict can also contain references to another action; compatibility will be checked).
-        3. SET_SRV_DICT - Set the dict (explicit) of an action at index to the input dict (if not given the implicit dict of the action) (this can only be a dict with actual values and should not contain references; function checks for this).
-        """
-        # get a key value list that contains the key to the values of the service request.
-        # because it is the implicit, there might be references to earlier service responses.
-        if input_impl_dict is None:
-            # key_value_list: list = ServiceAction.get_key_value_pairs_from_dict(
-            #     self.action_list[index].request_dict_implicit)
-            key_value_list: list = get_key_value_pairs_from_dict(self.action_list[index].request_dict_implicit)
+    #     """
+    #     This function provides functionality to check/set input_dict for the dict of a action at index specified by the key.
+    #     Use constants CHECK_COMPATIBILITY_ONLY (=0) or SET_IMPLICIT_SRV_DICT (=1) SET_SRV_DICT (=2).
+    #     This function can do three things:
+    #     1. CHECK_COMPATIBILITY_ONLY - Check if the given dict is applicable to the dict of an action at index specified by the key (the dict can also contain references to another action output dict. It checks for compatibility with the default values)
+    #     2. SET_IMPLICIT_SRV_DICT - Set the implicit dictionary of an action at index to the given dict (The dict can also contain references to another action; compatibility will be checked).
+    #     3. SET_SRV_DICT - Set the dict (explicit) of an action at index to the input dict (if not given the implicit dict of the action) (this can only be a dict with actual values and should not contain references; function checks for this).
+    #     """
+    #     # get a key value list that contains the key to the values of the service request.
+    #     # because it is the implicit, there might be references to earlier service responses.
+    #     if input_impl_dict is None:
+    #         # key_value_list: list = ServiceAction.get_key_value_pairs_from_dict(
+    #         #     self.action_list[index].request_dict_implicit)
+    #         key_value_list: list = get_key_value_pairs_from_dict(self.action_list[index].request_dict_implicit)
             
-        else:
-            if not isinstance(input_impl_dict, OrderedDict):
-                input_impl_dict = convert_to_ordered_dict(input_impl_dict)
-            #key_value_list: list = ServiceAction.get_key_value_pairs_from_dict(input_impl_dict)
-            key_value_list: list = get_key_value_pairs_from_dict(input_impl_dict)
-            #self.node.get_logger().warn(f"TEST Input dict: {key_value_list}")
+    #     else:
+    #         if not isinstance(input_impl_dict, OrderedDict):
+    #             input_impl_dict = convert_to_ordered_dict(input_impl_dict)
+    #         #key_value_list: list = ServiceAction.get_key_value_pairs_from_dict(input_impl_dict)
+    #         key_value_list: list = get_key_value_pairs_from_dict(input_impl_dict)
+    #         #self.node.get_logger().warn(f"TEST Input dict: {key_value_list}")
 
-        # By default True, only if an setting or checking fails False is returned
-        process_success = False
+    #     # By default True, only if an setting or checking fails False is returned
+    #     process_success = False
 
-        # if list is empty we can return early
-        if not key_value_list:
-            return True
-        try:
-            # iterate through the list of key value pairs. Look for references to earlier respones.
-            for item in key_value_list:
-                # unfold key value pairs
-                for key, value in item.items():
-                    #self.node._logger.warn(f"TEST Processing {key} with value {value}, mode {mode}")
-                    process_success = self.process_action_dicts_at_index_from_key(
-                        index=index, key=key, value=value, mode=mode
-                    )
-                    if not process_success:
-                        return False
-            return process_success
-        except:
-            return False
+    #     # if list is empty we can return early
+    #     if not key_value_list:
+    #         return True
+    #     try:
+    #         # iterate through the list of key value pairs. Look for references to earlier respones.
+    #         for item in key_value_list:
+    #             # unfold key value pairs
+    #             for key, value in item.items():
+    #                 #self.node._logger.warn(f"TEST Processing {key} with value {value}, mode {mode}")
+    #                 process_success = self.process_action_dicts_at_index_from_key(
+    #                     index=index, key=key, value=value, mode=mode
+    #                 )
+    #                 if not process_success:
+    #                     return False
+    #         return process_success
+    #     except:
+    #         return False
 
-    def process_action_dicts_at_index_from_key(
-        self, index: int, key: str, value: any, mode: int
-    ) -> bool:
-        """
-        This function provides functionality to check/set new_values for a value of a action at index specified by the key.
-        Use constants CHECK_COMPATIBILITY_ONLY (=0) or SET_IMPLICIT_SRV_DICT (=1) SET_SRV_DICT (=2).
-        This function can do three things:
-        1. CHECK_COMPATIBILITY_ONLY - Check if the given value is applicable to the value of an action at index specified by the key (the value can also be a reference to another action output. It checks for compatibility with the default values)
-        2. SET_IMPLICIT_SRV_DICT - Set the value of the implicit dictionary of an action at index specified by the key to the given value (The value can also contain references to another action; compatibility will be checked).
-        3. SET_SRV_DICT - Set the value of the dictionary (explicit) of an action at index specified by the key to the given value (this can only be an actual value and not a reference; function checks for this).
-        """
-        try:
-            set_success = False
-            (
-                is_reference,
-                error_in_reference,
-                ref_index,
-                ref_key,
-            ) = self.check_for_reference(value)
-            if error_in_reference:
-                self.node.get_logger().warn(f"Error in reference '{value}'")
-                return False
+    # def process_action_dicts_at_index_from_key(
+    #     self, index: int, key: str, value: any, mode: int
+    # ) -> bool:
+    #     """
+    #     This function provides functionality to check/set new_values for a value of a action at index specified by the key.
+    #     Use constants CHECK_COMPATIBILITY_ONLY (=0) or SET_IMPLICIT_SRV_DICT (=1) SET_SRV_DICT (=2).
+    #     This function can do three things:
+    #     1. CHECK_COMPATIBILITY_ONLY - Check if the given value is applicable to the value of an action at index specified by the key (the value can also be a reference to another action output. It checks for compatibility with the default values)
+    #     2. SET_IMPLICIT_SRV_DICT - Set the value of the implicit dictionary of an action at index specified by the key to the given value (The value can also contain references to another action; compatibility will be checked).
+    #     3. SET_SRV_DICT - Set the value of the dictionary (explicit) of an action at index specified by the key to the given value (this can only be an actual value and not a reference; function checks for this).
+    #     """
+    #     try:
+    #         set_success = False
+    #         (
+    #             is_reference,
+    #             error_in_reference,
+    #             ref_index,
+    #             ref_key,
+    #         ) = self.check_for_reference(value)
+    #         if error_in_reference:
+    #             self.node.get_logger().warn(f"Error in reference '{value}'")
+    #             return False
 
-            check_value = value
+    #         check_value = value
 
-            current_action = self.get_action_at_index(index)
+    #         current_action = self.get_action_at_index(index)
             
-            if is_reference:
-                if mode == CHECK_COMPATIBILITY_ONLY or mode == SET_IMPLICIT_SRV_DICT:
-                    check_value = current_action.get_default_srv_res_value_from_key(key=ref_key)
-                else:
-                    value = self.get_action_at_index(
-                        ref_index
-                    ).get_srv_res_value_from_key(key=ref_key)
+    #         if is_reference:
+    #             if mode == CHECK_COMPATIBILITY_ONLY or mode == SET_IMPLICIT_SRV_DICT:
+    #                 check_value = current_action.get_default_srv_res_value_from_key(key=ref_key)
+    #             else:
+    #                 value = self.get_action_at_index(
+    #                     ref_index
+    #                 ).get_srv_res_value_from_key(key=ref_key)
 
-            if mode == CHECK_COMPATIBILITY_ONLY:
-                if isinstance(current_action, ServiceAction):
-                    test_action = copy.deepcopy(current_action)
-                    set_success = test_action.set_request_dict_value_from_key(
-                        key, check_value
-                    )
-                    del test_action
+    #         if mode == CHECK_COMPATIBILITY_ONLY:
+    #             if isinstance(current_action, ServiceAction):
+    #                 test_action = copy.deepcopy(current_action)
+    #                 set_success = test_action.set_request_dict_value_from_key(
+    #                     key, check_value
+    #                 )
+    #                 del test_action
 
-            if mode == SET_IMPLICIT_SRV_DICT:
-                if isinstance(current_action, ServiceAction):
-                    test_action = copy.deepcopy(current_action)
-                    #self.node._logger.warn(f"TEST HERE Setting {key} to {check_value}")
-                    set_success = test_action.set_request_dict_value_from_key(
-                        key, check_value
-                    )
-                    del test_action
-                    if set_success:
-                        set_success = current_action.set_request_dict_value_from_key(path_key=key, new_value=value, override_to_implicit=True)
+    #         if mode == SET_IMPLICIT_SRV_DICT:
+    #             if isinstance(current_action, ServiceAction):
+    #                 test_action = copy.deepcopy(current_action)
+    #                 #self.node._logger.warn(f"TEST HERE Setting {key} to {check_value}")
+    #                 set_success = test_action.set_request_dict_value_from_key(
+    #                     key, check_value
+    #                 )
+    #                 del test_action
+    #                 if set_success:
+    #                     set_success = current_action.set_request_dict_value_from_key(path_key=key, new_value=value, override_to_implicit=True)
 
-            if mode == SET_SRV_DICT:
-                if isinstance(current_action, ServiceAction):
-                    #self.node._logger.warn(f"Setting {key} to {value}")
-                    set_success = self.get_action_at_index(
-                        index
-                    ).set_request_dict_value_from_key(path_key=key, new_value=value)
+    #         if mode == SET_SRV_DICT:
+    #             if isinstance(current_action, ServiceAction):
+    #                 #self.node._logger.warn(f"Setting {key} to {value}")
+    #                 set_success = self.get_action_at_index(
+    #                     index
+    #                 ).set_request_dict_value_from_key(path_key=key, new_value=value)
 
-            if not set_success:
-                if not mode == CHECK_COMPATIBILITY_ONLY:
-                    self.node.get_logger().error(
-                        f"In {current_action.name}, failed at setting key '{str(key)}' to value: '{str(value)}' of type '{str(type(value))}'."
-                    )
-                    if is_reference:
-                        self.node.get_logger().error(
-                            f"Action {ref_index}-{self.get_action_at_index(ref_index).name} might not have been executed yet!"
-                        )
-                return False
+    #         if not set_success:
+    #             if not mode == CHECK_COMPATIBILITY_ONLY:
+    #                 self.node.get_logger().error(
+    #                     f"In {current_action.name}, failed at setting key '{str(key)}' to value: '{str(value)}' of type '{str(type(value))}'."
+    #                 )
+    #                 if is_reference:
+    #                     self.node.get_logger().error(
+    #                         f"Action {ref_index}-{self.get_action_at_index(ref_index).name} might not have been executed yet!"
+    #                     )
+    #             return False
 
-            return set_success
-        except Exception as e:
-            self.node.get_logger().error("Failed here")
-            self.node.get_logger().error(f"{e}")
+    #         return set_success
+    #     except Exception as e:
+    #         self.node.get_logger().error("Failed here")
+    #         self.node.get_logger().error(f"{e}")
 
-            return False
+    #         return False
 
     def check_for_reference(self, input_value: any) -> tuple[bool, bool, int, str]:
         """

@@ -31,7 +31,7 @@ class ActionBaseClass:
         self.name = name
 
         self.request = None
-        self.request_dict_implicit = {}
+        #self.request_dict_implicit = {}
         self.response_dict = {}
         self.empty_response = None
         self.default_response_dict = None
@@ -46,9 +46,6 @@ class ActionBaseClass:
 
     def get_name(self)-> str:
         return self.name
-    
-    def get_request_dict(self):
-        return self.request_dict
     
     def set_name(self, new_name:str) -> bool:
         try:
@@ -115,16 +112,21 @@ class ActionBaseClass:
         self._description = new_description
     
     def get_description(self)->str:
-        return self._description
-    
-    def set_request_dict(self, request_dict:OrderedDict):
-        self.request_dict = request_dict
-        self.request_dict_implicit = request_dict
-    
-    def set_request_from_request_dict(self)-> bool:
-        #return "NotImplemented"
-        return True
+        return self._description   
 
+    def get_request_as_ordered_dict(self)->OrderedDict:
+        raise NotImplementedError
+             
+    def set_request_from_dict(self,request_dictionary:Union[dict,OrderedDict]) -> bool:
+        raise NotImplementedError
+    
+    def set_request_from_request(self, new_request:any) -> bool:
+        if not isinstance(self.request, new_request):
+            return False
+        else:
+            self.request = new_request
+            return True
+    
     def set_request_dict_value_from_key(self, path_key: str, new_value: any, override_to_implicit=False) -> bool:
         """
         This function tries to set the value of the service request given the path_key to the value and a new value.
@@ -215,13 +217,10 @@ class ActionBaseClass:
         except:
             self.node.get_logger().debug("Error occured in set_request_dict_value_from_key!")
             return False
-        
-    def get_new_request_obj(self,type:str)->any:
-        raise NotImplementedError
-
-    def update_request_obj_from_dict(self):
-        """Update the ros service message from the dict"""
-        set_message_fields(self.request, self.request_dict)
+    
+    # def update_request_obj_from_dict(self):
+    #     """Update the ros service message from the dict"""
+    #     set_message_fields(self.request, self.request_dict)
 
     def get_default_response_value_from_key(self, key: str) -> any:
         return get_obj_value_from_key(obj=self.default_response_dict, path_key=key)
@@ -232,14 +231,14 @@ class ActionBaseClass:
     def clear_log_entry(self):
         self.log_entry = {}
         
-    def set_service_request(self, request: any):
-        """
-        Warning: The method doesn not check for valid inputs.
-        This method set the service request object of the class from the input parameter request.
-        It also updates the request dict.
-        """
-        self.request = request
-        self.request_dict = message_to_ordereddict(self.request)
+    # def set_service_request(self, request: any):
+    #     """
+    #     Warning: The method doesn not check for valid inputs.
+    #     This method set the service request object of the class from the input parameter request.
+    #     It also updates the request dict.
+    #     """
+    #     self.request = request
+    #     self.request_dict = message_to_ordereddict(self.request)
         
     def get_request_type(self):
-        pass
+        raise NotImplementedError

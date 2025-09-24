@@ -92,13 +92,16 @@ class ActionSequenceListWidget(QListWidget):
         self.setDragDropMode(QListWidget.DragDropMode.InternalMove)
         self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
 
-    
+
     def populate_list(self):
         self.clear()
         for i, action in enumerate(self.rsap_sequence.action_list):
+            
+            #self.rsap_sequence.node.get_logger().error(f"{str(action)}")
+            
             item = QListWidgetItem(self)
             widget = ActionSequenceListItem(number = i + 1, 
-                                            text = action.name,
+                                            text = action.get_name(),
                                             action=action)
             
             # Set style for inactive actions

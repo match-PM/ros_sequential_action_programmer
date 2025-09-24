@@ -12,6 +12,8 @@ from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass 
 from typing import Tuple, Any
 from PyQt6.QtCore import Qt, QByteArray, pyqtSignal, QObject, QThread
 from collections import OrderedDict
+from ros_sequential_action_programmer.submodules.rsap_modules.errors import ActionInitializationError, SetActionRequestError
+from typing import Union
 
 
 class UserInteractionModes():
@@ -32,7 +34,8 @@ class ResultReadySignal(QObject):
 
 class UserInteractionActionData():
     def __init__(self, text: str) -> None:
-        self.interaction_text:str
+        self.interaction_text:str = text
+        
         
 class UserInteractionAction(ActionBaseClass):
 
@@ -50,7 +53,6 @@ class UserInteractionAction(ActionBaseClass):
         self.name = name
         self.interaction_mode = interaction_mode
         
-        self.request_dict = OrderedDict([('interaction_text', action_text)])
         self.request = UserInteractionActionData(action_text)
         
         if name == "":
@@ -96,10 +98,6 @@ class UserInteractionAction(ActionBaseClass):
         type_dict = {'interaction_text': {'type': 'str'}}
         return type_dict
     
-    def set_request_from_request_dict(self)-> bool:
-        self.request.interaction_text = self.request_dict['interaction_text']
-        return True
-    
     def request_user_interaction(self, messsage:str)->bool:
         result_holder = {"result": None}
         
@@ -118,6 +116,17 @@ class UserInteractionAction(ActionBaseClass):
     
     def set_interaction_text(self, new_text:str):
         self.request.interaction_text = new_text
+    
+    def get_request_as_ordered_dict(self)->OrderedDict:
+        dictionary = OrderedDict([('interaction_text', self.request.interaction_text)])
+        return dictionary
+    
+    def set_request_from_dict(self,request_dictionary:Union[dict,OrderedDict]):
+        """Update the ros service message from the dict"""
+        try:
+            self.request.interaction_text = request_dictionary['interaction_text']
+        except Exception as e:
+            raise SetActionRequestError(f"Could not set request from dictionary for {self.get_name()}!")
         
     def update_log_entry(self, success: bool, start_time: datetime, end_time: datetime, additional_text:str = ""):
         #self.log_entry={}

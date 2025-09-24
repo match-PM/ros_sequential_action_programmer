@@ -23,6 +23,10 @@ from rclpy.action import ActionClient
 from typing import Tuple, Any
 
 from rosidl_parser.definition import BasicType, Array, AbstractNestedType, NamespacedType
+from collections import OrderedDict
+from ros_sequential_action_programmer.submodules.action_classes.ros_messages_functions import field_type_map_recursive, field_type_map_recursive_with_msg_type
+from ros_sequential_action_programmer.submodules.rsap_modules.errors import ActionInitializationError, SetActionRequestError
+
 
 STATUS_UNKNOWN = 0
 STATUS_ACCEPTED = 1
@@ -53,7 +57,7 @@ class RosActionAction(ActionBaseClass):
         self.valid = self.check_for_valid_inputs()
 
         if not self.valid:
-           return None
+           raise ActionInitializationError
         
         self.init_action()
         #self.init_service_res_bool_messages()
@@ -187,6 +191,16 @@ class RosActionAction(ActionBaseClass):
     def get_init_success(self)-> bool:
         return self.valid
     
+    def set_request_from_dict(self,request_dictionary:Union[dict,OrderedDict]) -> bool:
+        """Update the ros service message from the dict"""
+        try:
+            set_message_fields(self.request, request_dictionary)
+        except Exception as e:
+            raise SetActionRequestError(f"Could not set request from dictionary for {self.name}!")
+        
+    def get_request_as_ordered_dict(self)->OrderedDict:
+        return message_to_ordereddict(self.request)
+    
     def get_request_type(self):
         # slt = self.service_metaclass.Request.__slots__
         # #slt = ""
@@ -196,8 +210,9 @@ class RosActionAction(ActionBaseClass):
         
         #self.node.get_logger().warn(f"slt: {slt}, type: {type}")
 
-        type_dict = self.field_type_map_recursive_with_msg_type(self.metaclass.Goal)
-        self.node.get_logger().warn(f"dict: {type_dict}")
+        type_dict = field_type_map_recursive_with_msg_type(self.metaclass.Goal)
+        # 
+        self.node.get_logger().warn(f"dict HERE: {type_dict}")
         
         return type_dict
         

@@ -104,13 +104,21 @@
 #     main()
 
 #!/usr/bin/env python3
+#!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionServer, GoalResponse, CancelResponse
-
+from diagnostic_msgs.srv import AddDiagnostics
+from diagnostic_msgs.msg import KeyValue
 from std_srvs.srv import SetBool
 from example_interfaces.action import Fibonacci
-from nav_msgs.srv import GetPlan
+from nav_msgs.srv import GetPlan, GetMap
+from nav_msgs.msg import OccupancyGrid, MapMetaData
+from builtin_interfaces.msg import Time
+
+
+from control_msgs.action import FollowJointTrajectory
+from trajectory_msgs.msg import JointTrajectoryPoint
 
 class SimpleServiceAndActionNode(Node):
     def __init__(self):
@@ -125,13 +133,21 @@ class SimpleServiceAndActionNode(Node):
         )
         self.get_logger().info('Service "toggle_flag" ready.')
 
-        # ---- Service 2: GetPlan (multi-field request) ----
+        # ---- Service 2: GetPlan ----
         self._srv_plan = self.create_service(
             GetPlan,
             'get_plan_demo',
             self.get_plan_callback
         )
         self.get_logger().info('Service "get_plan_demo" ready.')
+
+        # ---- Service 3: GetMap (returns array data) ----
+        self._srv_map = self.create_service(
+            GetMap,
+            'get_map_demo',
+            self.get_map_callback
+        )
+        self.get_logger().info('Service "get_map_demo" ready.')
 
         # ---- Action: Fibonacci ----
         self._action_server = ActionServer(
@@ -144,6 +160,22 @@ class SimpleServiceAndActionNode(Node):
         )
         self.get_logger().info('Action server "fibonacci" ready.')
 
+        self.srv = self.create_service(
+            AddDiagnostics,
+            'add_diagnostics_demo',
+            self.handle_add_diag
+        )
+        
+        self._server = ActionServer(
+            self,
+            FollowJointTrajectory,
+            'follow_joint_trajectory',
+            execute_callback=self.execute_cb,
+            goal_callback=self.goal_cb,
+            cancel_callback=self.cancel_cb
+        )
+        
+        
     # ---------- Service callbacks ----------
     def toggle_flag_callback(self, request, response):
         self._flag = request.data
@@ -153,19 +185,39 @@ class SimpleServiceAndActionNode(Node):
         return response
 
     def get_plan_callback(self, request, response):
-        """
-        Dummy implementation of GetPlan.
-        It simply returns a Path starting at 'start' and ending at 'goal'.
-        """
-        self.get_logger().info(
-            f"Received GetPlan request: tolerance={request.tolerance}"
-        )
-        # Just create a path with the start and goal
         from nav_msgs.msg import Path
         path = Path()
         path.header.frame_id = request.start.header.frame_id
         path.poses = [request.start, request.goal]
         response.plan = path
+        return response
+
+    def get_map_callback(self, request, response):
+        """
+        Dummy implementation of GetMap.
+        Returns a 10x10 occupancy grid with a simple gradient pattern.
+        """
+        grid = OccupancyGrid()
+
+        # Header
+        grid.header.frame_id = "map"
+        grid.header.stamp = self.get_clock().now().to_msg()
+
+        # Map info
+        info = MapMetaData()
+        info.width = 10
+        info.height = 10
+        info.resolution = 0.5  # meters/cell
+        info.origin.position.x = 0.0
+        info.origin.position.y = 0.0
+        info.origin.position.z = 0.0
+        grid.info = info
+
+        # Fill with a gradient from 0 to 100
+        grid.data = [int((x + y) % 100) for y in range(10) for x in range(10)]
+
+        response.map = grid
+        self.get_logger().info("Sent dummy occupancy grid with 100 cells.")
         return response
 
     # ---------- Action callbacks ----------
@@ -211,6 +263,48 @@ class SimpleServiceAndActionNode(Node):
         timer.cancel()
 
 
+    def goal_cb(self, goal_request):
+        # goal_request is FollowJointTrajectory.Goal
+        self.get_logger().info(
+            f"Received goal with joints: {list(goal_request.trajectory.joint_names)} "
+            f"and {len(goal_request.trajectory.points)} trajectory points"
+        )
+        # Always accept in this demo
+        return GoalResponse.ACCEPT
+
+    def cancel_cb(self, goal_handle):
+        self.get_logger().info("Cancel request received.")
+        return CancelResponse.ACCEPT
+
+    async def execute_cb(self, goal_handle):
+        """Pretend to follow the trajectory and immediately succeed."""
+        goal = goal_handle.request
+
+        # Publish a dummy feedback for each point
+        feedback = FollowJointTrajectory.Feedback()
+        for i, point in enumerate(goal.trajectory.points):
+            feedback.joint_names = goal.trajectory.joint_names
+            feedback.desired = point  # Just echo the point
+            goal_handle.publish_feedback(feedback)
+            self.get_logger().info(
+                f"Feedback for point {i}: positions={list(point.positions)}"
+            )
+
+        # Result
+        result = FollowJointTrajectory.Result()
+        result.error_code = 0  # SUCCESS in control_msgs
+        goal_handle.succeed()
+        self.get_logger().info("Trajectory execution finished.")
+        return result
+    
+    def handle_add_diag(self, request, response):
+        self.get_logger().info(f"Namespace: {request.load_namespace}")
+        for kv in request.kvs:
+            self.get_logger().info(f"  {kv.key}: {kv.value}")
+        response.success = True
+        response.message = "Received diagnostics"
+        return response
+    
 def main(args=None):
     rclpy.init(args=args)
     node = SimpleServiceAndActionNode()
@@ -221,6 +315,7 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

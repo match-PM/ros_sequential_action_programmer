@@ -9,11 +9,14 @@ from ros_sequential_action_programmer.submodules.action_classes.UserInteractionA
 from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass
 from PyQt6.QtCore import pyqtSignal
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.RecomButton import RecomButton
+from ros_sequential_action_programmer.submodules.rsap_modules.errors import SetActionRequestError
 
 from typing import Union
 from collections import OrderedDict
 import copy
 import ast
+
+from ros_sequential_action_programmer.submodules.action_classes.ros_messages_functions import resolve_ros_type
 
 class ActionParameterLayout(QWidget):
     actionChanged = pyqtSignal(object)
@@ -62,7 +65,7 @@ class ActionParameterLayout(QWidget):
         req_types = self.action.get_request_type()
 
         self.add_meta_data_info()
-        self.handle_dict = copy.deepcopy(self.action.get_request_dict())
+        self.handle_dict = copy.deepcopy(self.action.get_request_as_ordered_dict())
         #self.populateActionParameterWidgets(self.handle_dict)
         
         disabled_keys = ["start.header.stamp", "start.pose.position.x", "tolerance"]
@@ -73,8 +76,7 @@ class ActionParameterLayout(QWidget):
         
         self.parameter_layout.addWidget(param_editor_wid)
 
-
-        self.logger.error(f"{self.handle_dict}")
+        #self.logger.error(f"{self.handle_dict}")
         
 
     def toggle_action_activation(self):
@@ -187,27 +189,14 @@ class ActionParameterLayout(QWidget):
         # Apply values to service request dict
         self.action.set_name(self.action_name_edit.text())
         
-        _old_dict = copy.deepcopy(self.action.get_request_dict())
+        _old_dict = copy.deepcopy(self.action.get_request_as_ordered_dict())
         
         # set the request_dict
-        self.action.set_request_dict(self.handle_dict)
-
-        # set the request obj from the request
-        set_success = self.action.set_request_from_request_dict()
-        
-        if not set_success:
-            #set back to old dict
+        try:
+            self.action.set_request_from_dict(self.handle_dict)
+        except SetActionRequestError as e:
             self.action.set_request_dict(_old_dict)
             self.logger.error(f"Setting failed")         
-        
-        
-        # if isinstance(self.action, ServiceAction):
-        #     set_success = self.action_sequence_builder.process_action_dict_at_index(index=index,mode=SET_IMPLICIT_SRV_DICT, input_impl_dict=self.handle_dict)
-
-        #     if set_success and set_error_identifier_success:
-        #         self.text_output.append("Success changing values!")
-        #     else:
-        #         self.text_output.append_red_text("Error occured changing changes!")
         
         self.actionChanged.emit(self.action)
 
@@ -292,38 +281,147 @@ class ROS2DictEditor(QWidget):
         self.setLayout(layout)
         self.setWindowTitle("ROS2 Message Editor")
         
+    # def build_layout(self, type_dict, value_dict, parent_layout, parent_path=""):
+    #     if type_dict is None:
+    #         return
+    #     for key, val_type in type_dict.items():
+    #         field_name = key.capitalize()
+    #         full_path = f"{parent_path}.{key}" if parent_path else key
+
+    #         is_disabled = self.check_disabled(full_path, self.disabled_keys)
+
+    #         if 'fields' in val_type:
+    #             # Nested message -> header with label + button
+    #             header_layout = QHBoxLayout()
+    #             label = QLabel(field_name)
+    #             label.setToolTip(val_type['type'])
+    #             header_layout.addWidget(label)
+
+    #             if full_path in self.disabled_keys:
+    #                 btn_text = "-"  # disabled top-level field
+    #             elif any(full_path.startswith(k + ".") for k in self.disabled_keys):
+    #                 btn_text = "×"  # disabled child
+    #             else:
+    #                 btn_text = "+"
+                    
+    #             btn = ReferenceButton(btn_text,
+    #                               val_type=val_type['type'])
+    #             if btn_text == "×":
+    #                 btn.setDisabled(True)
+    #             else:
+    #                 btn.setDisabled(False)
+                    
+    #             btn.clicked.connect(lambda k=full_path: print(f"Group button clicked: {k}"))
+    #             header_layout.addWidget(btn)
+
+    #             group = QGroupBox()
+    #             group.setLayout(QVBoxLayout())
+    #             parent_layout.addWidget(group)
+    #             group.layout().addLayout(header_layout)
+
+    #             self.build_layout(val_type['fields'], value_dict[key], group.layout(), full_path)
+
+    #         else:
+    #             # Primitive field
+    #             hlayout = QHBoxLayout()
+    #             label = QLabel(field_name)
+    #             label.setToolTip(val_type['type'])
+    #             hlayout.addWidget(label)
+
+    #             typ = val_type['type']
+    #             widget = None
+
+    #             if typ == 'int':
+    #                 widget = QSpinBox()
+    #                 widget.setValue(value_dict[key])
+    #                 widget.setDisabled(is_disabled)
+    #                 widget.setMinimum(-1_000_000_000)   # allow negative numbers
+    #                 widget.setMaximum(1_000_000_000)    # optional upper limit
+    #                 widget.valueChanged.connect(lambda val, d=value_dict, k=key: d.__setitem__(k, val))
+    #             elif typ == 'float':
+    #                 widget = QDoubleSpinBox()
+    #                 widget.setDecimals(6)
+    #                 widget.setValue(value_dict[key])
+    #                 widget.setDisabled(is_disabled)
+    #                 widget.setMinimum(-1_000_000_000)   # allow negative numbers
+    #                 widget.setMaximum(1_000_000_000)    # optional upper limit
+    #                 widget.valueChanged.connect(lambda val, d=value_dict, k=key: d.__setitem__(k, val))
+    #             elif typ == 'str':
+    #                 widget = QLineEdit()
+    #                 widget.setText(value_dict[key])
+    #                 widget.setDisabled(is_disabled)
+    #                 widget.textChanged.connect(lambda val, d=value_dict, k=key: d.__setitem__(k, val))
+    #             elif typ == 'bool':
+    #                 widget = QCheckBox()
+    #                 widget.setChecked(value_dict[key])
+    #                 widget.setDisabled(is_disabled)
+    #                 widget.stateChanged.connect(lambda val, d=value_dict, k=key: d.__setitem__(k, bool(val)))
+    #             else:
+    #                 widget = QLabel(f"Unsupported type: {typ}")
+
+    #             hlayout.addWidget(widget)
+
+    #             btn_text = "×" if is_disabled else "+"
+    #             btn = ReferenceButton(btn_text,val_type=typ)
+    #             btn.setDisabled(is_disabled)
+    #             btn.clicked.connect(lambda k=full_path: print(f"Field button clicked: {k}"))
+    #             hlayout.addWidget(btn)
+
+    #             parent_layout.addLayout(hlayout)
+        
     def build_layout(self, type_dict, value_dict, parent_layout, parent_path=""):
         if type_dict is None:
             return
+
+        MAX = 2_147_483_640
+
+        int_type_bounds = {
+            'int8': (-128, 127),
+            'uint8': (0, 255),
+            'int16': (-32_768, 32_767),
+            'uint16': (0, 65_535),
+            'int32': (-MAX, MAX),
+            'uint32': (0, MAX),
+            'int64': (-MAX, MAX),
+            'uint64': (0, MAX)
+        }
+
+        float_type_bounds = {
+            'float32': (-MAX, MAX),
+            'float64': (-MAX, MAX),
+            'float': (-MAX, MAX),
+            'double': (-MAX, MAX),
+        }
+
         for key, val_type in type_dict.items():
             field_name = key.capitalize()
             full_path = f"{parent_path}.{key}" if parent_path else key
-
             is_disabled = self.check_disabled(full_path, self.disabled_keys)
 
             if 'fields' in val_type:
-                # Nested message -> header with label + button
+                # Nested message
                 header_layout = QHBoxLayout()
                 label = QLabel(field_name)
                 label.setToolTip(val_type['type'])
                 header_layout.addWidget(label)
 
                 if full_path in self.disabled_keys:
-                    btn_text = "-"  # disabled top-level field
+                    btn_text = "-"  # disabled top-level
                 elif any(full_path.startswith(k + ".") for k in self.disabled_keys):
                     btn_text = "×"  # disabled child
                 else:
                     btn_text = "+"
-                    
-                btn = ReferenceButton(btn_text,
-                                  val_type=val_type['type'])
-                if btn_text == "×":
-                    btn.setDisabled(True)
-                else:
-                    btn.setDisabled(False)
-                    
+
+                btn = ReferenceButton(btn_text, val_type=val_type['type'])
+                btn.setDisabled(btn_text == "×")
                 btn.clicked.connect(lambda k=full_path: print(f"Group button clicked: {k}"))
                 header_layout.addWidget(btn)
+
+                # Array button for nested array of messages
+                if val_type.get('is_array', False):
+                    array_btn = ReferenceButton(f"Array[{val_type['type']}]", val_type=val_type['type'])
+                    array_btn.setDisabled(is_disabled)
+                    header_layout.addWidget(array_btn)
 
                 group = QGroupBox()
                 group.setLayout(QVBoxLayout())
@@ -341,39 +439,53 @@ class ROS2DictEditor(QWidget):
 
                 typ = val_type['type']
                 widget = None
-
-                if typ == 'int':
+                
+                # Array button for nested array of messages
+                if val_type.get('is_array', False):
+                    array_btn = ReferenceButton(f"Array[{val_type['type']}]", val_type=val_type['type'])
+                    array_btn.setDisabled(is_disabled)
+                    hlayout.addWidget(array_btn)
+                    continue
+                
+                if typ in int_type_bounds:
                     widget = QSpinBox()
+                    min_val, max_val = int_type_bounds[typ]
+                    widget.setMinimum(min_val)
+                    widget.setMaximum(max_val)
                     widget.setValue(value_dict[key])
                     widget.setDisabled(is_disabled)
-                    widget.setMinimum(-1_000_000_000)   # allow negative numbers
-                    widget.setMaximum(1_000_000_000)    # optional upper limit
                     widget.valueChanged.connect(lambda val, d=value_dict, k=key: d.__setitem__(k, val))
-                elif typ == 'float':
+
+                elif typ in float_type_bounds:
                     widget = QDoubleSpinBox()
+                    min_val, max_val = float_type_bounds[typ]
                     widget.setDecimals(6)
+                    widget.setMinimum(min_val)
+                    widget.setMaximum(max_val)
                     widget.setValue(value_dict[key])
                     widget.setDisabled(is_disabled)
-                    widget.setMinimum(-1_000_000_000)   # allow negative numbers
-                    widget.setMaximum(1_000_000_000)    # optional upper limit
                     widget.valueChanged.connect(lambda val, d=value_dict, k=key: d.__setitem__(k, val))
-                elif typ == 'str':
+
+                elif typ == 'string' or typ == 'str':
                     widget = QLineEdit()
                     widget.setText(value_dict[key])
                     widget.setDisabled(is_disabled)
                     widget.textChanged.connect(lambda val, d=value_dict, k=key: d.__setitem__(k, val))
-                elif typ == 'bool':
+
+                elif typ == 'bool' or typ == 'boolean':
                     widget = QCheckBox()
                     widget.setChecked(value_dict[key])
                     widget.setDisabled(is_disabled)
                     widget.stateChanged.connect(lambda val, d=value_dict, k=key: d.__setitem__(k, bool(val)))
+
                 else:
                     widget = QLabel(f"Unsupported type: {typ}")
 
                 hlayout.addWidget(widget)
 
-                btn_text = "×" if is_disabled else "…"
-                btn = ReferenceButton(btn_text,val_type=typ)
+                # Field button
+                btn_text = "×" if is_disabled else "+"
+                btn = ReferenceButton(btn_text, val_type=typ)
                 btn.setDisabled(is_disabled)
                 btn.clicked.connect(lambda k=full_path: print(f"Field button clicked: {k}"))
                 hlayout.addWidget(btn)
