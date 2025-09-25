@@ -1,5 +1,6 @@
-from PyQt6.QtWidgets import QScrollArea, QMessageBox, QDialog, QHBoxLayout, QDialog, QInputDialog, QTreeWidget, QTreeWidgetItem, QApplication, QGridLayout, QFrame, QMainWindow, QListWidget, QListWidgetItem, QDoubleSpinBox, QWidget, QVBoxLayout, QPushButton, QCheckBox, QLineEdit, QComboBox, QTextEdit,QLabel,QSlider, QSpinBox, QFontDialog, QFileDialog, QGroupBox
+from PyQt6.QtWidgets import QScrollArea, QMessageBox, QDialog, QHBoxLayout, QDialog, QInputDialog, QTreeWidget, QTreeWidgetItem, QApplication, QGridLayout, QFrame, QMainWindow, QListWidget, QListWidgetItem, QDoubleSpinBox, QWidget, QVBoxLayout, QPushButton, QCheckBox, QLineEdit, QComboBox, QTextEdit,QLabel,QSlider, QSpinBox, QFontDialog, QFileDialog, QGroupBox, QSizePolicy
 
+    
 from PyQt6.QtGui import QColor, QTextCursor, QFont, QAction
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.NoScrollComboBox import NoScrollComboBox
 
@@ -15,6 +16,7 @@ from typing import Union
 from collections import OrderedDict
 import copy
 import ast
+from functools import partial
 
 from ros_sequential_action_programmer.submodules.action_classes.ros_messages_functions import resolve_ros_type
 
@@ -268,7 +270,19 @@ class ActionParameterLayout(QWidget):
     #         widget.setText(selected_value)
     #         print(f"Selected value: {selected_value}")
             
-            
+
+MAX = 2_147_483_640
+INT_TYPE_BOUNDS = {
+    'int8': (-128, 127), 'uint8': (0, 255),
+    'int16': (-32_768, 32_767), 'uint16': (0, 65_535),
+    'int32': (-MAX, MAX), 'uint32': (0, MAX),
+    'int64': (-MAX, MAX), 'uint64': (0, MAX)
+}
+FLOAT_TYPE_BOUNDS = {
+    'float32': (-MAX, MAX), 'float64': (-MAX, MAX),
+    'float': (-MAX, MAX), 'double': (-MAX, MAX),
+}
+
 class ROS2DictEditor(QWidget):
     def __init__(self, types_dict, values_dict, disabled_keys=None):
         super().__init__()
@@ -276,160 +290,61 @@ class ROS2DictEditor(QWidget):
         self.values_dict = values_dict
         self.disabled_keys = set(disabled_keys or [])
 
-        layout = QVBoxLayout()
-        self.build_layout(types_dict, values_dict, layout)
-        self.setLayout(layout)
+        main_layout = QVBoxLayout()
+        self.build_layout(types_dict, values_dict, main_layout)
+        self.setLayout(main_layout)
         self.setWindowTitle("ROS2 Message Editor")
-        
-    # def build_layout(self, type_dict, value_dict, parent_layout, parent_path=""):
-    #     if type_dict is None:
-    #         return
-    #     for key, val_type in type_dict.items():
-    #         field_name = key.capitalize()
-    #         full_path = f"{parent_path}.{key}" if parent_path else key
 
-    #         is_disabled = self.check_disabled(full_path, self.disabled_keys)
-
-    #         if 'fields' in val_type:
-    #             # Nested message -> header with label + button
-    #             header_layout = QHBoxLayout()
-    #             label = QLabel(field_name)
-    #             label.setToolTip(val_type['type'])
-    #             header_layout.addWidget(label)
-
-    #             if full_path in self.disabled_keys:
-    #                 btn_text = "-"  # disabled top-level field
-    #             elif any(full_path.startswith(k + ".") for k in self.disabled_keys):
-    #                 btn_text = "×"  # disabled child
-    #             else:
-    #                 btn_text = "+"
-                    
-    #             btn = ReferenceButton(btn_text,
-    #                               val_type=val_type['type'])
-    #             if btn_text == "×":
-    #                 btn.setDisabled(True)
-    #             else:
-    #                 btn.setDisabled(False)
-                    
-    #             btn.clicked.connect(lambda k=full_path: print(f"Group button clicked: {k}"))
-    #             header_layout.addWidget(btn)
-
-    #             group = QGroupBox()
-    #             group.setLayout(QVBoxLayout())
-    #             parent_layout.addWidget(group)
-    #             group.layout().addLayout(header_layout)
-
-    #             self.build_layout(val_type['fields'], value_dict[key], group.layout(), full_path)
-
-    #         else:
-    #             # Primitive field
-    #             hlayout = QHBoxLayout()
-    #             label = QLabel(field_name)
-    #             label.setToolTip(val_type['type'])
-    #             hlayout.addWidget(label)
-
-    #             typ = val_type['type']
-    #             widget = None
-
-    #             if typ == 'int':
-    #                 widget = QSpinBox()
-    #                 widget.setValue(value_dict[key])
-    #                 widget.setDisabled(is_disabled)
-    #                 widget.setMinimum(-1_000_000_000)   # allow negative numbers
-    #                 widget.setMaximum(1_000_000_000)    # optional upper limit
-    #                 widget.valueChanged.connect(lambda val, d=value_dict, k=key: d.__setitem__(k, val))
-    #             elif typ == 'float':
-    #                 widget = QDoubleSpinBox()
-    #                 widget.setDecimals(6)
-    #                 widget.setValue(value_dict[key])
-    #                 widget.setDisabled(is_disabled)
-    #                 widget.setMinimum(-1_000_000_000)   # allow negative numbers
-    #                 widget.setMaximum(1_000_000_000)    # optional upper limit
-    #                 widget.valueChanged.connect(lambda val, d=value_dict, k=key: d.__setitem__(k, val))
-    #             elif typ == 'str':
-    #                 widget = QLineEdit()
-    #                 widget.setText(value_dict[key])
-    #                 widget.setDisabled(is_disabled)
-    #                 widget.textChanged.connect(lambda val, d=value_dict, k=key: d.__setitem__(k, val))
-    #             elif typ == 'bool':
-    #                 widget = QCheckBox()
-    #                 widget.setChecked(value_dict[key])
-    #                 widget.setDisabled(is_disabled)
-    #                 widget.stateChanged.connect(lambda val, d=value_dict, k=key: d.__setitem__(k, bool(val)))
-    #             else:
-    #                 widget = QLabel(f"Unsupported type: {typ}")
-
-    #             hlayout.addWidget(widget)
-
-    #             btn_text = "×" if is_disabled else "+"
-    #             btn = ReferenceButton(btn_text,val_type=typ)
-    #             btn.setDisabled(is_disabled)
-    #             btn.clicked.connect(lambda k=full_path: print(f"Field button clicked: {k}"))
-    #             hlayout.addWidget(btn)
-
-    #             parent_layout.addLayout(hlayout)
-        
     def build_layout(self, type_dict, value_dict, parent_layout, parent_path=""):
         if type_dict is None:
             return
-
-        MAX = 2_147_483_640
-
-        int_type_bounds = {
-            'int8': (-128, 127),
-            'uint8': (0, 255),
-            'int16': (-32_768, 32_767),
-            'uint16': (0, 65_535),
-            'int32': (-MAX, MAX),
-            'uint32': (0, MAX),
-            'int64': (-MAX, MAX),
-            'uint64': (0, MAX)
-        }
-
-        float_type_bounds = {
-            'float32': (-MAX, MAX),
-            'float64': (-MAX, MAX),
-            'float': (-MAX, MAX),
-            'double': (-MAX, MAX),
-        }
 
         for key, val_type in type_dict.items():
             field_name = key.capitalize()
             full_path = f"{parent_path}.{key}" if parent_path else key
             is_disabled = self.check_disabled(full_path, self.disabled_keys)
 
+            # ---------- ARRAY HANDLING ----------
+            if val_type.get('is_array', False):
+                if key not in value_dict or not isinstance(value_dict[key], list):
+                    value_dict[key] = []
+
+                array_group = QGroupBox(field_name)
+                array_layout = QVBoxLayout()
+                array_group.setLayout(array_layout)
+                parent_layout.addWidget(array_group)
+
+                add_btn = QPushButton(f"Edit {val_type['type']}[]")
+                add_btn.setDisabled(is_disabled)
+                array_layout.addWidget(add_btn)
+
+                def open_editor(k, t, _checked=False):
+                    dlg = ArrayEditDialog(self, value_dict[k], t)
+                    dlg.resize(500, 400)  # give a decent initial size
+                    dlg.exec()
+
+                add_btn.clicked.connect(partial(open_editor, key, val_type))
+                continue
+            # ---------- END ARRAY HANDLING ----------
+
+            # nested message (non-array)
             if 'fields' in val_type:
-                # Nested message
                 header_layout = QHBoxLayout()
                 label = QLabel(field_name)
                 label.setToolTip(val_type['type'])
                 header_layout.addWidget(label)
-
-                if full_path in self.disabled_keys:
-                    btn_text = "-"  # disabled top-level
-                elif any(full_path.startswith(k + ".") for k in self.disabled_keys):
-                    btn_text = "×"  # disabled child
-                else:
-                    btn_text = "+"
-
-                btn = ReferenceButton(btn_text, val_type=val_type['type'])
-                btn.setDisabled(btn_text == "×")
-                btn.clicked.connect(lambda k=full_path: print(f"Group button clicked: {k}"))
-                header_layout.addWidget(btn)
-
-                # Array button for nested array of messages
-                if val_type.get('is_array', False):
-                    array_btn = ReferenceButton(f"Array[{val_type['type']}]", val_type=val_type['type'])
-                    array_btn.setDisabled(is_disabled)
-                    header_layout.addWidget(array_btn)
 
                 group = QGroupBox()
                 group.setLayout(QVBoxLayout())
                 parent_layout.addWidget(group)
                 group.layout().addLayout(header_layout)
 
-                self.build_layout(val_type['fields'], value_dict[key], group.layout(), full_path)
-
+                self.build_layout(
+                    val_type['fields'],
+                    value_dict.setdefault(key, {}),
+                    group.layout(),
+                    full_path
+                )
             else:
                 # Primitive field
                 hlayout = QHBoxLayout()
@@ -438,67 +353,148 @@ class ROS2DictEditor(QWidget):
                 hlayout.addWidget(label)
 
                 typ = val_type['type']
-                widget = None
-                
-                # Array button for nested array of messages
-                if val_type.get('is_array', False):
-                    array_btn = ReferenceButton(f"Array[{val_type['type']}]", val_type=val_type['type'])
-                    array_btn.setDisabled(is_disabled)
-                    hlayout.addWidget(array_btn)
-                    continue
-                
-                if typ in int_type_bounds:
+                if typ in INT_TYPE_BOUNDS:
                     widget = QSpinBox()
-                    min_val, max_val = int_type_bounds[typ]
-                    widget.setMinimum(min_val)
-                    widget.setMaximum(max_val)
-                    widget.setValue(value_dict[key])
-                    widget.setDisabled(is_disabled)
-                    widget.valueChanged.connect(lambda val, d=value_dict, k=key: d.__setitem__(k, val))
-
-                elif typ in float_type_bounds:
+                    widget.setRange(*INT_TYPE_BOUNDS[typ])
+                    widget.setValue(value_dict.get(key, 0))
+                    widget.valueChanged.connect(lambda v, d=value_dict, k=key: d.__setitem__(k, v))
+                elif typ in FLOAT_TYPE_BOUNDS:
                     widget = QDoubleSpinBox()
-                    min_val, max_val = float_type_bounds[typ]
                     widget.setDecimals(6)
-                    widget.setMinimum(min_val)
-                    widget.setMaximum(max_val)
-                    widget.setValue(value_dict[key])
-                    widget.setDisabled(is_disabled)
-                    widget.valueChanged.connect(lambda val, d=value_dict, k=key: d.__setitem__(k, val))
-
-                elif typ == 'string' or typ == 'str':
-                    widget = QLineEdit()
-                    widget.setText(value_dict[key])
-                    widget.setDisabled(is_disabled)
-                    widget.textChanged.connect(lambda val, d=value_dict, k=key: d.__setitem__(k, val))
-
-                elif typ == 'bool' or typ == 'boolean':
+                    widget.setRange(*FLOAT_TYPE_BOUNDS[typ])
+                    widget.setValue(value_dict.get(key, 0.0))
+                    widget.valueChanged.connect(lambda v, d=value_dict, k=key: d.__setitem__(k, v))
+                elif typ in ('string', 'str'):
+                    widget = QLineEdit(value_dict.get(key, ""))
+                    widget.textChanged.connect(lambda v, d=value_dict, k=key: d.__setitem__(k, v))
+                elif typ in ('bool', 'boolean'):
                     widget = QCheckBox()
-                    widget.setChecked(value_dict[key])
-                    widget.setDisabled(is_disabled)
-                    widget.stateChanged.connect(lambda val, d=value_dict, k=key: d.__setitem__(k, bool(val)))
-
+                    widget.setChecked(value_dict.get(key, False))
+                    widget.stateChanged.connect(lambda v, d=value_dict, k=key: d.__setitem__(k, bool(v)))
                 else:
                     widget = QLabel(f"Unsupported type: {typ}")
 
+                widget.setDisabled(is_disabled)
                 hlayout.addWidget(widget)
-
-                # Field button
-                btn_text = "×" if is_disabled else "+"
-                btn = ReferenceButton(btn_text, val_type=typ)
-                btn.setDisabled(is_disabled)
-                btn.clicked.connect(lambda k=full_path: print(f"Field button clicked: {k}"))
-                hlayout.addWidget(btn)
-
                 parent_layout.addLayout(hlayout)
 
     def check_disabled(self, full_path, disabled_keys):
-        for key in disabled_keys:
-            if full_path == key or full_path.startswith(key + "."):
-                return True
-        return False
+        return any(full_path == k or full_path.startswith(k + ".") for k in disabled_keys)
 
-                
+
+class ArrayEditDialog(QDialog):
+    """Now includes a scroll area to handle many elements."""
+    def __init__(self, parent, arr, val_type):
+        super().__init__(parent)
+        self.setWindowTitle("Edit Array")
+        self.arr = arr
+        self.val_type = val_type
+
+        # Outer layout for dialog
+        self.main_layout = QVBoxLayout(self)
+
+        # ---- Scroll area ----
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll_content = QWidget()
+        self.rows_layout = QVBoxLayout(self.scroll_content)
+        self.scroll.setWidget(self.scroll_content)
+        self.main_layout.addWidget(self.scroll)
+
+        self.refresh_rows()
+
+        add_btn = QPushButton("Add element")
+        add_btn.clicked.connect(self.add_element)
+        self.main_layout.addWidget(add_btn)
+
+        close_btn = QPushButton("Done")
+        close_btn.clicked.connect(self.accept)
+        self.main_layout.addWidget(close_btn)
+
+    def refresh_rows(self):
+        def clear_layout(layout):
+            while layout.count():
+                item = layout.takeAt(0)
+                w = item.widget()
+                l = item.layout()
+                if w:
+                    w.deleteLater()
+                elif l:
+                    clear_layout(l)
+
+        self.scroll_content.setUpdatesEnabled(False)
+        clear_layout(self.rows_layout)
+
+        for i, val in enumerate(self.arr):
+            row_box = QGroupBox(f"Element {i}")
+            row_v = QVBoxLayout(row_box)
+
+            rm_btn = QPushButton("Remove")
+            rm_btn.clicked.connect(lambda _, idx=i: self.remove(idx))
+            row_v.addWidget(rm_btn)
+
+            if 'fields' in self.val_type:
+                if not isinstance(self.arr[i], dict):
+                    self.arr[i] = {}
+                nested_editor = ROS2DictEditor(
+                    self.val_type['fields'],
+                    self.arr[i]
+                )
+                # allow the nested editor to shrink/grow nicely
+                nested_editor.setSizePolicy(QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed))
+                row_v.addWidget(nested_editor)
+            else:
+                row_v.addLayout(self._primitive_editor(i, val))
+
+            self.rows_layout.addWidget(row_box)
+
+        self.scroll_content.setUpdatesEnabled(True)
+
+    def _primitive_editor(self, i, val):
+        layout = QHBoxLayout()
+        typ = self.val_type['type']
+        if typ in INT_TYPE_BOUNDS:
+            w = QSpinBox()
+            w.setRange(*INT_TYPE_BOUNDS[typ])
+            w.setValue(val)
+            w.valueChanged.connect(lambda v, idx=i: self.arr.__setitem__(idx, v))
+        elif typ in FLOAT_TYPE_BOUNDS:
+            w = QDoubleSpinBox()
+            w.setDecimals(6)
+            w.setRange(*FLOAT_TYPE_BOUNDS[typ])
+            w.setValue(val)
+            w.valueChanged.connect(lambda v, idx=i: self.arr.__setitem__(idx, v))
+        elif typ in ('string', 'str'):
+            w = QLineEdit(val)
+            w.textChanged.connect(lambda v, idx=i: self.arr.__setitem__(idx, v))
+        elif typ in ('bool', 'boolean'):
+            w = QCheckBox()
+            w.setChecked(val)
+            w.stateChanged.connect(lambda v, idx=i: self.arr.__setitem__(idx, bool(v)))
+        else:
+            w = QLabel(f"Unsupported: {typ}")
+        layout.addWidget(w)
+        return layout
+
+    def add_element(self):
+        if 'fields' in self.val_type:
+            self.arr.append({})
+        else:
+            t = self.val_type['type']
+            if t in INT_TYPE_BOUNDS or t in FLOAT_TYPE_BOUNDS:
+                self.arr.append(0)
+            elif t in ('string', 'str'):
+                self.arr.append("")
+            elif t in ('bool', 'boolean'):
+                self.arr.append(False)
+            else:
+                self.arr.append(None)
+        self.refresh_rows()
+
+    def remove(self, idx):
+        self.arr.pop(idx)
+        self.refresh_rows()
+        
 class ReferenceButton(QPushButton):
     def __init__(self, 
                  text='+', 
