@@ -12,10 +12,11 @@ from ros_sequential_action_programmer.submodules.action_classes.RosActionAction 
 from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI, TERMINAL
 from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass
 from ros_sequential_action_programmer.submodules.rsap_modules.errors import ActionInitializationError, SetActionRequestError
-
-from ros_sequential_action_programmer.submodules.action_classes.RecomGenerator import RecomGenerator
+from ros_sequential_action_programmer.submodules.rsap_modules.RsapFileManager import RsapFileManager
 from ros_sequential_action_programmer.submodules.rsap_modules.RsapConfig import RsapConfig
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.rsap_signals import IncomingLogSignal, ExecutionStatusSignal, CurrentActionSignal
+from ros_sequential_action_programmer.submodules.rsap_modules.ActionParameterValueManager import ActionParameterValueManager
+
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from ros_sequential_action_programmer.submodules.rsap_modules.RsapConfig import ExecutionLog
 import json
@@ -40,14 +41,15 @@ SET_SRV_DICT = 2
 
 class RosSequentialActionProgrammer:
     def __init__(self, node: Node) -> None:
-        self.name = None
         self.action_list: list[ServiceAction,UserInteractionAction] = []
         self.node = node
-        self.folder_path = None
-        self.action_file_path = None
         self.current_action_index = 0
         self.current_action = None
 
+        self.rsap_file_manager = RsapFileManager(self.action_list, self.node)
+        self.action_parameter_value_manager = ActionParameterValueManager(self.action_list, 
+                                                                          self.node)
+        
         self.list_of_active_services = None
         self.list_of_active_clients = None
         self._list_of_service_types = None
@@ -57,7 +59,6 @@ class RosSequentialActionProgrammer:
         self.initialize_ros_action_list()
         self.action_sequence_log = {}
         self.action_log = []
-        self.recommendations = RecomGenerator(node)
         self.config = RsapConfig('ros_sequential_action_programmer', self.node.get_logger())
         self.log_subscription = self.node.create_subscription(Log, "/rosout", self.log_callback, 10, callback_group=self.callback_group_reentrant)
         self._init_signals()
@@ -268,167 +269,6 @@ class RosSequentialActionProgrammer:
         else:
             return False
 
-    # def get_service_req_from_dict(
-    #     self, client: str, dict: dict, service_type=None
-    # ) -> any:
-    #     """
-    #     This function returns a service request object given the client and a dict.
-    #     If the client is not spinning when calling this function, you also have to specify the service_type.
-    #     The dict has to have the appropriate structure or the function will return 'None'.
-    #     """
-    #     if service_type is None:
-    #         service_type = self.get_service_type_for_client(client)
-    #     try:
-    #         service_request = ServiceAction.get_service_request(service_type)
-    #         service_ordered_dict = collections.OrderedDict(dict)
-    #         set_message_fields(service_request, service_ordered_dict)
-    #         return service_request
-    #     except Exception as e:
-    #         print(e)
-    #         return None
-
-    def load_from_JSON(self, file_path) -> bool:
-        """
-        Sets the action list from a given json-file path.
-        :param file_path: The path to the json-file.
-        :return: True if the action list was set successfully, False otherwise.
-        """
-        file_data = None
-        loading_action_list = []
-        try:
-            with open(file_path, "r") as json_file:
-                file_data = json.load(json_file)
-            # clear action_list to be empty
-            self.action_list.clear()
-        except Exception as e:
-            self.node.get_logger().error(f"Error opening file '{file_path}'!")
-
-        if not file_data:
-            return False
-            
-        self.action_file_path = file_path
-        self.folder_path = os.path.dirname(file_path)
-        self.name = file_data["name"]
-
-        for index, action_dict in enumerate(file_data["action_list"]):
-            try:
-                action_dict:dict
-                _request = action_dict.get("request",{})
-                if _request == {}:
-                    _request = action_dict.get("service_request",{})
-                _description = action_dict["description"]
-                _name = action_dict["name"]
-                _type = action_dict['action_type']
-                
-                if _type == 'ServiceAction':
-                    _service_client = action_dict["service_client"]
-                    _service_type = action_dict["service_type"]
-
-                    action_from_item = ServiceAction(node=self.node,
-                                                    client=_service_client,
-                                                    service_type=_service_type,
-                                                    name=_name)
-                    
-                    set_success = action_from_item.set_success_identifier(action_dict["error_identifier"])
-                    action_from_item.set_description(_description)
-                    action_from_item.set_request_from_dict(_request)
-                    self.action_list.append(action_from_item)
-
-                elif _type == 'UserInteractionAction':
-                    action_from_item = UserInteractionAction(node=self.node,
-                                                            interaction_mode = action_dict['interaction_mode'],
-                                                            name=_name,
-                                                            action_text=action_dict['action_text'])
-                    action_from_item.set_description(_description)
-                    self.action_list.append(action_from_item)
-                    
-                elif _type == 'RosActionAction':
-                    _ros_action_client = action_dict["ros_action_client"]
-                    _ros_action_type = action_dict["ros_action_type"]
-                    action_from_item = RosActionAction(node = self.node,
-                                                    client = _ros_action_client,
-                                                    action_type = _ros_action_type,
-                                                    name = _name)
-                    
-                    action_from_item.set_description(_description)
-                    action_from_item.set_request_from_dict(_request)
-                    self.action_list.append(action_from_item)
-
-                else:
-                    self.node.get_logger().error(f"Action type '{_type}' not supported!")
-                    continue
-                
-            except (ActionInitializationError,SetActionRequestError) as e:
-                self.node.get_logger().error(f"{e}. Skipping loading this action")
-            
-        self.node.get_logger().error(f"SUCCEEESS!")
-        return True
-
-    def save_to_JSON(self) -> bool:
-        """
-        Saves the action_list to a json-file.
-        In order to execute the function successfully, a valid path and the action_list name must be set.
-        """
-
-        if (self.folder_path is not None) and (self.name is not None):
-            self.action_file_path = f"{self.folder_path}/{self.name}.json"
-            process_dict = {}
-            process_dict["name"] = self.name
-            process_dict["saved_at"] = str(datetime.now())  # Add a timestamp
-
-            action_list = []
-            for index, action in enumerate(self.action_list):
-                action_dict = {}
-                                
-                action_dict["name"] = action.get_name()
-                action_dict["description"] = action.get_description()
-                self.node.get_logger().error(f'desc{action_dict["description"]}')
-
-                action_dict["action_type"] = action.get_type_indicator()
-                action_dict["action_position"] = index
-
-                if isinstance(action, ServiceAction):
-                    action: ServiceAction
-                    action_dict["service_client"] = action.client
-                    action_dict["service_type"] = action.service_type
-                    action_dict["error_identifier"] = action.service_success_key
-                    action_dict["request"] = json.loads(json.dumps(action.get_request_as_ordered_dict()))
-                    
-                elif isinstance(action, UserInteractionAction):
-                    action: UserInteractionAction
-                    action_dict["action_text"] = action.request.interaction_text
-                    action_dict["interaction_mode"] = action.interaction_mode
-                    action_dict["request"] = json.loads(json.dumps(action.get_request_as_ordered_dict()))
-
-                elif isinstance(action, RosActionAction):
-                    action: RosActionAction
-                    action_dict["ros_action_client"] = action.client
-                    action_dict["ros_action_type"] = action.action_type
-                    action_dict["request"] = json.loads(json.dumps(action.get_request_as_ordered_dict()))
-                    
-                action_dict["has_breakpoint"] = action.has_breakpoint()
-                action_dict["is_active"] = action.is_active()
-                
-                if action_dict:
-                    action_list.append(action_dict)
-
-            process_dict["action_list"] = action_list
-            try:
-                with open(f"{self.folder_path}/{self.name}.json", "w") as json_file:
-                    json.dump(process_dict, json_file,indent=4)
-                self.node.get_logger().info("Saved!")
-                return True
-            except FileNotFoundError as e:
-                self.node.get_logger().error(f"{e}")
-                self.node.get_logger().error("Directory does not exist!")
-                return False
-            except Exception as e:
-                self.node.get_logger().error(f"{e}")
-                self.node.get_logger().error("Saving file failed!")
-                return False
-        else:
-            return False
-
     def set_current_action(self, index: int) -> bool:
         """
         Sets the current action to the index from input.
@@ -566,43 +406,6 @@ class RosSequentialActionProgrammer:
         """
         return self.get_action_at_index(self.current_action_index).has_breakpoint()
     
-    # def get_copy_srv_dict_at_index(self, index: int) -> collections.OrderedDict:
-    #     """
-    #     This method returns the service request as a OrderedDict.
-    #     The dict will be copied so changes to the OrderedDict will not apply to the process action_list.
-    #     :param index: The index of the action.
-    #     """
-    #     try:
-    #         return_value = copy.deepcopy(self.action_list[index].request_dict)
-    #         return return_value
-    #     except Exception as e:
-    #         return None
-
-    # def get_copy_impl_srv_dict_at_index(self, index: int) -> collections.OrderedDict:
-    #     """
-    #     This method returns the service request as a OrderedDict.
-    #     The dict will be copied so changes to the OrderedDict will not apply to the process action_list.
-    #     :param index: The index of the action.
-    #     """
-    #     try:
-    #         return_value = copy.deepcopy(
-    #             self.get_action_at_index(index).request_dict_implicit
-    #         )
-    #         return return_value
-    #     except Exception as e:
-    #         return None
-
-    # def set_service_req_from_dict_at_index(self, index: int, dict: collections.OrderedDict
-    # ) -> bool:
-    #     """
-    #     Tries to set the service request of the service at index. Returns bool for success.
-    #     """
-    #     try:
-    #         set_success = self.action_list[index].set_req_message_from_dict(dict)
-    #         return set_success
-    #     except:
-    #         return False
-
     def get_service_responses_list(self) -> list[collections.OrderedDict]:
         """
         Returns a list that contains all the service responses from the action_list in an ordered dict.
@@ -1066,7 +869,7 @@ class RosSequentialActionProgrammer:
         """
         Updates the action sequence log with the current action sequence log.
         """
-        self.action_sequence_log["action_sequence_name"] = self.name
+        self.action_sequence_log["action_sequence_name"] = self.rsap_file_manager.get_sequence_name()
         self.action_sequence_log["action_log"] = self.action_log
 
     def copy_action_at_index_and_insert(self, index: int = None) -> bool:
@@ -1115,7 +918,7 @@ class RosSequentialActionProgrammer:
         """
         Saves the action sequence log to the folder.
         """
-        if (self.folder_path is not None) and (self.name is not None):
+        if (self.folder_path is not None) and (self.rsap_file_manager.get_sequence_name() is not None):
             self._update_action_sequence_log()
             export_time = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
             try:
@@ -1123,7 +926,7 @@ class RosSequentialActionProgrammer:
                 if not os.path.exists(file_path):
                     os.makedirs(file_path)
                 with open(
-                    f"{file_path}/{self.name}_log_{str(export_time)}.json", "w"
+                    f"{file_path}/{self.rsap_file_manager.get_sequence_name()}_log_{str(export_time)}.json", "w"
                 ) as json_file:
                     json.dump(self.action_sequence_log, json_file,indent=4)
                 self.node.get_logger().info("Action sequence log saved!")

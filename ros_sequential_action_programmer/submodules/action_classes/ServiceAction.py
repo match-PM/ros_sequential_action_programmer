@@ -296,6 +296,10 @@ class ServiceAction(ActionBaseClass):
         self.node.get_logger().warn(f"dict: {type_dict}")
         
         return type_dict
+    
+    def get_response_type(self):
+        type_dict = field_type_map_recursive_with_msg_type(self.service_metaclass.Response)        
+        return type_dict
         
     def get_request_as_ordered_dict(self)->OrderedDict:
         return message_to_ordereddict(self.request)

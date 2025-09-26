@@ -18,9 +18,76 @@ import re
 from typing import Tuple, Any
 from ros_sequential_action_programmer.submodules.obj_dict_modules.obj_functions import get_obj_value_from_key, set_obj_value_from_key, get_last_index_value
 from typing import Tuple, Any
+from ros_sequential_action_programmer.submodules.action_classes.ParameterReferences import ParameterReferences
 
 from rosidl_parser.definition import BasicType, Array, AbstractNestedType
 from collections import OrderedDict
+
+# Compatibility mapping
+COMPATIBLE_TYPES = {
+    "int8": ["int8", "int16", "int32", "int64"],
+    "uint8": ["uint8", "uint16", "uint32", "uint64"],
+    "int16": ["int16", "int32", "int64"],
+    "uint16": ["uint16", "uint32", "uint64"],
+    "int32": ["int32", "int64"],
+    "uint32": ["uint32", "uint64"],
+    "int64": ["int64"],
+    "uint64": ["uint64"],
+    "float32": ["float32", "float64", "float", "double"],
+    "float64": ["float64", "double"],
+    "float": ["float", "double"],
+    "double": ["double"],
+    "string": ["string", "str"],
+    "str": ["string", "str"],
+    "bool": ["bool", "boolean"],
+    "boolean": ["bool", "boolean"]
+}
+
+def find_fields_by_type(type_dict, target_type, parent_path="", compatible_map=None):
+    """
+    Recursively find all fields whose type matches target_type (or compatible).
+
+    Args:
+        type_dict (dict): ROS2-style type dictionary.
+        target_type (str): Type to search for.
+        parent_path (str): Internal recursion, for nested field paths.
+        compatible_map (dict): Optional compatibility map. Defaults to COMPATIBLE_TYPES.
+
+    Returns:
+        List[str]: List of full paths to matching fields.
+
+    Raises:
+        ValueError: If target_type is not in compatible_map.
+    """
+    compatible_map = compatible_map or COMPATIBLE_TYPES
+
+    # Strict check for supported types
+    if target_type not in compatible_map:
+        raise ValueError(f"Type '{target_type}' is not supported in the compatibility map.")
+
+    matches = []
+    compatible_types = compatible_map[target_type]
+
+    for key, val_type in type_dict.items():
+        full_path = f"{parent_path}.{key}" if parent_path else key
+        typ = val_type.get("type")
+
+        # Check primitive match
+        if typ in compatible_types:
+            matches.append(full_path)
+
+        # If it's an array, mark with []
+        if val_type.get("is_array", False) and typ in compatible_types:
+            matches.append(f"{full_path}[]")
+
+        # Recurse into nested fields
+        if "fields" in val_type:
+            sub_matches = find_fields_by_type(
+                val_type["fields"], target_type, parent_path=full_path, compatible_map=compatible_map
+            )
+            matches.extend(sub_matches)
+
+    return matches
 
 
 class ActionBaseClass:
@@ -43,7 +110,8 @@ class ActionBaseClass:
         self._has_breakpoint = False
         self._is_active = True
         self._success_key = None
-
+        self._parameter_references = ParameterReferences()
+    
     def get_name(self)-> str:
         return self.name
     
@@ -55,17 +123,6 @@ class ActionBaseClass:
             self.node.get_logger().error(str(e))
             return False
 
-    def execute(self, get_interupt_method:Any = None) -> Tuple[bool, Any]:
-        raise NotImplementedError
-    
-    def update_log_entry(self, success: bool, start_time: datetime, end_time: datetime, additional_text:str = ""):
-        raise NotImplementedError
-    
-    def __deepcopy__(self, memo):
-        """
-        deepcopy of this class is not possible without this mehtod definition
-        """
-        raise NotImplementedError
     
     def toggle_active(self):
         self.node.get_logger().warn(f"State: {self._is_active}")
@@ -114,11 +171,48 @@ class ActionBaseClass:
     def get_description(self)->str:
         return self._description   
 
+    def execute(self, get_interupt_method:Any = None) -> Tuple[bool, Any]:
+        raise NotImplementedError
+    
+    def update_log_entry(self, success: bool, start_time: datetime, end_time: datetime, additional_text:str = ""):
+        raise NotImplementedError
+    
+    def __deepcopy__(self, memo):
+        """
+        deepcopy of this class is not possible without this mehtod definition
+        """
+        raise NotImplementedError
+    
     def get_request_as_ordered_dict(self)->OrderedDict:
+        raise NotImplementedError
+    
+    def get_response_as_ordered_dict(self)->OrderedDict:
         raise NotImplementedError
              
     def set_request_from_dict(self,request_dictionary:Union[dict,OrderedDict]) -> bool:
         raise NotImplementedError
+    
+    def get_request_type(self):
+        raise NotImplementedError
+    
+    def get_response_type(self):
+        raise NotImplementedError
+    
+    def get_response_keys_for_type(self, field_type:str)->list[str]:
+        key_list :list[str] = []
+        type_dict = self.get_response_type()
+        
+        key_list = find_fields_by_type(type_dict=type_dict, 
+                                       target_type=field_type)
+        return key_list
+    
+    def get_request_keys_for_type(self, field_type:str)->list[str]:
+        key_list :list[str] = []
+        type_dict = self.get_request_type()
+        key_list = find_fields_by_type(type_dict=type_dict, 
+                                target_type=field_type)
+        return key_list
+
     
     def set_request_from_request(self, new_request:any) -> bool:
         if not isinstance(self.request, new_request):
@@ -230,15 +324,4 @@ class ActionBaseClass:
     
     def clear_log_entry(self):
         self.log_entry = {}
-        
-    # def set_service_request(self, request: any):
-    #     """
-    #     Warning: The method doesn not check for valid inputs.
-    #     This method set the service request object of the class from the input parameter request.
-    #     It also updates the request dict.
-    #     """
-    #     self.request = request
-    #     self.request_dict = message_to_ordereddict(self.request)
-        
-    def get_request_type(self):
-        raise NotImplementedError
+    

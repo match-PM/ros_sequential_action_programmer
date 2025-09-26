@@ -32,9 +32,13 @@ class ResultReadySignal(QObject):
     signal = pyqtSignal(bool)
 
 
-class UserInteractionActionData():
+class UserInteractionActionRequest():
     def __init__(self, text: str) -> None:
         self.interaction_text:str = text
+        
+class UserInteractionActionResponse():
+    def __init__(self) -> None:
+        self.success:bool = False
         
         
 class UserInteractionAction(ActionBaseClass):
@@ -53,7 +57,8 @@ class UserInteractionAction(ActionBaseClass):
         self.name = name
         self.interaction_mode = interaction_mode
         
-        self.request = UserInteractionActionData(action_text)
+        self.request = UserInteractionActionRequest(action_text)
+        self.response = UserInteractionActionResponse()
         
         if name == "":
             self.name = 'UserInteraction'
@@ -98,6 +103,10 @@ class UserInteractionAction(ActionBaseClass):
         type_dict = {'interaction_text': {'type': 'str'}}
         return type_dict
     
+    def get_response_type(self):
+        type_dict = {'success': {'type': 'bool'}}
+        return type_dict
+    
     def request_user_interaction(self, messsage:str)->bool:
         result_holder = {"result": None}
         
@@ -119,6 +128,10 @@ class UserInteractionAction(ActionBaseClass):
     
     def get_request_as_ordered_dict(self)->OrderedDict:
         dictionary = OrderedDict([('interaction_text', self.request.interaction_text)])
+        return dictionary
+    
+    def get_response_as_ordered_dict(self)->OrderedDict:
+        dictionary = OrderedDict([('success', self.response.success)])
         return dictionary
     
     def set_request_from_dict(self,request_dictionary:Union[dict,OrderedDict]):

@@ -19,18 +19,29 @@ import ast
 from functools import partial
 
 from ros_sequential_action_programmer.submodules.action_classes.ros_messages_functions import resolve_ros_type
+from ros_sequential_action_programmer.submodules.rsap_modules.ActionParameterValueManager import ActionParameterValueManager
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionParameterValueManagerDialog import ActionParameterValueManagerDialog
 
+class NoWheelSpinBox(QSpinBox):
+    def wheelEvent(self, event):
+        event.ignore()  # ignore the wheel event
+
+class NoWheelDoubleSpinBox(QDoubleSpinBox):
+    def wheelEvent(self, event):
+        event.ignore()
+        
 class ActionParameterLayout(QWidget):
     actionChanged = pyqtSignal(object)
 
     def __init__(self, 
                  action: Union[ActionBaseClass, ServiceAction, UserInteractionAction, RosActionAction], 
+                 action_parameter_value_manager: ActionParameterValueManager,
                  logger = None):
         super().__init__()
 
         self.logger = logger
         self.action = action
-
+        self.action_parameter_value_manager = action_parameter_value_manager
         # ----- Main layout -----
         main_layout = QVBoxLayout(self)       # set as widget layout
         self.setLayout(main_layout)
@@ -65,7 +76,8 @@ class ActionParameterLayout(QWidget):
         
         self.logger.error ("Test")
         req_types = self.action.get_request_type()
-
+        test_keys = self.action.get_request_keys_for_type("string")
+        self.logger.error (f"{test_keys}")
         self.add_meta_data_info()
         self.handle_dict = copy.deepcopy(self.action.get_request_as_ordered_dict())
         #self.populateActionParameterWidgets(self.handle_dict)
@@ -74,6 +86,9 @@ class ActionParameterLayout(QWidget):
         
         param_editor_wid = ROS2DictEditor(types_dict=req_types,
                                           values_dict=self.handle_dict,
+                                          action=self.action,
+                                          action_parameter_value_manager = self.action_parameter_value_manager,
+                                          logger=self.logger,
                                           disabled_keys=disabled_keys)
         
         self.parameter_layout.addWidget(param_editor_wid)
@@ -201,60 +216,6 @@ class ActionParameterLayout(QWidget):
             self.logger.error(f"Setting failed")         
         
         self.actionChanged.emit(self.action)
-
-    # def populateActionParameterWidgets(self, data, parent_key=None, active=True):
-    #     """
-    #     This method populates the action parameter layout with the parameters of the selected action.
-    #     """
-    #     # iterate through the dict
-    #     for key, value in data.items():
-    #         if parent_key is not None:
-    #             full_key = parent_key + '.' + key
-    #         else:
-    #             full_key = key
-
-    #         if isinstance(value, OrderedDict):
-    #             self.populateActionParameterWidgets(data=value, 
-    #                                                 parent_key=full_key, 
-    #                                                 active = active)
-    #         else:
-    #             widget_with_button = RecomButton(full_key=full_key, 
-    #                                              initial_value=str(value), 
-    #                                              on_text_changed=self.updateDictionary, 
-    #                                              on_button_clicked=self.get_recom_button_clicked,
-    #                                              active=active)
-                
-    #             self.parameter_layout.addWidget(widget_with_button)
-
-    # def updateDictionary(self, key, edit):
-    #     def handleTextChange(text):
-    #         try:
-    #             keys = key.split('.')
-    #             current_dict = self.handle_dict
-    #             for k in keys[:-1]:
-    #                 current_dict = current_dict[k]
-
-    #             # Convert the input text to the appropriate data type
-    #             value = text
-    #             if '.' in text and all(part.replace('.', '').lstrip('-').isdigit() for part in text.split('.', 1)):
-    #                 # Modified condition to allow negative floats
-    #                 value = float(text)
-    #             elif text.lstrip('-').isdigit():
-    #                 value = int(text)
-    #             elif text == 'True':
-    #                 value = True
-    #             elif text == 'False':
-    #                 value = False
-    #             elif text[0] == '[' and text[-1] == ']':
-    #                 value = ast.literal_eval(text)
-    #             elif text == 'None':
-    #                 value = None
-
-    #             current_dict[keys[-1]] = value
-    #         except ValueError:
-    #             pass
-
-    #     return handleTextChange
     
     # def get_recom_button_clicked(self, key, widget:QLineEdit):
     #     """
@@ -284,11 +245,21 @@ FLOAT_TYPE_BOUNDS = {
 }
 
 class ROS2DictEditor(QWidget):
-    def __init__(self, types_dict, values_dict, disabled_keys=None):
+    def __init__(self, 
+                 types_dict, 
+                 values_dict, 
+                 action: Union[ActionBaseClass, ServiceAction, UserInteractionAction, RosActionAction], 
+                 action_parameter_value_manager: ActionParameterValueManager,
+                 logger,
+                 disabled_keys=None):
+        
         super().__init__()
         self.types_dict = types_dict
         self.values_dict = values_dict
         self.disabled_keys = set(disabled_keys or [])
+        self._action = action
+        self._action_parameter_value_manager = action_parameter_value_manager
+        self.logger = logger
 
         main_layout = QVBoxLayout()
         self.build_layout(types_dict, values_dict, main_layout)
@@ -320,8 +291,9 @@ class ROS2DictEditor(QWidget):
 
                 def open_editor(k, t, _checked=False):
                     dlg = ArrayEditDialog(self, value_dict[k], t)
-                    dlg.resize(500, 400)  # give a decent initial size
-                    dlg.exec()
+                    dlg.resize(500, 400)
+                    dlg.show()
+                    #dlg.exec()
 
                 add_btn.clicked.connect(partial(open_editor, key, val_type))
                 continue
@@ -333,6 +305,14 @@ class ROS2DictEditor(QWidget):
                 label = QLabel(field_name)
                 label.setToolTip(val_type['type'])
                 header_layout.addWidget(label)
+
+                # Add placeholder button
+                btn_text = "×" if is_disabled else "+"
+                btn = ReferenceButton(btn_text, val_type=val_type['type'])
+                btn.clicked.connect(partial(self.recom_clicked, val_type['type']))
+
+                btn.setDisabled(is_disabled)
+                header_layout.addWidget(btn)
 
                 group = QGroupBox()
                 group.setLayout(QVBoxLayout())
@@ -354,12 +334,12 @@ class ROS2DictEditor(QWidget):
 
                 typ = val_type['type']
                 if typ in INT_TYPE_BOUNDS:
-                    widget = QSpinBox()
+                    widget = NoWheelSpinBox()
                     widget.setRange(*INT_TYPE_BOUNDS[typ])
                     widget.setValue(value_dict.get(key, 0))
                     widget.valueChanged.connect(lambda v, d=value_dict, k=key: d.__setitem__(k, v))
                 elif typ in FLOAT_TYPE_BOUNDS:
-                    widget = QDoubleSpinBox()
+                    widget = NoWheelDoubleSpinBox()
                     widget.setDecimals(6)
                     widget.setRange(*FLOAT_TYPE_BOUNDS[typ])
                     widget.setValue(value_dict.get(key, 0.0))
@@ -376,15 +356,35 @@ class ROS2DictEditor(QWidget):
 
                 widget.setDisabled(is_disabled)
                 hlayout.addWidget(widget)
+
+                # Add placeholder button
+                btn_text = "×" if is_disabled else "+"
+                btn = ReferenceButton(btn_text, val_type=typ)
+                btn.clicked.connect(partial(self.recom_clicked, typ))
+                btn.setDisabled(is_disabled)
+                hlayout.addWidget(btn)
+
                 parent_layout.addLayout(hlayout)
 
     def check_disabled(self, full_path, disabled_keys):
         return any(full_path == k or full_path.startswith(k + ".") for k in disabled_keys)
+    
+    def recom_clicked(self, type):
+        self.logger.error(f"{type}")
+        self._action_parameter_value_manager.parameter_values_set_generator.update()
+        dlg = ActionParameterValueManagerDialog(current_action=self._action,
+                                                current_type=type,
+                                                action_parameter_value_manager=self._action_parameter_value_manager)
+        dlg.exec()
+        
 
 
 class ArrayEditDialog(QDialog):
     """Now includes a scroll area to handle many elements."""
-    def __init__(self, parent, arr, val_type):
+    def __init__(self, 
+                 parent, 
+                 arr, 
+                 val_type):
         super().__init__(parent)
         self.setWindowTitle("Edit Array")
         self.arr = arr
@@ -454,12 +454,12 @@ class ArrayEditDialog(QDialog):
         layout = QHBoxLayout()
         typ = self.val_type['type']
         if typ in INT_TYPE_BOUNDS:
-            w = QSpinBox()
+            w = NoWheelSpinBox()
             w.setRange(*INT_TYPE_BOUNDS[typ])
             w.setValue(val)
             w.valueChanged.connect(lambda v, idx=i: self.arr.__setitem__(idx, v))
         elif typ in FLOAT_TYPE_BOUNDS:
-            w = QDoubleSpinBox()
+            w = NoWheelDoubleSpinBox()
             w.setDecimals(6)
             w.setRange(*FLOAT_TYPE_BOUNDS[typ])
             w.setValue(val)
@@ -507,3 +507,4 @@ class ReferenceButton(QPushButton):
         self.setFixedSize(width, height)  # small square button
         self.setToolTip("Click me!")      # optional default tooltip
         self.val_type = val_type
+        

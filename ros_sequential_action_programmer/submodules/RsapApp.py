@@ -29,7 +29,6 @@ from ros_sequential_action_programmer.submodules.RsapApp_submodules.app_worker i
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AppTextWidget import AppTextOutput
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.ConfigWindow import DictionaryValueEditor, NestedDictionaryEditor
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.NoScrollComboBox import NoScrollComboBox
-from ros_sequential_action_programmer.submodules.RsapApp_submodules.RecomButton import RecomButton
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_widget_adv import ActionSequenceListWidget
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_widgets import ActionListWidget, ActionListItem
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionParameterLayout import ActionParameterLayout
@@ -103,10 +102,10 @@ class RsapApp(QMainWindow):
         font = QFont()
         font.setPointSize(14)
         self.action_sequence_name_widget.setFont(font)
-        if self.action_sequence_builder.name is None:
+        if self.action_sequence_builder.rsap_file_manager.get_sequence_name() is None:
             self.set_widget_action_sequence_name('- No name given - ')
         else:
-            self.set_widget_action_sequence_name(self.action_sequence_builder.name)
+            self.set_widget_action_sequence_name(self.action_sequence_builder.rsap_file_manager.get_sequence_name())
         layout.addWidget(self.action_sequence_name_widget,0,1,1,2)
         
         status_layout = QVBoxLayout()
@@ -475,7 +474,7 @@ class RsapApp(QMainWindow):
 
     def set_widget_action_sequence_name(self, text):
         self.action_sequence_name_widget.setText("Process name: " + text)
-        self.action_sequence_name_widget.setToolTip(self.action_sequence_builder.action_file_path)
+        self.action_sequence_name_widget.setToolTip(self.action_sequence_builder.rsap_file_manager.get_action_sequence_file_path())
 
     # def create_service_parameter_layout(self):
     #     self.scroll_area = QScrollArea()
@@ -549,7 +548,7 @@ class RsapApp(QMainWindow):
     #     self.error_handling_box.setCurrentIndex(box_values.index(currently_set_error_handler))
     #     self.inner_layout.addWidget(label_error_handling_box)
     #     self.inner_layout.addWidget(self.error_handling_box)
-
+    
     def action_selected(self, active=True):
         row = self.action_list_widget.currentRow()
         self.clear_action_parameter_layout()
@@ -557,7 +556,10 @@ class RsapApp(QMainWindow):
 
         action = self.action_sequence_builder.get_action_at_index(row)
         
-        self.current_action_parameter_widget = ActionParameterLayout(action, logger=self.service_node.get_logger())
+        self.current_action_parameter_widget = ActionParameterLayout(action,
+                                                                     self.action_sequence_builder.action_parameter_value_manager,
+                                                                     logger=self.service_node.get_logger())
+        
         self.action_parameter_layout.addWidget(self.current_action_parameter_widget)
         self.current_action_parameter_widget.on_action_changed(self.action_parameter_changed)
 
@@ -762,11 +764,11 @@ class RsapApp(QMainWindow):
         if file_path:
             self.text_output.clear()
             self.text_output.append(f"Opening: {file_path}")
-            success = self.action_sequence_builder.load_from_JSON(file_path)
+            success = self.action_sequence_builder.rsap_file_manager.load_from_JSON(file_path)
             self.set_recent_file()
             if success:
                 self.action_list_widget.populate_list()
-                self.set_widget_action_sequence_name(self.action_sequence_builder.name)
+                self.set_widget_action_sequence_name(self.action_sequence_builder.rsap_file_manager.get_sequence_name())
                 self.text_output.append("File loaded!")
             else:
                 self.text_output.append("Error Opening File!")
@@ -786,10 +788,10 @@ class RsapApp(QMainWindow):
         """
         This method saves the current process to a file.
         """
-        if self.action_sequence_builder.name is None:
+        if self.action_sequence_builder.rsap_file_manager.get_sequence_name() is None:
             self.create_new_file()
         else:
-            success = self.action_sequence_builder.save_to_JSON()
+            success = self.action_sequence_builder.rsap_file_manager.save_to_JSON()
             self.text_output.append(f"Saved file: {success}")
             self.update_last_saved()
             
@@ -821,7 +823,7 @@ class RsapApp(QMainWindow):
             success = self.action_sequence_builder.save_to_JSON()
             self.text_output.append(f"Saved file: {success}")
             # set text in gui from action sequence name
-            self.set_widget_action_sequence_name(self.action_sequence_builder.name)
+            self.set_widget_action_sequence_name(self.action_sequence_builder.rsap_file_manager.get_sequence_name())
             # update the last saved timestamp
             self.update_last_saved()
             self.set_recent_file()
@@ -868,7 +870,7 @@ class RsapApp(QMainWindow):
                 yaml_content = yaml.safe_load(file)
 
             process_file_path = yaml_content['recent_file'] 
-            self.action_sequence_builder.load_from_JSON(process_file_path)
+            self.action_sequence_builder.rsap_file_manager.load_from_JSON(process_file_path)
         except Exception as e:
             self.service_node.get_logger().error(f"Error loading recent file: {e}")
             self.service_node.get_logger().warn("No recent file found! Skipping loading of recent file!")
