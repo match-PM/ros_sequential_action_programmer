@@ -36,6 +36,7 @@ class ActionParameterLayout(QWidget):
     def __init__(self, 
                  action: Union[ActionBaseClass, ServiceAction, UserInteractionAction, RosActionAction], 
                  action_parameter_value_manager: ActionParameterValueManager,
+                 active : bool = True,
                  logger = None):
         super().__init__()
 
@@ -60,6 +61,10 @@ class ActionParameterLayout(QWidget):
         apply_btn = QPushButton("Apply Changes")
         apply_btn.clicked.connect(self.apply_changes_to_action)
 
+        if not active:
+            apply_btn.setDisabled(True)
+            toggle_btn.setDisabled(True)
+
         main_layout.addWidget(toggle_btn)
         main_layout.addWidget(apply_btn)
 
@@ -74,24 +79,28 @@ class ActionParameterLayout(QWidget):
         self.scroll_area.setWidget(self.parameter_widget)
         main_layout.addWidget(self.scroll_area)
         
-        self.logger.error ("Test")
+        #self.logger.error ("Test")
+
         req_types = self.action.get_request_type()
         test_keys = self.action.get_request_keys_for_type("string")
-        self.logger.error (f"{test_keys}")
+
+        #self.logger.error (f"{test_keys}")
+
         self.add_meta_data_info()
         self.handle_dict = copy.deepcopy(self.action.get_request_as_ordered_dict())
         #self.populateActionParameterWidgets(self.handle_dict)
         
         disabled_keys = ["start.header.stamp", "start.pose.position.x", "tolerance"]
         
-        param_editor_wid = ROS2DictEditor(types_dict=req_types,
-                                          values_dict=self.handle_dict,
-                                          action=self.action,
-                                          action_parameter_value_manager = self.action_parameter_value_manager,
-                                          logger=self.logger,
-                                          disabled_keys=disabled_keys)
-        
-        self.parameter_layout.addWidget(param_editor_wid)
+        if active:
+            param_editor_wid = ROS2DictEditor(types_dict=req_types,
+                                            values_dict=self.handle_dict,
+                                            action=self.action,
+                                            action_parameter_value_manager = self.action_parameter_value_manager,
+                                            logger=self.logger,
+                                            disabled_keys=disabled_keys)
+            
+            self.parameter_layout.addWidget(param_editor_wid)
 
         #self.logger.error(f"{self.handle_dict}")
         
@@ -135,7 +144,7 @@ class ActionParameterLayout(QWidget):
             
             # Set info for service type
             label_action_service_desc = QLabel(f"Service Type: ")
-            label_action_service_type = QLineEdit(f"{_action.service_type}")
+            label_action_service_type = QLineEdit(f"{_action.get_type_indicator()}")
             label_action_service_type.setReadOnly(True)
             self.parameter_layout.addWidget(label_action_service_desc)
             self.parameter_layout.addWidget(label_action_service_type)
@@ -144,7 +153,7 @@ class ActionParameterLayout(QWidget):
             label_error_handling_box = QLabel(f"Execution identifier: ")
             self.error_handling_box = NoScrollComboBox()
 
-            box_values = ['None'] + _action.get_bool_fields()
+            box_values = ['None'] + _action.get_res_bool_fields()
             self.error_handling_box.addItems(box_values)
             # Set the default value when creating the qcombobox
             currently_set_error_handler = _action.get_success_identifier()
@@ -152,6 +161,7 @@ class ActionParameterLayout(QWidget):
                currently_set_error_handler = "None"
 
             self.error_handling_box.setCurrentIndex(box_values.index(currently_set_error_handler))
+
             self.parameter_layout.addWidget(label_error_handling_box)
             self.parameter_layout.addWidget(self.error_handling_box)
             
@@ -188,6 +198,13 @@ class ActionParameterLayout(QWidget):
             self.parameter_layout.addWidget(label_error_handling_box)
             self.parameter_layout.addWidget(self.error_handling_box)
         
+    def on_error_handling_changed(self,new_value):
+        if new_value == "None":
+            self.action.set_success_identifier(None)
+        else:
+            self.action.set_success_identifier(new_value)
+        # Optional: log the change for debugging
+        self.logger.info(f"Execution identifier updated to: {new_value}")
 
     def apply_changes_to_action(self):
 
@@ -208,6 +225,9 @@ class ActionParameterLayout(QWidget):
         
         _old_dict = copy.deepcopy(self.action.get_request_as_ordered_dict())
         
+        if isinstance(self.action, ServiceAction) or isinstance(self.action, RosActionAction):
+            self.on_error_handling_changed(self.error_handling_box.currentText())
+            
         # set the request_dict
         try:
             self.action.set_request_from_dict(self.handle_dict)
@@ -250,7 +270,7 @@ class ROS2DictEditor(QWidget):
                  values_dict, 
                  action: Union[ActionBaseClass, ServiceAction, UserInteractionAction, RosActionAction], 
                  action_parameter_value_manager: ActionParameterValueManager,
-                 logger,
+                 logger = None,
                  disabled_keys=None):
         
         super().__init__()
@@ -261,10 +281,14 @@ class ROS2DictEditor(QWidget):
         self._action_parameter_value_manager = action_parameter_value_manager
         self.logger = logger
 
-        main_layout = QVBoxLayout()
-        self.build_layout(types_dict, values_dict, main_layout)
-        self.setLayout(main_layout)
+        self.main_layout = QVBoxLayout()
+        self.init_layout()
+        self.setLayout(self.main_layout)
         self.setWindowTitle("ROS2 Message Editor")
+
+    def init_layout(self):
+        self.clear_layout(self.main_layout)
+        self.build_layout(self.types_dict, self.values_dict, self.main_layout)
 
     def build_layout(self, type_dict, value_dict, parent_layout, parent_path=""):
         if type_dict is None:
@@ -290,7 +314,13 @@ class ROS2DictEditor(QWidget):
                 array_layout.addWidget(add_btn)
 
                 def open_editor(k, t, _checked=False):
-                    dlg = ArrayEditDialog(self, value_dict[k], t)
+                    dlg = ArrayEditDialog(parent=self, 
+                                          arr=value_dict[k], 
+                                          val_type=t,
+                                          action_parameter_value_manager=self._action_parameter_value_manager,
+                                          current_action=self._action,
+                                          logger=self.logger)
+
                     dlg.resize(500, 400)
                     dlg.show()
                     #dlg.exec()
@@ -309,7 +339,7 @@ class ROS2DictEditor(QWidget):
                 # Add placeholder button
                 btn_text = "×" if is_disabled else "+"
                 btn = ReferenceButton(btn_text, val_type=val_type['type'])
-                btn.clicked.connect(partial(self.recom_clicked, val_type['type']))
+                btn.clicked.connect(partial(self.recom_clicked, full_path, val_type['type']))
 
                 btn.setDisabled(is_disabled)
                 header_layout.addWidget(btn)
@@ -360,23 +390,47 @@ class ROS2DictEditor(QWidget):
                 # Add placeholder button
                 btn_text = "×" if is_disabled else "+"
                 btn = ReferenceButton(btn_text, val_type=typ)
-                btn.clicked.connect(partial(self.recom_clicked, typ))
+                btn.clicked.connect(partial(self.recom_clicked, full_path, typ))
                 btn.setDisabled(is_disabled)
                 hlayout.addWidget(btn)
 
                 parent_layout.addLayout(hlayout)
+    
+    def clear_layout(self, layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            w = item.widget()
+            l = item.layout()
+            if w:
+                w.deleteLater()
+            elif l:
+                self.clear_layout(l)
 
     def check_disabled(self, full_path, disabled_keys):
         return any(full_path == k or full_path.startswith(k + ".") for k in disabled_keys)
-    
-    def recom_clicked(self, type):
-        self.logger.error(f"{type}")
+
+    def recom_clicked(self, key: str, field_type: str):
+
+        #self.logger.error(f"{field_type}")
+        #self.logger.error(f"{key}")
+
         self._action_parameter_value_manager.parameter_values_set_generator.update()
+
+        #self.logger.error(f"Getting dialog")
+        
         dlg = ActionParameterValueManagerDialog(current_action=self._action,
-                                                current_type=type,
+                                                current_type=field_type,
+                                                current_values_dict=self.values_dict,
+                                                current_field_key=key,
                                                 action_parameter_value_manager=self._action_parameter_value_manager)
         dlg.exec()
-        
+
+        #self.logger.error(f"{dlg.current_field_key}")
+        #self.logger.error(f"{dlg.values_dict}")
+        #self.logger.error(f"{dlg.current_type}")
+
+        self.init_layout()  # Rebuild the layout to reflect any changes
+
 
 
 class ArrayEditDialog(QDialog):
@@ -384,7 +438,11 @@ class ArrayEditDialog(QDialog):
     def __init__(self, 
                  parent, 
                  arr, 
-                 val_type):
+                 val_type,
+                 action_parameter_value_manager: ActionParameterValueManager,
+                 current_action: ActionBaseClass,
+                 logger = None):
+        
         super().__init__(parent)
         self.setWindowTitle("Edit Array")
         self.arr = arr
@@ -400,6 +458,9 @@ class ArrayEditDialog(QDialog):
         self.rows_layout = QVBoxLayout(self.scroll_content)
         self.scroll.setWidget(self.scroll_content)
         self.main_layout.addWidget(self.scroll)
+        self._action_parameter_value_manager = action_parameter_value_manager
+        self._action = current_action
+        self.logger = logger
 
         self.refresh_rows()
 
@@ -437,8 +498,11 @@ class ArrayEditDialog(QDialog):
                 if not isinstance(self.arr[i], dict):
                     self.arr[i] = {}
                 nested_editor = ROS2DictEditor(
-                    self.val_type['fields'],
-                    self.arr[i]
+                    types_dict=self.val_type['fields'],
+                    values_dict=self.arr[i],
+                    action=self._action,
+                    action_parameter_value_manager=self._action_parameter_value_manager,
+                    logger=self.logger
                 )
                 # allow the nested editor to shrink/grow nicely
                 nested_editor.setSizePolicy(QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed))
@@ -453,6 +517,8 @@ class ArrayEditDialog(QDialog):
     def _primitive_editor(self, i, val):
         layout = QHBoxLayout()
         typ = self.val_type['type']
+
+        # --- Value widget ---
         if typ in INT_TYPE_BOUNDS:
             w = NoWheelSpinBox()
             w.setRange(*INT_TYPE_BOUNDS[typ])
@@ -473,22 +539,59 @@ class ArrayEditDialog(QDialog):
             w.stateChanged.connect(lambda v, idx=i: self.arr.__setitem__(idx, bool(v)))
         else:
             w = QLabel(f"Unsupported: {typ}")
+
         layout.addWidget(w)
+
+        # --- Recommendation button ---
+        btn = ReferenceButton('+', val_type=typ)
+        layout.addWidget(btn)
+
+        # Connect to recommendation logic
+        def on_recom_clicked():
+            self._action_parameter_value_manager.parameter_values_set_generator.update()
+            dlg = ActionParameterValueManagerDialog(
+                current_action=self._action,
+                current_type=typ,
+                current_values_dict={str(i): self.arr[i]},
+                current_field_key=i,
+                action_parameter_value_manager=self._action_parameter_value_manager,
+                add_references=False,
+                add_equations=False,
+            )
+            dlg.exec()
+            # Apply recommended value back to array
+
+            #self.logger.error(f"Test {dlg.values_dict}")
+
+            if dlg.values_dict.get(str(i)) is not None:
+                self.arr[i] = dlg.values_dict[str(i)]
+                w.setValue(self.arr[i]) if hasattr(w, "setValue") else w.setText(str(self.arr[i]))
+
+            #self.logger.error(f"Updated array element {i} to {self.arr[i]}")
+
+        btn.clicked.connect(on_recom_clicked)
+
         return layout
 
     def add_element(self):
-        if 'fields' in self.val_type:
-            self.arr.append({})
-        else:
-            t = self.val_type['type']
-            if t in INT_TYPE_BOUNDS or t in FLOAT_TYPE_BOUNDS:
-                self.arr.append(0)
-            elif t in ('string', 'str'):
-                self.arr.append("")
-            elif t in ('bool', 'boolean'):
-                self.arr.append(False)
+        def create_default_value(val_type):
+            if 'fields' in val_type:
+                # Nested message → recursively create dict with defaults
+                return {k: create_default_value(v) for k, v in val_type['fields'].items()}
             else:
-                self.arr.append(None)
+                t = val_type['type']
+                if t in INT_TYPE_BOUNDS or t in FLOAT_TYPE_BOUNDS:
+                    return 0
+                elif t in ('string', 'str'):
+                    return ""
+                elif t in ('bool', 'boolean'):
+                    return False
+                else:
+                    return None
+
+        default_value = create_default_value(self.val_type)
+        self.arr.append(default_value)
+        #self.logger.error(f"Added new element with defaults: {default_value}")
         self.refresh_rows()
 
     def remove(self, idx):

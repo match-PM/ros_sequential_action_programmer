@@ -10,6 +10,7 @@ import rclpy
 # import packagenotfounderror
 from ament_index_python.packages import PackageNotFoundError
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
+from ros_sequential_action_programmer.submodules.action_classes.compatibility_mapping import COMPATIBLE_TYPES
 
 try:
     from assembly_manager_interfaces.msg import ObjectScene, Object, RefFrame
@@ -35,32 +36,37 @@ class ValueSets():
     def __init__(self) -> None:
         self._value_sets:list[ValuesSet] = []
 
-    def get_all_value_set_names(self,type:str = None)->list[str]:
-        names_list = []
-        for sets in self._value_sets:
-            _name = sets.value_set_name
-            _type = sets.value_set_type
-            if type is None:
-                names_list.append(_name)
-            elif type == _type:
-                names_list.append(_name)
+    # def get_all_value_set_names(self,type:str = None)->list[str]:
+    #     names_list = []
+    #     for sets in self._value_sets:
+    #         _name = sets.value_set_name
+    #         _type = sets.value_set_type
+    #         if type is None:
+    #             names_list.append(_name)
+    #         elif type == _type:
+    #             names_list.append(_name)
                 
-        return names_list
+    #     return names_list
     
     def append_set(self, v_set:ValuesSet):
+        # check value set name does not exist
+        for existing_set in self._value_sets:
+            if existing_set.value_set_name == v_set.value_set_name:
+                raise ValueError(f"Set with name '{v_set.value_set_name}' already exists!")
+            
         if isinstance(v_set, ValuesSet):
             self._value_sets.append(v_set)
         else:
             raise ValueError("Is not a set!")
     
-    def get_value_sets_for_type(self,set_type:str):
-        new_set = ValueSets()
+    # def get_value_sets_for_type(self,set_type:str):
+    #     new_set = ValueSets()
         
-        for _set in self._value_sets:
-            if _set.value_set_type == set_type:
-                new_set.append_set(_set)
+    #     for _set in self._value_sets:
+    #         if _set.value_set_type == set_type:
+    #             new_set.append_set(_set)
         
-        return new_set
+    #     return new_set
     
     def get_set_for_set_name(self, name:str):
         for _set in self._value_sets:
@@ -68,6 +74,29 @@ class ValueSets():
                 return _set
         raise ValueError(f"Set with name '{name}' not found!")
     
+
+    def get_all_value_set_names(self, type: str = None) -> list[str]:
+        names_list = []
+        for sets in self._value_sets:
+            _name = sets.value_set_name
+            _type = sets.value_set_type
+            if type is None:
+                names_list.append(_name)
+            else:
+                # include sets that are compatible with the requested type
+                compatible_types = COMPATIBLE_TYPES.get(type, [type])
+                if _type in compatible_types:
+                    names_list.append(_name)
+        return names_list
+
+    def get_value_sets_for_type(self, set_type: str):
+        new_set = ValueSets()
+        compatible_types = COMPATIBLE_TYPES.get(set_type, [set_type])
+        
+        for _set in self._value_sets:
+            if _set.value_set_type in compatible_types:
+                new_set.append_set(_set)
+        return new_set
 class ParameterValueSetGenerator():
     def __init__(self,ros_node:Node) -> None:
         self.value_sets = ValueSets()
@@ -117,27 +146,43 @@ class ParameterValueSetGenerator():
         self.value_sets.append_set(self.vision_cameras_set)
         self.value_sets.append_set(self.vision_processes_set)
         
-        self.test_set = ValuesSet(value_set_type='string',
-                        set_name='test_set')
-        
-        self.test_set.set_value_list(["1","2","3"])
-        
-        self.value_sets.append_set(self.test_set)
-        
-        
-        self.test_set_2 = ValuesSet(value_set_type='string',
-                        set_name='test_set_2')
-        
-        self.test_set_2.set_value_list(["5","6","7"])
-        
-        self.value_sets.append_set(self.test_set_2)
-
+        self._apply_test_sets()
         
         self.update()
         #self.timer = self.ros_node.create_timer(1.0, self.on_timer)
 
     def on_timer(self):
         pass
+
+    def _apply_test_sets(self):
+        test_set_1 = ValuesSet(value_set_type='string',
+                        set_name='test_set_1')
+        
+        test_set_1.set_value_list(["1","2","3"])
+        
+        self.value_sets.append_set(test_set_1)
+        
+        test_set_2 = ValuesSet(value_set_type='string',
+                        set_name='test_set_2')
+        
+        test_set_2.set_value_list(["5","6","7"])
+        
+        self.value_sets.append_set(test_set_2)
+
+        test_set_3 = ValuesSet(value_set_type='uint32',
+                        set_name='test_set_3')
+        
+        test_set_3.set_value_list([5, 8, 9])
+        
+        self.value_sets.append_set(test_set_3)
+
+        test_set_4 = ValuesSet(value_set_type='double',
+                        set_name='test_set_4')
+        
+        test_set_4.set_value_list([5, 8, 9])
+        
+        self.value_sets.append_set(test_set_4)
+
 
     def am_callback(self, msg: ObjectScene):
         if not AM_INTERFACES_AVAILABLE:

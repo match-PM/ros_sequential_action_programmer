@@ -30,7 +30,13 @@ class RsapFileManager():
         
     def get_action_sequence_file_path(self)->str:
         return self._sequence_file_path
-        
+
+    def set_folder_path(self, folder_path:str):
+        self._folder_path = folder_path
+
+    def get_folder_path(self)->str:
+        return self._folder_path
+    
     def load_from_JSON(self, file_path) -> bool:
         """
         Sets the action list from a given json-file path.
@@ -135,9 +141,9 @@ class RsapFileManager():
                     action: ServiceAction
                     action_dict["service_client"] = action.client
                     action_dict["service_type"] = action.service_type
-                    action_dict["error_identifier"] = action.service_success_key
+                    action_dict["error_identifier"] = action.get_success_identifier()
                     action_dict["request"] = json.loads(json.dumps(action.get_request_as_ordered_dict()))
-                    
+                
                 elif isinstance(action, UserInteractionAction):
                     action: UserInteractionAction
                     action_dict["action_text"] = action.request.interaction_text
@@ -148,6 +154,7 @@ class RsapFileManager():
                     action: RosActionAction
                     action_dict["ros_action_client"] = action.client
                     action_dict["ros_action_type"] = action.action_type
+                    action_dict["error_identifier"] = action.get_success_identifier()
                     action_dict["request"] = json.loads(json.dumps(action.get_request_as_ordered_dict()))
                     
                 action_dict["has_breakpoint"] = action.has_breakpoint()

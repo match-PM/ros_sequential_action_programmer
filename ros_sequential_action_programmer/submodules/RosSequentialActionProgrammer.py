@@ -31,6 +31,7 @@ from yaml.loader import SafeLoader
 from ros_sequential_action_programmer.submodules.obj_dict_modules.dict_functions import convert_to_ordered_dict, get_key_value_pairs_from_dict
 from typing import Union
 import subprocess
+import time
 
 CHECK = 0
 SET = 1
@@ -64,6 +65,7 @@ class RosSequentialActionProgrammer:
         self._init_signals()
         self._stop_execution = False
         self._interupt_execution = False
+
 
     def get_interrupt_execution(self)->bool:
         return self._interupt_execution
@@ -384,6 +386,7 @@ class RosSequentialActionProgrammer:
                 # reset breakpoint_override after first action
                 breakpoint_override = False
                 ind += 1
+                time.sleep(0.5)
 
             # for ind in range(index_start, len(self.action_list)):
             #     self.set_current_action(ind)
@@ -918,11 +921,11 @@ class RosSequentialActionProgrammer:
         """
         Saves the action sequence log to the folder.
         """
-        if (self.folder_path is not None) and (self.rsap_file_manager.get_sequence_name() is not None):
+        if (self._folder_path is not None) and (self.rsap_file_manager.get_sequence_name() is not None):
             self._update_action_sequence_log()
             export_time = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
             try:
-                file_path = f"{self.folder_path}/logs/"
+                file_path = f"{self._folder_path}/logs/"
                 if not os.path.exists(file_path):
                     os.makedirs(file_path)
                 with open(

@@ -106,9 +106,10 @@ class RosActionAction(ActionBaseClass):
         return "RosActionAction"
 
     def execute(self, get_interupt_method:Any = None) -> bool:
+        self.node.get_logger().error(f"Test 1")
         if self.request and self.metaclass and self.action_type:
             # update srv request from dictionary
-            self.update_request_obj_from_dict()
+            self.node.get_logger().error(f"Test 2")
 
             execute_success = False
 
@@ -137,7 +138,7 @@ class RosActionAction(ActionBaseClass):
             
             self.node.get_logger().info(f"{future.status}")
             self.node.get_logger().info(f"{future}")
-
+            
             self.response = future.result
             status = future.status
 
@@ -212,7 +213,8 @@ class RosActionAction(ActionBaseClass):
 
         type_dict = field_type_map_recursive_with_msg_type(self.metaclass.Goal)
         # 
-        self.node.get_logger().warn(f"dict HERE: {type_dict}")
+
+        #self.node.get_logger().warn(f"dict HERE: {type_dict}")
         
         return type_dict
     

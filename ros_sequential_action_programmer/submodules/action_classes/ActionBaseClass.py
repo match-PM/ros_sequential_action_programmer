@@ -19,29 +19,11 @@ from typing import Tuple, Any
 from ros_sequential_action_programmer.submodules.obj_dict_modules.obj_functions import get_obj_value_from_key, set_obj_value_from_key, get_last_index_value
 from typing import Tuple, Any
 from ros_sequential_action_programmer.submodules.action_classes.ParameterReferences import ParameterReferences
-
+from ros_sequential_action_programmer.submodules.action_classes.compatibility_mapping import COMPATIBLE_TYPES
 from rosidl_parser.definition import BasicType, Array, AbstractNestedType
 from collections import OrderedDict
 
 # Compatibility mapping
-COMPATIBLE_TYPES = {
-    "int8": ["int8", "int16", "int32", "int64"],
-    "uint8": ["uint8", "uint16", "uint32", "uint64"],
-    "int16": ["int16", "int32", "int64"],
-    "uint16": ["uint16", "uint32", "uint64"],
-    "int32": ["int32", "int64"],
-    "uint32": ["uint32", "uint64"],
-    "int64": ["int64"],
-    "uint64": ["uint64"],
-    "float32": ["float32", "float64", "float", "double"],
-    "float64": ["float64", "double"],
-    "float": ["float", "double"],
-    "double": ["double"],
-    "string": ["string", "str"],
-    "str": ["string", "str"],
-    "bool": ["bool", "boolean"],
-    "boolean": ["bool", "boolean"]
-}
 
 def find_fields_by_type(type_dict, target_type, parent_path="", compatible_map=None):
     """
@@ -104,8 +86,6 @@ class ActionBaseClass:
         self.default_response_dict = None
         self.request_dict = None
         self.default_request = None
-
-        self.log_entry = {}
         
         self._has_breakpoint = False
         self._is_active = True
@@ -159,7 +139,7 @@ class ActionBaseClass:
     def get_success_identifier(self)-> str:
         return self._success_key
     
-    def get_bool_fields(self):
+    def get_res_bool_fields(self):
         """
         Returns a list of strings containing the full keys to all bool messages of the service response
         """
@@ -221,7 +201,7 @@ class ActionBaseClass:
             self.request = new_request
             return True
     
-    def set_request_dict_value_from_key(self, path_key: str, new_value: any, override_to_implicit=False) -> bool:
+    def set_request_dict_value_from_key(self, path_key: str, new_value: any) -> bool:
         """
         This function tries to set the value of the service request given the path_key to the value and a new value.
         Retuns false if key or value are incopatible with the service request.
@@ -237,9 +217,9 @@ class ActionBaseClass:
 
         try:
 
-            test_request = copy.deepcopy(self.default_request)
+            original_request = copy.deepcopy(self.request_dict)
 
-            value_to_set = get_obj_value_from_key(test_request, path_key)
+            value_to_set = get_obj_value_from_key(original_request, path_key)
 
             # if given key leads to an array entry
             if '[' in path_key and ']' in path_key:
@@ -253,63 +233,23 @@ class ActionBaseClass:
 
             # in case the value leads to an list entry we will process
             if value_is_list_entry:
-                test_dict = copy.deepcopy(self.request_dict_implicit)
-                list_to_set = get_obj_value_from_key(test_dict, list_path_key)
-                self.node.get_logger().debug(f"List old '{str(list_to_set)}'")
-                self.node.get_logger().debug(f"test_dict old '{str(test_dict)}'")
-
-                if list_to_set is None:
-                    self.node.get_logger().error(f"Error occured accessing list element '{list_path_key}' in dict!")
+                pass
+                
+            else:
+                set_success = set_obj_value_from_key(original_request, path_key, new_value)
+                if not set_success:
+                    self.node.get_logger().debug(f"Failed to set value for key '{path_key}'!")
                     return False
                 
-                list_to_set[index] = new_value
-                
-                if not override_to_implicit:
-                    set_success = set_obj_value_from_key(self.request_dict, list_path_key, list_to_set)
-                    self.update_request_obj_from_dict()
-                else:
-                    set_success = set_obj_value_from_key(self.request_dict_implicit, list_path_key, list_to_set)
-                return set_success
-            
-            # Create a new service request object
-            # Set test request with dict
-            self.node.get_logger().debug(f"Path key {str(path_key)}")
-            self.node.get_logger().debug(f"New value {str(new_value)}")
-            self.node.get_logger().debug(f"Value to set {str(value_to_set)}")
+                set_success = self.set_request_from_dict(original_request)
 
-            self.node.get_logger().debug(f"New value type {str(type(new_value))}")
-            self.node.get_logger().debug(f"Value to set type {str(type(value_to_set))}")
-            self.node.get_logger().debug(f"{str(type(value_to_set))}")
-
-            if isinstance(value_to_set, np.ndarray) and isinstance(new_value, list):
-                new_value = np.array(new_value)
-
-            if isinstance(value_to_set, array.array) and isinstance(new_value, list):
-                new_value = array.array("i", new_value)
-
-            self.node.get_logger().debug(f"New value type {str(type(new_value))}")
-
-            if not isinstance(new_value, type(value_to_set)) and not override_to_implicit:
-                self.node.get_logger().debug(f"Given value '{new_value}' of type '{type(new_value)}' is incompatible for '{path_key}' of type '{type(value_to_set)}'!")
-                return False
-
-            # If the path does not lead to an existing value
-            if value_to_set is None:
-                return False
-            
-            if not override_to_implicit:
-                set_success = set_obj_value_from_key(self.request_dict, path_key, new_value)
-                #self.node.get_logger().debug(f"Set success {str((set_success))}")
-                self.update_request_obj_from_dict()
-            else:
-                #self.node.get_logger().debug(f"Set success {str((self.request_dict_implicit))}")
-                set_success = set_obj_value_from_key(self.request_dict_implicit, path_key, new_value)
-                #self.node.get_logger().debug(f"Set success {str((self.request_dict_implicit))}")
-                #self.node.get_logger().debug(f"Set success {str((set_success))}")
+                if not set_success:
+                    self.node.get_logger().debug(f"Failed to set value for key '{path_key}'!")
 
             return set_success
-        except:
-            self.node.get_logger().debug("Error occured in set_request_dict_value_from_key!")
+        
+        except Exception as e:
+            self.node.get_logger().error(f"Error occured in set_request_dict_value_from_key! {e}")
             return False
     
     # def update_request_obj_from_dict(self):
@@ -324,4 +264,3 @@ class ActionBaseClass:
     
     def clear_log_entry(self):
         self.log_entry = {}
-    

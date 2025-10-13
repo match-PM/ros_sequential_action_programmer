@@ -3,9 +3,10 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem,QHBoxLayout,QComboBox
 )
 from ros_sequential_action_programmer.submodules.rsap_modules.ActionParameterValueManager import ActionParameterValueManager
-
+from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass  
 from ros_sequential_action_programmer.submodules.rsap_modules.ActionParameterValueManager import RefKeyList, RefKeyListElement
-
+from ros_sequential_action_programmer.submodules.action_classes.ParameterValueSetGenerator import ValuesSet
+from ros_sequential_action_programmer.submodules.obj_dict_modules.obj_functions import get_obj_value_from_key, set_obj_value_from_key, get_last_index_value
 
 class ReferenceListItem(QWidget):
     def __init__(self, key: str, action_index: int, action_name: str):
@@ -38,9 +39,11 @@ class ReferenceListItem(QWidget):
         
 class ActionParameterValueManagerDialog(QDialog):
     def __init__(self,
-                 current_action,
+                 current_action: ActionBaseClass,
                  action_parameter_value_manager: ActionParameterValueManager,
                  current_type: str,
+                 current_values_dict: dict,
+                 current_field_key: str,
                  add_references = True,
                  add_equations = True,
                  parent=None):
@@ -49,12 +52,15 @@ class ActionParameterValueManagerDialog(QDialog):
         self.setWindowTitle(f"Field Editor - type: '{current_type}'")
         self.resize(600, 400)
         
-        self.action = current_action
+        self.current_action = current_action
         self.action_parameter_value_manager = action_parameter_value_manager
         self.current_type = current_type
+        self.values_dict = current_values_dict
+        self.current_field_key = current_field_key
         self.selected_reference = None  # store selected reference
         self.add_references = add_references
         self.add_equations = add_equations
+        self._selected_value_object_return = None  # store selected value object
         
         main_layout = QVBoxLayout(self)
         self.setLayout(main_layout)
@@ -103,7 +109,7 @@ class ActionParameterValueManagerDialog(QDialog):
     def populate_references_tab(self):
         """Populate the References tab with a scrollable list of keys."""
         ref_key_list = self.action_parameter_value_manager.get_comp_res_ref_keys(
-            target_action=self.action,
+            target_action=self.current_action,
             field_type=self.current_type
         )
         
@@ -159,32 +165,79 @@ class ActionParameterValueManagerDialog(QDialog):
             return
 
         # Retrieve the values for this header from the manager
-        values_for_header = self.action_parameter_value_manager.get_values_for_set_header(current_header)
+        value_set: ValuesSet = self.action_parameter_value_manager.get_value_set_for_header(current_header)
+        #
 
         # Add each value as a list item
-        for val in values_for_header:
-            QListWidgetItem(str(val), self.values_list_widget)
-        
-                
+        for val in value_set.get_values_list():
+            item = WidgetValuesSetItem(str(val), val)
+            self.values_list_widget.addItem(item)
+
     def on_ok(self):
         """
-        Collect selected reference and selected value set header.
+        Collect selected reference, selected value set header,
+        and the actual selected value depending on which tab is active.
         """
-        # Selected reference (if References tab is present)
-        if self.add_references:
+        # Store which tab the user is on
+        current_tab_index = self.tabs.currentIndex()
+        current_tab_name = self.tabs.tabText(current_tab_index)
+        self.selected_tab = current_tab_name
+
+        # Initialize
+        self.selected_reference = None
+        self.selected_value_header = None
+        self.selected_value_item = None
+        #self._selected_value_object_return = None
+
+        # ---------------- Values tab ----------------
+        if current_tab_name == "Values":
+            # Which header is currently selected
+            if hasattr(self, "values_dropdown"):
+                self.selected_value_header = self.values_dropdown.currentText()
+
+            # Which value (list item) is selected
+            selected_items = self.values_list_widget.selectedItems()
+            if selected_items:
+                selected_item = selected_items[0]
+                self.selected_value_item = selected_item.text()
+
+                # Get the underlying Python value from your custom QListWidgetItem
+                if isinstance(selected_item, WidgetValuesSetItem):
+                    #self._selected_value_object_return = selected_item.get_value()
+                    set_success = set_obj_value_from_key(self.values_dict, 
+                                                        str(self.current_field_key),
+                                                         selected_item.get_value())
+                    #self.current_action.set_request_dict_value_from_key(self.current_field_key, self._selected_value_object_return)
+
+        # ---------------- References tab ----------------
+        elif current_tab_name == "References" and self.add_references:
             selected_items = self.references_list_widget.selectedItems()
             if selected_items:
-                self.selected_reference = selected_items[0].text()
+                item_widget = self.references_list_widget.itemWidget(selected_items[0])
+                if item_widget:
+                    # Extract structured reference info
+                    self.selected_reference = {
+                        "key": item_widget.key_label.text(),
+                        "action_index": int(item_widget.index_label.text()),
+                        "action_name": item_widget.action_name_label.text()
+                    }
 
-        # Store the currently chosen value header
-        if hasattr(self, "values_dropdown"):
-            self.selected_value_header = self.values_dropdown.currentText()
-
-        # Optionally also capture the chosen value inside the list widget
-        self.selected_value_item = None
-        if hasattr(self, "values_list_widget"):
-            selected_values = self.values_list_widget.selectedItems()
-            if selected_values:
-                self.selected_value_item = selected_values[0].text()
-
+        # ---------------- Equations tab ----------------
+        elif current_tab_name == "Equations" and self.add_equations:
+            # Future: collect equation data here
+            pass
+            
+        # Close the dialog with success
         self.accept()
+
+    # def get_selected_value_object(self):
+    #     return self._selected_value_object_return
+
+
+class WidgetValuesSetItem(QListWidgetItem):
+    def __init__(self, disp_string, value):
+        super().__init__(disp_string)
+        self._value = value
+
+    def get_value(self):
+        return self._value

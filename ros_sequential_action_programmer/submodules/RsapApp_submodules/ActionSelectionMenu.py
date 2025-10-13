@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import  QMainWindow, QMenu
 from PyQt6.QtGui import QAction
 from functools import partial
 from copy import copy
+from PyQt6.QtGui import QCursor
 
 class ActionSelectionMenu():
     def __init__(self, mainwindow:QMainWindow):
@@ -51,12 +52,18 @@ class ActionSelectionMenu():
                 action.triggered.connect(menu_content)
                 menu.addAction(action)
 
-    def showMenu(self,use_button_pos = False):
-        # Display the menu at the cursor position
-        if use_button_pos:
+    def showMenu(self, use_button_pos=False):
+        """
+        Display the context menu.
+        - If use_button_pos=True, show at the button's position.
+        - Otherwise, show at the current mouse cursor.
+        """
+        if use_button_pos and self.mainwindow.sender():
+            # Use the widget's position that triggered the menu
             self.contextMenu.exec(self.mainwindow.mapToGlobal(self.mainwindow.sender().pos()))
         else:
-            self.contextMenu.exec()
+            # Show at the current cursor position
+            self.contextMenu.exec(QCursor.pos())
 
     def action_menu_clb(self, tree_list):
         print(tree_list)

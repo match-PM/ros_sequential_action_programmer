@@ -40,7 +40,6 @@ class ServiceAction(ActionBaseClass):
         self.response = None
 
         self.service_res_bool_messages = []
-        self.service_success_key = None
 
         if name is None:
             self.name = self.client
@@ -94,9 +93,9 @@ class ServiceAction(ActionBaseClass):
             )
 
     def execute(self, get_interupt_method:Any = None) -> bool:
+
         if self.request and self.service_metaclass and self.service_type:
             # update srv request from dictionary
-            self.update_request_obj_from_dict()
 
             client = self.node.create_client(self.service_metaclass, self.client)
             
@@ -135,7 +134,7 @@ class ServiceAction(ActionBaseClass):
                 # update srv response dict
                 self.response_dict = message_to_ordereddict(self.response)
                 # get service success value if it is set
-                success_val_from_srv_res = self.get_obj_value_from_key(self.response, self.service_success_key)
+                success_val_from_srv_res = self.get_obj_value_from_key(self.response, self._success_key)
 
                 if success_val_from_srv_res is not None:
                     srv_call_success = success_val_from_srv_res
@@ -154,6 +153,10 @@ class ServiceAction(ActionBaseClass):
             #self.node.get_logger().info(f"Service return: {self.response_dict}")
             
             return srv_call_success
+
+        else:
+            self.node.get_logger().error(f"Service Action '{self.get_name()}' not properly initialized!")
+            return False
 
     def client_executer_watchdog(self, node_name, future_obj, get_interupt_method):
         node_names = self.node.get_node_names()
@@ -184,36 +187,76 @@ class ServiceAction(ActionBaseClass):
         service = get_service(self.service_type)
         return service
 
+    # def init_service_res_bool_messages(self) -> None:
+    #     """
+    #     Initializes the service response bool messages from an empty service response
+    #     """
+
+    #     def check_for_bool_values(data, bool_list: list, parent_key=None):
+    #         # iterate through the dict
+    #         for key, value in data.items():
+    #             if parent_key is not None:
+    #                 full_key = parent_key + "." + key
+    #             else:
+    #                 full_key = key
+
+    #             if isinstance(value, collections.OrderedDict):
+    #                 check_for_bool_values(value, bool_list, full_key)
+    #             else:
+    #                 if isinstance(value, bool):
+    #                     bool_list.append(full_key)
+
+    #     if self.default_response_dict is not None:
+    #         check_for_bool_values(self.default_response_dict, self.service_res_bool_messages)
+    #     else:
+    #         self.node.get_logger().warn("Init of default service response not possible")
+
     def init_service_res_bool_messages(self) -> None:
         """
-        Initializes the service response bool messages from an empty service response
+        Initializes the service response bool messages from the type information of the response message.
+        Populates self.service_res_bool_messages with full keys to all boolean fields.
         """
+        self.service_res_bool_messages = []  # clear previous entries
+        #self.service_res_bool_messages.append("None")
 
-        def check_for_bool_values(data, bool_list: list, parent_key=None):
-            # iterate through the dict
-            for key, value in data.items():
-                if parent_key is not None:
-                    full_key = parent_key + "." + key
-                else:
-                    full_key = key
+        def recurse_fields(fields: dict, parent_key=None):
+            for key, info in fields.items():
+                full_key = f"{parent_key}.{key}" if parent_key else key
 
-                if isinstance(value, collections.OrderedDict):
-                    check_for_bool_values(value, bool_list, full_key)
-                else:
-                    if isinstance(value, bool):
-                        bool_list.append(full_key)
+                # Debug log: current key and info
+                self.node.get_logger().debug(f"Checking field: '{full_key}', info: {info}")
 
-        if self.default_response_dict is not None:
-            check_for_bool_values(self.default_response_dict, self.service_res_bool_messages)
+                # Check if the field is boolean
+                if info.get('type') == 'boolean' or info.get('type') == 'bool':
+                    self.node.get_logger().info(f"Found boolean field: '{full_key}'")
+                    self.service_res_bool_messages.append(full_key)
+
+                # Recurse into nested fields
+                if 'fields' in info:
+                    self.node.get_logger().debug(f"Recursing into nested fields of '{full_key}'")
+                    recurse_fields(info['fields'], full_key)
+
+                # If it's an array of nested messages, recurse into fields
+                if info.get('is_array') and 'fields' in info:
+                    self.node.get_logger().debug(f"Recursing into array of nested messages for '{full_key}'")
+                    recurse_fields(info['fields'], full_key + '.*')  # optional: add '*' to indicate array
+
+        # Get type dict of the response message
+        if self.service_metaclass and hasattr(self.service_metaclass, 'Response'):
+            type_dict = field_type_map_recursive_with_msg_type(self.service_metaclass.Response)
+            self.node.get_logger().debug(f"Response type dict: {type_dict}")
+            recurse_fields(type_dict)
+            self.node.get_logger().info(f"All boolean fields found: {self.service_res_bool_messages}")
         else:
-            self.node.get_logger().warn("Init of default service response not possible")
+            self.node.get_logger().warn(
+                "Cannot initialize service response bool messages: Response type not available."
+            )
 
-    def get_service_bool_fields(self):
+    def get_res_bool_fields(self)->list[str]:
         """
         Returns a list of strings containing the full keys to all bool messages of the service response
         """
         return self.service_res_bool_messages
-
 
     # def set_service_request(self, request: any):
     #     """
@@ -245,7 +288,7 @@ class ServiceAction(ActionBaseClass):
         self.log_entry["srv_end_time"] = str(end_time.strftime("%Y-%m-%d_%H:%M:%S.%f"))
         self.log_entry["execution_time"] = str(end_time - start_time)
         self.log_entry["srv_request"] = json.loads(json.dumps(self.request_dict))
-        self.log_entry["srv_response"] = json.loads(json.dumps(self.request_dict))
+        self.log_entry["srv_response"] = json.loads(json.dumps(self.response_dict))
         if not additional_text == '':
             self.log_entry["message"] = str(additional_text)
         self.log_entry["success"] = success
@@ -275,7 +318,7 @@ class ServiceAction(ActionBaseClass):
         new_instance.service_res_bool_messages = copy.deepcopy(
             self.service_res_bool_messages
         )
-        new_instance.service_success_key = copy.deepcopy(self.service_success_key)
+        new_instance._success_key = copy.deepcopy(self._success_key)
         new_instance.request_dict_implicit = copy.deepcopy(
             self.request_dict_implicit
         )
@@ -293,7 +336,8 @@ class ServiceAction(ActionBaseClass):
         #self.node.get_logger().warn(f"slt: {slt}, type: {type}")
 
         type_dict = field_type_map_recursive_with_msg_type(self.service_metaclass.Request)
-        self.node.get_logger().warn(f"dict: {type_dict}")
+
+        #self.node.get_logger().warn(f"dict: {type_dict}")
         
         return type_dict
     

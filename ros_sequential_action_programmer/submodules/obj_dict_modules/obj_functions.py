@@ -39,33 +39,29 @@ def set_obj_value_from_key(obj: any, path_key: str, new_value: any) -> bool:
     """
     keys = path_key.split(".")
     current_value = obj
-
-    try:
-        for key in keys[:-1]:
-            if isinstance(current_value, dict) and key in current_value:
-                current_value = current_value[key]
-            elif isinstance(current_value, list):
-                key = int(key)
-                current_value = current_value[key]
-            elif hasattr(current_value, key):
-                current_value = getattr(current_value, key)
-            else:
-                return False
-
-        last_key = keys[-1]
-        if isinstance(current_value, dict) and last_key in current_value:
-            current_value[last_key] = new_value
+    
+    for key in keys[:-1]:
+        if isinstance(current_value, dict) and key in current_value:
+            current_value = current_value[key]
         elif isinstance(current_value, list):
-            last_key = int(last_key)
-            current_value[last_key] = new_value
-        elif hasattr(current_value, last_key):
-            setattr(current_value, last_key, new_value)
+            key = int(key)
+            current_value = current_value[key]
+        elif hasattr(current_value, key):
+            current_value = getattr(current_value, key)
         else:
-            return False
-        # Finally
-        return True
-    except (KeyError, IndexError, AttributeError, ValueError):
-        return False
+            raise ValueError(f"Key not found in object! Key: {key}, Object: {current_value}")
+
+    last_key = keys[-1]
+    if isinstance(current_value, dict) and last_key in current_value:
+        current_value[last_key] = new_value
+    elif isinstance(current_value, list):
+        last_key = int(last_key)
+        current_value[last_key] = new_value
+    elif hasattr(current_value, last_key):
+        setattr(current_value, last_key, new_value)
+    else:
+        raise ValueError(f"Key not found in object! Key: {last_key}, Object: {current_value}")
+
     
 def get_last_index_value(self, input_string:str)->int:
     # Use regular expression to find all occurrences of '[x]' and extract 'x' from the last one
