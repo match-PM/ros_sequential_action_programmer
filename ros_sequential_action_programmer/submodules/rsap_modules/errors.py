@@ -8,3 +8,8 @@ class SetActionRequestError(Exception):
     def __init__(self, message="Action Request could not be set.!"):
         self.message = message
         super().__init__(self.message)
+
+class EvaluateActionReferenceError(Exception):
+    def __init__(self, message="Action Reference could not be evaluated.!"):
+        self.message = message
+        super().__init__(self.message)

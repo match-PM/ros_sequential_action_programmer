@@ -25,7 +25,7 @@ from typing import Tuple, Any
 from rosidl_parser.definition import BasicType, Array, AbstractNestedType, NamespacedType
 from collections import OrderedDict
 from ros_sequential_action_programmer.submodules.action_classes.ros_messages_functions import field_type_map_recursive, field_type_map_recursive_with_msg_type
-from ros_sequential_action_programmer.submodules.rsap_modules.errors import ActionInitializationError, SetActionRequestError
+from ros_sequential_action_programmer.submodules.rsap_modules.errors import ActionInitializationError, SetActionRequestError, EvaluateActionReferenceError
 
 
 STATUS_UNKNOWN = 0
@@ -69,7 +69,6 @@ class RosActionAction(ActionBaseClass):
             self.default_response_dict = message_to_ordereddict(self.empty_response)
             self.request_dict = message_to_ordereddict(self.request)
             self.metaclass = self.get_metaclass(self.action_type)
-            self.request_dict_implicit = copy.deepcopy(self.request_dict)
             self.response_dict = copy.deepcopy(self.default_response_dict)
             self.default_request = copy.deepcopy(self.request)
 
@@ -107,6 +106,15 @@ class RosActionAction(ActionBaseClass):
 
     def execute(self, get_interupt_method:Any = None) -> bool:
         self.node.get_logger().error(f"Test 1")
+
+        try:
+            new_request_dict = self.evaluate_references()
+            self.set_request_from_dict(new_request_dict)
+            
+        except EvaluateActionReferenceError as e:
+            self.node.get_logger().error(f"Error occured evaluating action references for service action '{self.get_name()}'! {str(e)}")
+            return False
+    
         if self.request and self.metaclass and self.action_type:
             # update srv request from dictionary
             self.node.get_logger().error(f"Test 2")
@@ -132,7 +140,6 @@ class RosActionAction(ActionBaseClass):
 
             self.node.get_logger().warn(f"Request {self.request}")
             self.node.get_logger().warn(f"Request dict {self.request_dict}")
-            self.node.get_logger().warn(f"Request dict implicit {self.request_dict_implicit}")
 
             future = _client.send_goal(self.request)
             
@@ -165,8 +172,8 @@ class RosActionAction(ActionBaseClass):
         )
         self.log_entry["srv_end_time"] = str(end_time.strftime("%Y-%m-%d_%H:%M:%S.%f"))
         self.log_entry["execution_time"] = str(end_time - start_time)
-        self.log_entry["request"] = json.loads(json.dumps(self.request_dict))
-        self.log_entry["response"] = json.loads(json.dumps(self.response_dict))
+        self.log_entry["request"] = json.loads(json.dumps(self.get_request_as_ordered_dict()))
+        self.log_entry["response"] = json.loads(json.dumps(self.get_response_as_ordered_dict()))
         if not additional_text == '':
             self.log_entry["message"] = str(additional_text)
         self.log_entry["success"] = success
@@ -181,10 +188,8 @@ class RosActionAction(ActionBaseClass):
         new_instance.request_dict = copy.deepcopy(self.request_dict)
         new_instance.response = copy.deepcopy(self.response)
         new_instance.request = copy.deepcopy(self.request)
-        new_instance.request_dict = copy.deepcopy(self.request_dict)
         new_instance.response_dict = copy.deepcopy(self.response_dict)
         new_instance.log_entry = copy.deepcopy(self.log_entry)
-        new_instance.request_dict_implicit = copy.deepcopy(self.request_dict_implicit)
         new_instance.set_name(f"{self.get_name()}_copy")
 
         return new_instance
@@ -202,6 +207,9 @@ class RosActionAction(ActionBaseClass):
     def get_request_as_ordered_dict(self)->OrderedDict:
         return message_to_ordereddict(self.request)
     
+    def get_response_as_ordered_dict(self):
+        return message_to_ordereddict(self.response)
+
     def get_request_type(self):
         # slt = self.service_metaclass.Request.__slots__
         # #slt = ""

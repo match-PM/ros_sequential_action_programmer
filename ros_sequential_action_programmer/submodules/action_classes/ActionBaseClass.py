@@ -18,7 +18,10 @@ import re
 from typing import Tuple, Any
 from ros_sequential_action_programmer.submodules.obj_dict_modules.obj_functions import get_obj_value_from_key, set_obj_value_from_key, get_last_index_value
 from typing import Tuple, Any
-from ros_sequential_action_programmer.submodules.action_classes.ParameterReferences import ParameterReferences
+from ros_sequential_action_programmer.submodules.action_classes.ParameterReferences import ActionParameterReferences
+from ros_sequential_action_programmer.submodules.action_classes.ParameterReference import ActionResponseParameterReference, SeqParameterReference
+from ros_sequential_action_programmer.submodules.rsap_modules.errors import EvaluateActionReferenceError
+
 from ros_sequential_action_programmer.submodules.action_classes.compatibility_mapping import COMPATIBLE_TYPES
 from rosidl_parser.definition import BasicType, Array, AbstractNestedType
 from collections import OrderedDict
@@ -90,7 +93,17 @@ class ActionBaseClass:
         self._has_breakpoint = False
         self._is_active = True
         self._success_key = None
-        self._parameter_references = ParameterReferences()
+        self._parameter_references = ActionParameterReferences()
+    
+    def get_references(self) -> ActionParameterReferences:
+        return self._parameter_references
+    
+    def set_references(self, new_references: ActionParameterReferences) -> bool:
+        if not isinstance(new_references, ActionParameterReferences):
+            return False
+        else:
+            self._parameter_references = new_references
+            return True
     
     def get_name(self)-> str:
         return self.name
@@ -252,6 +265,39 @@ class ActionBaseClass:
             self.node.get_logger().error(f"Error occured in set_request_dict_value_from_key! {e}")
             return False
     
+    def evaluate_references(self)->dict:
+        """
+        Evaluate all parameter references and update the request dict accordingly.
+        """
+
+        copy_request_dict = copy.deepcopy(self.get_request_as_ordered_dict())
+
+        for index, _reference in enumerate(self._parameter_references.get_reference_list()):
+
+            if isinstance(_reference, ActionResponseParameterReference):
+                _reference: ActionResponseParameterReference
+                value_key = _reference.get_value_key()
+                response_reference_key = _reference.get_reference_key()
+                reference_action = _reference.get_reference_action()
+
+                self.node.get_logger().warn(f"Evaluating action response reference for key '{_reference.get_value_key()}' from action '{_reference.get_reference_action().get_name()}'")
+
+            elif isinstance(_reference, SeqParameterReference):
+                _reference: SeqParameterReference
+                value_key = _reference.get_value_key()
+                seq_parameter = _reference.get_parameter()
+                value_to_set = seq_parameter.get_value()
+                set_obj_value_from_key(copy_request_dict, path_key=value_key, new_value=value_to_set)
+
+                #raise EvaluateActionReferenceError(f"Failed to set sequence parameter reference value for key '{value_key}' from parameter '{seq_parameter.get_name()}'")
+
+                self.node.get_logger().warn(f"Evaluating sequence parameter reference for key '{_reference.get_value_key()}'")
+    
+            else:
+                continue
+
+        return copy_request_dict
+        
     # def update_request_obj_from_dict(self):
     #     """Update the ros service message from the dict"""
     #     set_message_fields(self.request, self.request_dict)

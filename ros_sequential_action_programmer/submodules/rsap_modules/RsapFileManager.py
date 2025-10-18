@@ -3,8 +3,10 @@ from ros_sequential_action_programmer.submodules.action_classes.ServiceAction im
 from ros_sequential_action_programmer.submodules.action_classes.RosActionAction import RosActionAction
 from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI, TERMINAL
 from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass
-
+from ros_sequential_action_programmer.submodules.action_classes.ParameterReference import ActionResponseParameterReference, SeqParameterReference
+from ros_sequential_action_programmer.submodules.action_classes.ParameterReferences import ActionParameterReferences
 from ros_sequential_action_programmer.submodules.rsap_modules.errors import ActionInitializationError, SetActionRequestError
+from ros_sequential_action_programmer.submodules.rsap_modules.SeqParamterManager import SeqParameterManager, SeqParameter, SeqParameterError, SeqParameterManagerError
 import json
 import os
 from datetime import datetime
@@ -12,12 +14,13 @@ from rclpy.node import Node
 
 class RsapFileManager():
     def __init__(self, 
-                 sequence_list: list[ActionBaseClass], 
-                 node:Node):
+                 sequence_list: list[ActionBaseClass],
+                 node:Node,
+                 seq_parameter_manager: SeqParameterManager = None):
         
         self.sequence_list = sequence_list
         self.node = node
-        
+        self.seq_parameter_manager = seq_parameter_manager
         self._sequence_file_path = None
         self._folder_path = None
         self._sequence_name = None
@@ -60,6 +63,18 @@ class RsapFileManager():
         self._folder_path = os.path.dirname(file_path)
         self._sequence_name = file_data["name"]
 
+        _sequence_file_path = file_data.get("seq_parameters_file", None)
+
+        # its important to load the seq parameters first
+        if _sequence_file_path and self.seq_parameter_manager:
+            try:
+                self.seq_parameter_manager.load_file(_sequence_file_path)
+                self.node.get_logger().info(f"Success loading sequence parameters from '{_sequence_file_path}'!")
+            except SeqParameterManagerError as e:
+                self.node.get_logger().error(f"Error loading sequence parameters from '{_sequence_file_path}': {e}")
+                self.node.get_logger().error(f"No sequence parameters loaded!")
+
+
         for index, action_dict in enumerate(file_data["action_list"]):
             try:
                 action_dict:dict
@@ -69,7 +84,38 @@ class RsapFileManager():
                 _description = action_dict["description"]
                 _name = action_dict["name"]
                 _type = action_dict['action_type']
-                
+                _param_references_dict = action_dict.get('parameter_references', None)
+                _param_references = ActionParameterReferences()
+
+                if _param_references_dict:
+                    for ref in _param_references_dict:
+                        if ref["type"] == "action_response":
+                            action_pointer = None
+                            # find the action pointer from the current sequence list
+                            action_pointer = self.sequence_list[ref["action_index"]] if ref["action_index"] < len(self.sequence_list) else None
+
+                            _new_ref = ActionResponseParameterReference(
+                                value_key=ref["value_key"],
+                                reference_key=ref["reference_key"],
+                                action_pointer=action_pointer
+                            )
+                            _param_references.add_reference(_new_ref)
+                        elif ref["type"] == "seq_parameter":
+                            try:
+                                param = self.seq_parameter_manager.get_parameter_by_name(ref["parameter_name"])
+                                if param:
+                                    _new_ref = SeqParameterReference(
+                                        value_key=ref["value_key"],
+                                        param=param
+                                    )
+                                    _param_references.add_reference(_new_ref)
+                            except SeqParameterError as e:
+                                self.node.get_logger().error(f"Error loading SeqParameter reference '{ref['parameter_name']}': {e}")
+                                continue
+                        else:
+                            self.node.get_logger().error(f"Unknown parameter reference type '{ref['type']}'!")
+                            continue
+
                 if _type == 'ServiceAction':
                     _service_client = action_dict["service_client"]
                     _service_type = action_dict["service_type"]
@@ -82,7 +128,6 @@ class RsapFileManager():
                     set_success = action_from_item.set_success_identifier(action_dict["error_identifier"])
                     action_from_item.set_description(_description)
                     action_from_item.set_request_from_dict(_request)
-                    self.sequence_list.append(action_from_item)
 
                 elif _type == 'UserInteractionAction':
                     action_from_item = UserInteractionAction(node=self.node,
@@ -90,7 +135,6 @@ class RsapFileManager():
                                                             name=_name,
                                                             action_text=action_dict['action_text'])
                     action_from_item.set_description(_description)
-                    self.sequence_list.append(action_from_item)
                     
                 elif _type == 'RosActionAction':
                     _ros_action_client = action_dict["ros_action_client"]
@@ -102,11 +146,14 @@ class RsapFileManager():
                     
                     action_from_item.set_description(_description)
                     action_from_item.set_request_from_dict(_request)
-                    self.sequence_list.append(action_from_item)
 
                 else:
                     self.node.get_logger().error(f"Action type '{_type}' not supported!")
                     continue
+
+                action_from_item.set_references(_param_references)
+                self.sequence_list.append(action_from_item)
+
                 
             except (ActionInitializationError,SetActionRequestError) as e:
                 self.node.get_logger().error(f"{e}. Skipping loading this action")
@@ -125,6 +172,8 @@ class RsapFileManager():
             process_dict = {}
             process_dict["name"] = self._sequence_name
             process_dict["saved_at"] = str(datetime.now())  # Add a timestamp
+            if self.seq_parameter_manager:
+                process_dict["seq_parameters_file"] = self.seq_parameter_manager.get_file_path()
 
             action_list = []
             for index, action in enumerate(self.sequence_list):
@@ -136,6 +185,7 @@ class RsapFileManager():
 
                 action_dict["action_type"] = action.get_type_indicator()
                 action_dict["action_position"] = index
+                action_dict["parameter_references"] = self.references_as_dict_list(action=action)
 
                 if isinstance(action, ServiceAction):
                     action: ServiceAction
@@ -168,7 +218,12 @@ class RsapFileManager():
                 with open(f"{self._folder_path}/{self._sequence_name}.json", "w") as json_file:
                     json.dump(process_dict, json_file,indent=4)
                 self.node.get_logger().info("Saved!")
+
+                # save the seq parameters as well if available
+                if self.seq_parameter_manager and self.seq_parameter_manager.get_is_initialized():
+                    self.seq_parameter_manager.save_to_file()
                 return True
+            
             except FileNotFoundError as e:
                 self.node.get_logger().error(f"{e}")
                 self.node.get_logger().error("Directory does not exist!")
@@ -180,4 +235,36 @@ class RsapFileManager():
         else:
             return False
         
-        
+    def references_as_dict_list(self, action:ActionBaseClass)->list[dict]:
+        dict_list :list[dict] = []
+        for index, ref in enumerate(action.get_references().reference_list):
+            if isinstance(ref, ActionResponseParameterReference):
+                ref_action = ref.get_reference_action()
+                ref_action_name = ref_action.get_name() if ref_action else "None"
+                ref_index = self._get_index_of_action(ref_action) if ref_action else None
+                ref: ActionResponseParameterReference
+                dict_list.append({
+                    "type": "action_response",
+                    "value_key": ref.get_value_key(),
+                    "reference_key": ref.get_reference_key(),
+                    "action_name": ref_action_name,
+                    "action_index": ref_index,
+                })
+            elif isinstance(ref, SeqParameterReference):
+                ref: SeqParameterReference
+                dict_list.append({
+                    "type": "seq_parameter",
+                    "value_key": ref.get_value_key(),
+                    "parameter_name": ref.get_parameter().get_name()
+                })
+
+        return dict_list
+    
+    def _get_index_of_action(self, action:ActionBaseClass)->int|None:
+        for index, act in enumerate(self.sequence_list):
+            if act is action:
+                return index
+        return None
+    
+    def reset_sequence_parameter_manager(self) -> None:
+        self.seq_parameter_manager = SeqParameterManager()

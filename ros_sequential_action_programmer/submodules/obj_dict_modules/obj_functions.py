@@ -32,7 +32,7 @@ def get_obj_value_from_key(obj: Union[dict, list, any], path_key: str) -> any:
     return current_value
 
 
-def set_obj_value_from_key(obj: any, path_key: str, new_value: any) -> bool:
+def set_obj_value_from_key(obj: any, path_key: str, new_value: any):
     """
     This function sets the new_value at the value to which the path_key leads to. The obj can be any object, dict, list
     Returns False if value cant be set

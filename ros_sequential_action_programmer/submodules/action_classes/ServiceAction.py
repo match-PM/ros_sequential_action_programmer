@@ -20,7 +20,7 @@ from collections import OrderedDict
 
 from rosidl_parser.definition import BasicType, Array, AbstractNestedType, NamespacedType
 from ros_sequential_action_programmer.submodules.action_classes.ros_messages_functions import field_type_map_recursive, field_type_map_recursive_with_msg_type
-from ros_sequential_action_programmer.submodules.rsap_modules.errors import ActionInitializationError, SetActionRequestError
+from ros_sequential_action_programmer.submodules.rsap_modules.errors import ActionInitializationError, SetActionRequestError, EvaluateActionReferenceError
 
 def set_at_index(lst, index, value):
     while len(lst) <= index:  # Expand list if needed
@@ -94,6 +94,19 @@ class ServiceAction(ActionBaseClass):
 
     def execute(self, get_interupt_method:Any = None) -> bool:
 
+        # evaluate references and update request dict
+        try:
+            new_request_dict = self.evaluate_references()
+            self.node.get_logger().warn(f"Service Action '{self.get_name()}' evaluated request dict: {new_request_dict}")
+
+            self.set_request_from_dict(new_request_dict)
+            self.node.get_logger().warn(f"Service Action '{self.get_name()}' evaluated request dict: {self.request}")
+
+
+        except EvaluateActionReferenceError as e:
+            self.node.get_logger().error(f"Error occured evaluating action references for service action '{self.get_name()}'! {str(e)}")
+            return False
+
         if self.request and self.service_metaclass and self.service_type:
             # update srv request from dictionary
 
@@ -145,11 +158,15 @@ class ServiceAction(ActionBaseClass):
 
             srv_end_time = datetime.now()
 
+            self.node.get_logger().info(f"Test1..")
+
             client.destroy()
             if timer is not None:
                 timer.destroy()
-            self.update_log_entry(srv_call_success, srv_start_time, srv_end_time)
             
+            self.node.get_logger().info(f"Test2..")
+            self.update_log_entry(srv_call_success, srv_start_time, srv_end_time)
+            self.node.get_logger().info(f"Test3..")
             #self.node.get_logger().info(f"Service return: {self.response_dict}")
             
             return srv_call_success
@@ -287,8 +304,8 @@ class ServiceAction(ActionBaseClass):
         )
         self.log_entry["srv_end_time"] = str(end_time.strftime("%Y-%m-%d_%H:%M:%S.%f"))
         self.log_entry["execution_time"] = str(end_time - start_time)
-        self.log_entry["srv_request"] = json.loads(json.dumps(self.request_dict))
-        self.log_entry["srv_response"] = json.loads(json.dumps(self.response_dict))
+        self.log_entry["srv_request"] = json.loads(json.dumps(self.get_request_as_ordered_dict()))
+        self.log_entry["srv_response"] = json.loads(json.dumps(self.get_response_as_ordered_dict()))
         if not additional_text == '':
             self.log_entry["message"] = str(additional_text)
         self.log_entry["success"] = success
@@ -347,6 +364,9 @@ class ServiceAction(ActionBaseClass):
         
     def get_request_as_ordered_dict(self)->OrderedDict:
         return message_to_ordereddict(self.request)
+    
+    def get_response_as_ordered_dict(self):
+        return message_to_ordereddict(self.response)
     
     def set_request_from_dict(self,request_dictionary:Union[dict,OrderedDict]) -> bool:
         """Update the ros service message from the dict"""

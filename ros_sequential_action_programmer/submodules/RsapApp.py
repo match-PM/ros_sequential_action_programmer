@@ -32,7 +32,7 @@ from ros_sequential_action_programmer.submodules.RsapApp_submodules.NoScrollComb
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_widget_adv import ActionSequenceListWidget
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_widgets import ActionListWidget, ActionListItem
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionParameterLayout import ActionParameterLayout
-
+from ros_sequential_action_programmer.submodules.rsap_modules.SeqParamterManager import SeqParameterManager
 try:
     from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import PmDashboardApp
     from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import append_jog_panel_to_menu
@@ -186,6 +186,8 @@ class RsapApp(QMainWindow):
         menubar.setStyleSheet("QMenuBar { font-size: 18px; }")
         file_menu = menubar.addMenu("File")
         app_config_menu = menubar.addMenu("Settings")
+        seq_param_menu = menubar.addMenu("Sequence Parameters File")
+
         pm_robot_tools_menu = menubar.addMenu("PM Robot Tools")
         ros_menu = menubar.addMenu("ROS2 Functionalities")
         
@@ -215,6 +217,20 @@ class RsapApp(QMainWindow):
             pm_robot_tools_menu.addAction(open_pm_robot_config)
         except:
             pass
+        
+        load_actionable_seq_params = QAction("Load Sequence Parameters File", self)
+        load_actionable_seq_params.triggered.connect(self.load_sequence_parameters_file)
+        new_actionable_seq_params = QAction("New Sequence Parameters File", self)
+        new_actionable_seq_params.triggered.connect(self.create_new_sequence_parameters_file)
+        reset_actionable_seq_params =QAction("Reset Sequence Parameter Manager", self)
+        reset_actionable_seq_params.triggered.connect(self.reset_sequence_parameter_manager)
+        save_actionable_seq_params = QAction("Save Sequence Parameter Manager", self)
+        save_actionable_seq_params.triggered.connect(self.save_sequence_parameter_manager)
+
+        seq_param_menu.addAction(load_actionable_seq_params)
+        seq_param_menu.addAction(new_actionable_seq_params)
+        seq_param_menu.addAction(reset_actionable_seq_params)
+        seq_param_menu.addAction(save_actionable_seq_params)
 
         executable_menu = QAction("ROS2 Run", self)
         executable_menu.triggered.connect(self.show_ros_executable_menu)
@@ -687,6 +703,61 @@ class RsapApp(QMainWindow):
             pass
             #self.service_node._logger.info("Interruption aborted!")
 
+    def load_sequence_parameters_file(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open Sequence Parameters File",
+            "",
+            f"RSApp Parameter Files (*{SeqParameterManager.FILE_ENDING})"
+        )  
+        self.service_node.get_logger().info(f"Loading sequence parameters from: {file_path}")
+        self.action_sequence_builder.rsap_file_manager.seq_parameter_manager.load_file(file_path)
+
+    def create_new_sequence_parameters_file(self) -> None:
+        """
+        Opens a save file dialog to create a new .rsapp.json sequence parameters file.
+        Automatically appends the .rsapp.json extension and initializes it with metadata.
+        """
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Create New Sequence Parameters File",
+            "",
+            f"RSApp Parameter Files (*{SeqParameterManager.FILE_ENDING})"
+        )
+
+        if not file_path:
+            return  # user cancelled
+
+        # Ensure correct extension
+        if not file_path.endswith(SeqParameterManager.FILE_ENDING):
+            file_path += SeqParameterManager.FILE_ENDING
+
+        # Check if file already exists
+        if os.path.exists(file_path):
+            reply = QMessageBox.question(
+                self,
+                "Overwrite File?",
+                f"The file '{os.path.basename(file_path)}' already exists. Overwrite it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+        
+        self.service_node.get_logger().info(f"Creating new sequence parameters file at: {file_path}")
+        self.action_sequence_builder.rsap_file_manager.reset_sequence_parameter_manager()
+        self.action_sequence_builder.rsap_file_manager.seq_parameter_manager.set_file_dir(os.path.dirname(file_path))
+        self.action_sequence_builder.rsap_file_manager.seq_parameter_manager.set_file_name(os.path.basename(file_path))
+        self.action_sequence_builder.rsap_file_manager.seq_parameter_manager.save_to_file()
+
+    def reset_sequence_parameter_manager(self) -> None:
+        self.action_sequence_builder.rsap_file_manager.reset_sequence_parameter_manager()
+
+    def save_sequence_parameter_manager(self) -> None:
+        if self.action_sequence_builder.rsap_file_manager.seq_parameter_manager.get_is_initialized():
+            self.action_sequence_builder.rsap_file_manager.seq_parameter_manager.save_to_file()
+        else:
+            self.create_new_sequence_parameters_file()
 
     def add_service_to_action_list(self, service_name: str, service_client:str, service_type:str = None) -> None:
         pos_to_insert = self.action_list_widget.currentRow() + 1

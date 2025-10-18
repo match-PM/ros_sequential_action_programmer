@@ -1,43 +1,65 @@
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QTabWidget, QWidget, QLabel, QPushButton,
-    QListWidget, QListWidgetItem,QHBoxLayout,QComboBox
+    QListWidget, QListWidgetItem,QHBoxLayout,QComboBox,QTreeWidget, QTreeWidgetItem
 )
+from PyQt6.QtCore import Qt
 from ros_sequential_action_programmer.submodules.rsap_modules.ActionParameterValueManager import ActionParameterValueManager
 from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass  
 from ros_sequential_action_programmer.submodules.rsap_modules.ActionParameterValueManager import RefKeyList, RefKeyListElement
 from ros_sequential_action_programmer.submodules.action_classes.ParameterValueSetGenerator import ValuesSet
 from ros_sequential_action_programmer.submodules.obj_dict_modules.obj_functions import get_obj_value_from_key, set_obj_value_from_key, get_last_index_value
+from ros_sequential_action_programmer.submodules.rsap_modules.SeqParamterManager import SeqParameter
+from ros_sequential_action_programmer.submodules.action_classes.ParameterReference import SeqParameterReference, ActionResponseParameterReference
 
-class ReferenceListItem(QWidget):
-    def __init__(self, key: str, action_index: int, action_name: str):
-        super().__init__()
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(2, 2, 2, 2)
-        layout.setSpacing(10)
+# class ReferenceListItem(QWidget):
+#     def __init__(self, key: str, action_index: int, action_name: str):
+#         super().__init__()
+#         layout = QHBoxLayout(self)
+#         layout.setContentsMargins(2, 2, 2, 2)
+#         layout.setSpacing(10)
 
-        # Create labels in the desired order: index, name, key
-        self.index_label = QLabel(str(action_index))
-        self.action_name_label = QLabel(action_name)
-        self.key_label = QLabel(key)
+#         # Create labels in the desired order: index, name, key
+#         self.index_label = QLabel(str(action_index))
+#         self.action_name_label = QLabel(action_name)
+#         self.key_label = QLabel(key)
 
-        # Optional: style for clarity
-        self.index_label.setStyleSheet("color: gray;")
-        self.action_name_label.setStyleSheet("color: darkblue;")
-        self.key_label.setStyleSheet("font-weight: bold;")
+#         # Optional: style for clarity
+#         self.index_label.setStyleSheet("color: gray;")
+#         self.action_name_label.setStyleSheet("color: darkblue;")
+#         self.key_label.setStyleSheet("font-weight: bold;")
 
-        # Set fixed width for consistent alignment
-        self.index_label.setFixedWidth(40)
-        self.action_name_label.setFixedWidth(200)
-        #self.key_label.setFixedWidth(label_width)
+#         # Set fixed width for consistent alignment
+#         self.index_label.setFixedWidth(40)
+#         self.action_name_label.setFixedWidth(200)
+#         #self.key_label.setFixedWidth(label_width)
 
-        # Add widgets in order
-        layout.addWidget(self.index_label)
-        layout.addWidget(self.action_name_label)
-        layout.addWidget(self.key_label)
+#         # Add widgets in order
+#         layout.addWidget(self.index_label)
+#         layout.addWidget(self.action_name_label)
+#         layout.addWidget(self.key_label)
 
-        layout.addStretch()  # push everything to the left
-        
+#         layout.addStretch()  # push everything to the left
+
+# class SeqParameterListItem(QWidget):
+#     def __init__(self, parameter:SeqParameter):
+#         super().__init__()
+#         layout = QHBoxLayout(self)
+#         layout.setContentsMargins(2, 2, 2, 2)
+#         layout.setSpacing(10)
+
+#         self.name_label = QLabel(parameter.get_name())
+#         #self.type_label = QLabel(parameter.get_type())
+#         self.value_label = QLabel(str(parameter.get_value()))
+
+#         layout.addWidget(self.name_label)
+#         #layout.addWidget(self.type_label)
+#         layout.addWidget(self.value_label)
+
 class ActionParameterValueManagerDialog(QDialog):
+
+    RERFERENCE_TAB_SEQUENCE_PARAMETERS = "Sequence Parameters"
+    RERFERENCE_TAB_ACTION_RESPONSES = "Action Responses"
+
     def __init__(self,
                  current_action: ActionBaseClass,
                  action_parameter_value_manager: ActionParameterValueManager,
@@ -57,7 +79,6 @@ class ActionParameterValueManagerDialog(QDialog):
         self.current_type = current_type
         self.values_dict = current_values_dict
         self.current_field_key = current_field_key
-        self.selected_reference = None  # store selected reference
         self.add_references = add_references
         self.add_equations = add_equations
         self._selected_value_object_return = None  # store selected value object
@@ -84,7 +105,7 @@ class ActionParameterValueManagerDialog(QDialog):
             self.tabs.addTab(self.references_tab, "References")
 
             # Populate References tab
-            self.populate_references_tab()
+            self.init_references_tab()
 
         # ------------------ Tab 3: Equations ------------------
         if add_equations:
@@ -106,27 +127,94 @@ class ActionParameterValueManagerDialog(QDialog):
         self.close_button.clicked.connect(self.reject)
         button_layout.addWidget(self.close_button)
 
-    def populate_references_tab(self):
+    def init_references_tab(self):
         """Populate the References tab with a scrollable list of keys."""
-        ref_key_list = self.action_parameter_value_manager.get_comp_res_ref_keys(
-            target_action=self.current_action,
-            field_type=self.current_type
-        )
+
+        if not self.add_references:
+            return
         
-        self.references_list_widget = QListWidget()
-        self.references_layout.addWidget(self.references_list_widget)
+        # Create a dropdown combo box
+        self.reference_dropdown = QComboBox()
+        self.reference_dropdown.addItems([self.RERFERENCE_TAB_SEQUENCE_PARAMETERS, self.RERFERENCE_TAB_ACTION_RESPONSES])
 
-        for ref_key in ref_key_list.get_list():
-            ref_key: RefKeyListElement
-            keys = ref_key.key
-            action_index = ref_key.action_index
-            action_name = ref_key.action_name
-            for elem in keys:
-                list_item = QListWidgetItem(self.references_list_widget)
-                custom_widget = ReferenceListItem(elem, action_index, action_name)
-                self.references_list_widget.setItemWidget(list_item, custom_widget)
-                list_item.setSizeHint(custom_widget.sizeHint())
+        # when a value changes
+        self.reference_dropdown.currentTextChanged.connect(self.populate_references_tab)
+        self.reference_dropdown.setCurrentIndex(0)
 
+        # Label and dropdown
+        self.references_layout.addWidget(QLabel("Select the reference source:"))
+        self.references_layout.addWidget(self.reference_dropdown)
+
+        self.references_values_layout = QVBoxLayout()
+        self.references_layout.addLayout(self.references_values_layout)
+        self.references_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.populate_references_tab()
+
+
+    def populate_references_tab(self):
+        """Populate the References tab dynamically based on selected source."""
+        self.clear_layout(self.references_values_layout)
+        current_reference_type = self.reference_dropdown.currentText()
+
+        # === Sequence Parameters ===
+        if current_reference_type == self.RERFERENCE_TAB_SEQUENCE_PARAMETERS:
+            manager = self.action_parameter_value_manager.seq_parameter_manager
+
+            if not manager or not manager.get_is_initialized():
+                self.references_values_layout.addWidget(QLabel("Sequence Parameter Manager File has not been loaded."))
+                return
+
+            current_file_name = manager.get_file_name()
+            self.references_values_layout.addWidget(QLabel(f"Current Sequence Parameter File: {current_file_name}"))
+
+            param_list = manager.get_parameters_for_type(self.current_type)
+            if not param_list:
+                self.references_values_layout.addWidget(QLabel("No parameters available for this type."))
+                return
+
+            # Create a QTreeWidget instead of a QListWidget
+            self.reference_val_tree = QTreeWidget()
+            self.reference_val_tree.setHeaderLabels(["Name", "Type", "Value"])
+            self.reference_val_tree.header().setStretchLastSection(True)
+            self.reference_val_tree.setAlternatingRowColors(True)
+            self.reference_val_tree.setRootIsDecorated(False)
+            self.reference_val_tree.setSelectionBehavior(QTreeWidget.SelectionBehavior.SelectRows)
+            self.references_values_layout.addWidget(self.reference_val_tree)
+
+            for param in param_list:
+                param_name = param.get_name()
+                param_type = param.get_type()
+                param_value = str(param.get_value())
+                item = QTreeWidgetItem(self.reference_val_tree, [param_name, param_type, param_value])
+                item.setData(0, Qt.ItemDataRole.UserRole, param)
+
+        # === Action Responses ===
+        elif current_reference_type == self.RERFERENCE_TAB_ACTION_RESPONSES:
+            ref_key_list = self.action_parameter_value_manager.get_comp_res_ref_keys(
+                target_action=self.current_action,
+                field_type=self.current_type
+            )
+
+            if not ref_key_list.get_list():
+                self.references_values_layout.addWidget(QLabel("No action response references available."))
+                return
+
+            # Create a QTreeWidget with headers
+            self.reference_val_tree = QTreeWidget()
+            self.reference_val_tree.setHeaderLabels(["Key", "Action Index", "Action Name"])
+            self.reference_val_tree.header().setStretchLastSection(True)
+            self.reference_val_tree.setAlternatingRowColors(True)
+            self.reference_val_tree.setRootIsDecorated(False)
+            self.reference_val_tree.setSelectionBehavior(QTreeWidget.SelectionBehavior.SelectRows)
+            self.references_values_layout.addWidget(self.reference_val_tree)
+
+            for ref_key in ref_key_list.get_list():
+                item = QTreeWidgetItem(self.reference_val_tree, [str(ref_key.key), str(ref_key.action_index), str(ref_key.action_name)])
+                item.setData(0, Qt.ItemDataRole.UserRole, ref_key)
+
+        else:
+            return
+    
     def populate_values_tab(self):
         """
         Populate the Values tab with:
@@ -184,7 +272,6 @@ class ActionParameterValueManagerDialog(QDialog):
         self.selected_tab = current_tab_name
 
         # Initialize
-        self.selected_reference = None
         self.selected_value_header = None
         self.selected_value_item = None
         #self._selected_value_object_return = None
@@ -211,17 +298,38 @@ class ActionParameterValueManagerDialog(QDialog):
 
         # ---------------- References tab ----------------
         elif current_tab_name == "References" and self.add_references:
-            selected_items = self.references_list_widget.selectedItems()
-            if selected_items:
-                item_widget = self.references_list_widget.itemWidget(selected_items[0])
-                if item_widget:
-                    # Extract structured reference info
-                    self.selected_reference = {
-                        "key": item_widget.key_label.text(),
-                        "action_index": int(item_widget.index_label.text()),
-                        "action_name": item_widget.action_name_label.text()
-                    }
+            # Detect which sub-type of reference is being displayed
+            if hasattr(self, "reference_dropdown"):
+                ref_type = self.reference_dropdown.currentText()
+            else:
+                ref_type = None
 
+            # === Sequence Parameters ===
+            if ref_type == self.RERFERENCE_TAB_SEQUENCE_PARAMETERS:
+                selected_items = self.reference_val_tree.selectedItems()
+                if selected_items:
+                    item = selected_items[0]
+                    param: SeqParameter = item.data(0, Qt.ItemDataRole.UserRole)
+                    self.current_action.get_references().add_reference(
+                        SeqParameterReference(value_key=self.current_field_key, param=param)
+                    )
+                    self.current_action.node.get_logger().info(f"Selected SeqParameter: {param.get_name()} with value: {param.get_value()}")
+
+            # === Action Responses ===
+            elif ref_type == self.RERFERENCE_TAB_ACTION_RESPONSES:
+                selected_items = self.reference_val_tree.selectedItems()
+                if selected_items:
+                    item = selected_items[0]
+                    # columns: Key, Action Index, Action Name
+                    ref_key: RefKeyListElement = item.data(0, Qt.ItemDataRole.UserRole)
+
+                    self.current_action.get_references().add_reference(
+                        ActionResponseParameterReference(
+                            value_key=self.current_field_key,
+                            reference_key=ref_key.key,
+                            action_pointer=self.action_parameter_value_manager.get_action_at_index(ref_key.action_index)
+                        )
+                    )
         # ---------------- Equations tab ----------------
         elif current_tab_name == "Equations" and self.add_equations:
             # Future: collect equation data here
@@ -233,6 +341,15 @@ class ActionParameterValueManagerDialog(QDialog):
     # def get_selected_value_object(self):
     #     return self._selected_value_object_return
 
+    def clear_layout(self, layout):
+        """Helper: safely clear all widgets and sublayouts from a layout."""
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+            elif item.layout():
+                self.clear_layout(item.layout())
 
 class WidgetValuesSetItem(QListWidgetItem):
     def __init__(self, disp_string, value):

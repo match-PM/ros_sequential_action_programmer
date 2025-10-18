@@ -89,16 +89,15 @@ class ActionParameterLayout(QWidget):
         self.add_meta_data_info()
         self.handle_dict = copy.deepcopy(self.action.get_request_as_ordered_dict())
         #self.populateActionParameterWidgets(self.handle_dict)
-        
-        disabled_keys = ["start.header.stamp", "start.pose.position.x", "tolerance"]
-        
+    
+
         if active:
             param_editor_wid = ROS2DictEditor(types_dict=req_types,
                                             values_dict=self.handle_dict,
                                             action=self.action,
                                             action_parameter_value_manager = self.action_parameter_value_manager,
                                             logger=self.logger,
-                                            disabled_keys=disabled_keys)
+                                            is_array_element=False)
             
             self.parameter_layout.addWidget(param_editor_wid)
 
@@ -271,15 +270,20 @@ class ROS2DictEditor(QWidget):
                  action: Union[ActionBaseClass, ServiceAction, UserInteractionAction, RosActionAction], 
                  action_parameter_value_manager: ActionParameterValueManager,
                  logger = None,
-                 disabled_keys=None):
+                is_array_element: bool = False
+                 ):
         
         super().__init__()
         self.types_dict = types_dict
         self.values_dict = values_dict
-        self.disabled_keys = set(disabled_keys or [])
+
         self._action = action
+        self.disabled_keys = []
+
+        # log the disabled keys
         self._action_parameter_value_manager = action_parameter_value_manager
         self.logger = logger
+        self.is_array_element = is_array_element
 
         self.main_layout = QVBoxLayout()
         self.init_layout()
@@ -291,6 +295,14 @@ class ROS2DictEditor(QWidget):
         self.build_layout(self.types_dict, self.values_dict, self.main_layout)
 
     def build_layout(self, type_dict, value_dict, parent_layout, parent_path=""):
+        self.disabled_keys = []
+
+        self.disabled_keys.extend(self._action.get_references().get_all_value_keys_with_reference())
+        self.disabled_keys.extend(["start.header.stamp", "start.pose.position.x", "tolerance"])
+
+        #self.logger.error(f"Disabled keys for action '{self._action.get_name()}': {self.disabled_keys}")
+
+
         if type_dict is None:
             return
 
@@ -298,6 +310,7 @@ class ROS2DictEditor(QWidget):
             field_name = key.capitalize()
             full_path = f"{parent_path}.{key}" if parent_path else key
             is_disabled = self.check_disabled(full_path, self.disabled_keys)
+            has_parent_disabled = self.has_disabled_parent(full_path, self.disabled_keys)
 
             # ---------- ARRAY HANDLING ----------
             if val_type.get('is_array', False):
@@ -327,21 +340,37 @@ class ROS2DictEditor(QWidget):
 
                 add_btn.clicked.connect(partial(open_editor, key, val_type))
                 continue
-            # ---------- END ARRAY HANDLING ----------
 
-            # nested message (non-array)
+                    # ---------- END ARRAY HANDLING ----------
+
+            # ---------- NESTED MESSAGE ----------
             if 'fields' in val_type:
                 header_layout = QHBoxLayout()
                 label = QLabel(field_name)
                 label.setToolTip(val_type['type'])
                 header_layout.addWidget(label)
 
-                # Add placeholder button
-                btn_text = "×" if is_disabled else "+"
-                btn = ReferenceButton(btn_text, val_type=val_type['type'])
-                btn.clicked.connect(partial(self.recom_clicked, full_path, val_type['type']))
+                # Determine button for nested message
+                if is_disabled:
+                    btn_text = "-"  # exact disabled
+                    btn_enabled = True
+                    btn_clicked = partial(self.show_disabled_field_dialog, full_path, val_type['type'])
+                elif has_parent_disabled:
+                    btn_text = "×"  # child of disabled
+                    btn_enabled = False
+                    btn_clicked = None
+                else:
+                    btn_text = "+"
+                    btn_enabled = True
+                    btn_clicked = partial(self.recom_clicked, full_path, val_type['type'])
 
-                btn.setDisabled(is_disabled)
+                btn = ReferenceButton(btn_text, val_type=val_type['type'])
+                if btn_clicked:
+                    btn.clicked.connect(btn_clicked)
+                btn.setEnabled(btn_enabled)
+                if btn_text in ("-", "×"):
+                    btn.setStyleSheet("color: gray;")
+
                 header_layout.addWidget(btn)
 
                 group = QGroupBox()
@@ -355,6 +384,8 @@ class ROS2DictEditor(QWidget):
                     group.layout(),
                     full_path
                 )
+                continue
+
             else:
                 # Primitive field
                 hlayout = QHBoxLayout()
@@ -384,18 +415,51 @@ class ROS2DictEditor(QWidget):
                 else:
                     widget = QLabel(f"Unsupported type: {typ}")
 
-                widget.setDisabled(is_disabled)
+
+                # --- Apply disabled visuals ---
+                if is_disabled or has_parent_disabled:
+                    widget.setStyleSheet("color: gray; background-color: #f2f2f2;")
+                    widget.setDisabled(True)
+
                 hlayout.addWidget(widget)
 
-                # Add placeholder button
-                btn_text = "×" if is_disabled else "+"
-                btn = ReferenceButton(btn_text, val_type=typ)
-                btn.clicked.connect(partial(self.recom_clicked, full_path, typ))
-                btn.setDisabled(is_disabled)
-                hlayout.addWidget(btn)
+                # --- Button logic ---
+                if is_disabled:
+                    # Exact disabled field → "-"
+                    btn = ReferenceButton("-", val_type=typ)
+                    btn.clicked.connect(partial(self.show_disabled_field_dialog, full_path, typ))
+                    btn.setStyleSheet("color: gray;")
+                elif has_parent_disabled:
+                    # Child of disabled field → "×" (gray, disabled)
+                    btn = ReferenceButton("×", val_type=typ)
+                    btn.setEnabled(False)
+                    btn.setStyleSheet("color: gray;")
+                else:
+                    # Normal editable field → "+"
+                    btn = ReferenceButton("+", val_type=typ)
+                    btn.clicked.connect(partial(self.recom_clicked, full_path, typ))
 
+                hlayout.addWidget(btn)
                 parent_layout.addLayout(hlayout)
     
+    def show_disabled_field_dialog(self, field_path, field_type):
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("Disabled Field")
+        dlg.setText(f"'{field_path}' ({field_type}) has a reference.\nDo you want to delete the existing reference?")
+        dlg.setIcon(QMessageBox.Icon.Warning)
+        dlg.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+        dlg.setDefaultButton(QMessageBox.StandardButton.Cancel)
+
+        result = dlg.exec()
+
+        if result == QMessageBox.StandardButton.Ok:
+            # Delete the reference from values_dict
+            #self.delete_value_by_path(self.values_dict, field_path)
+            self._action.get_references().del_reference(field_path)
+            if self.logger:
+                self.logger.info(f"Deleted disabled reference '{field_path}'")
+            self.init_layout()  # Rebuild the layout to reflect changes
+
     def clear_layout(self, layout):
         while layout.count():
             item = layout.takeAt(0)
@@ -406,9 +470,18 @@ class ROS2DictEditor(QWidget):
             elif l:
                 self.clear_layout(l)
 
-    def check_disabled(self, full_path, disabled_keys):
-        return any(full_path == k or full_path.startswith(k + ".") for k in disabled_keys)
+    # def check_disabled(self, full_path, disabled_keys):
+    #     return any(full_path == k or full_path.startswith(k + ".") for k in disabled_keys)
 
+    def check_disabled(self, full_path, disabled_keys):
+        """True if this field is exactly disabled."""
+        return full_path in disabled_keys
+
+    def has_disabled_parent(self, full_path, disabled_keys):
+        """True if this field is a descendant of a disabled key, excluding exact matches."""
+        return any(full_path.startswith(k + ".") for k in disabled_keys if full_path != k)
+
+    
     def recom_clicked(self, key: str, field_type: str):
 
         #self.logger.error(f"{field_type}")
@@ -422,7 +495,10 @@ class ROS2DictEditor(QWidget):
                                                 current_type=field_type,
                                                 current_values_dict=self.values_dict,
                                                 current_field_key=key,
-                                                action_parameter_value_manager=self._action_parameter_value_manager)
+                                                action_parameter_value_manager=self._action_parameter_value_manager,
+                                                add_equations=not self.is_array_element,
+                                                add_references=not self.is_array_element,
+                                                )
         dlg.exec()
 
         #self.logger.error(f"{dlg.current_field_key}")
@@ -502,7 +578,8 @@ class ArrayEditDialog(QDialog):
                     values_dict=self.arr[i],
                     action=self._action,
                     action_parameter_value_manager=self._action_parameter_value_manager,
-                    logger=self.logger
+                    logger=self.logger,
+                    is_array_element=True
                 )
                 # allow the nested editor to shrink/grow nicely
                 nested_editor.setSizePolicy(QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed))

@@ -12,7 +12,7 @@ from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass 
 from typing import Tuple, Any
 from PyQt6.QtCore import Qt, QByteArray, pyqtSignal, QObject, QThread
 from collections import OrderedDict
-from ros_sequential_action_programmer.submodules.rsap_modules.errors import ActionInitializationError, SetActionRequestError
+from ros_sequential_action_programmer.submodules.rsap_modules.errors import ActionInitializationError, SetActionRequestError, EvaluateActionReferenceError
 from typing import Union
 
 
@@ -71,9 +71,17 @@ class UserInteractionAction(ActionBaseClass):
 
     def execute(self, get_interupt_method = None) -> bool:
         exec_success = False
-        
+
         start_time = datetime.now()
 
+        try:
+            new_request_dict = self.evaluate_references()
+            self.set_request_from_dict(new_request_dict)
+            
+        except EvaluateActionReferenceError as e:
+            self.node.get_logger().error(f"Error occured evaluating action references for service action '{self.get_name()}'! {str(e)}")
+            return False
+    
         if self.interaction_mode == TERMINAL:
             self.node.get_logger().info(self.request.interaction_text)
             self.node.get_logger().info("Enter y/n and press enter to proceed! Waiting for user interaction...")
@@ -138,8 +146,9 @@ class UserInteractionAction(ActionBaseClass):
         """Update the ros service message from the dict"""
         try:
             self.request.interaction_text = request_dictionary['interaction_text']
+
         except Exception as e:
-            raise SetActionRequestError(f"Could not set request from dictionary for {self.get_name()}!")
+            raise SetActionRequestError(f"Could not set request from dictionary for {self.get_name()}! Error: {str(e)}")
         
     def update_log_entry(self, success: bool, start_time: datetime, end_time: datetime, additional_text:str = ""):
         #self.log_entry={}
@@ -147,6 +156,7 @@ class UserInteractionAction(ActionBaseClass):
         self.log_entry["start_time"] = str(start_time.strftime("%Y-%m-%d_%H:%M:%S.%f"))
         self.log_entry["end_time"] = str(end_time.strftime("%Y-%m-%d_%H:%M:%S.%f"))
         self.log_entry["execution_time"] = str(end_time - start_time)
+        self.log_entry["request"] = {"interaction_text": self.request.interaction_text}
         self.log_entry["success"] = success
 
     def get_log_entry(self) -> dict:

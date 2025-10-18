@@ -6,19 +6,19 @@ from ros_sequential_action_programmer.submodules.action_classes.ParameterValueSe
 
 from ros_sequential_action_programmer.submodules.rsap_modules.errors import ActionInitializationError, SetActionRequestError
 from ros_sequential_action_programmer.submodules.action_classes.compatibility_mapping import COMPATIBLE_TYPES
-
+from ros_sequential_action_programmer.submodules.rsap_modules.SeqParamterManager import SeqParameterManager, SeqParameter, SeqParameterError, SeqParameterManagerError
 from rclpy.node import Node
 
 class RefKeyListElement():
     def __init__(self, 
             action_name:str,
             action_index:int,
-            keys:list[str]):
+            key:str):
         self.action_name = action_name
         self.action_index = action_index
-        self.key = keys
-        
-        
+        self.key = key
+
+
 class RefKeyList():
     def __init__(self):
         self._list: list[RefKeyListElement] = []
@@ -41,6 +41,7 @@ class ActionParameterValueManager():
                 node:Node):
         self._node = node
         self.parameter_values_set_generator = ParameterValueSetGenerator(self._node)
+        self.seq_parameter_manager = SeqParameterManager()
         self._sequence_list = sequence_list
 
     def get_comp_res_ref_keys(self, 
@@ -57,23 +58,28 @@ class ActionParameterValueManager():
 
         for index, action in enumerate(self._sequence_list):
             if action is target_action:
-                return keys_list
+                return keys_list  # stop at the target action
 
             response_keys = []
+
             for t in compatible_types:
                 keys_for_t = action.get_response_keys_for_type(t)
-                if keys_for_t:
-                    response_keys.extend(keys_for_t)
+                response_keys.extend(keys_for_t)
 
             if not response_keys:
                 continue
+            
+            #self._node.get_logger().error(f"Found compatible response keys in action '{action.get_name()}' for field type '{field_type}': {response_keys}")
 
-            _new_element = RefKeyListElement(
-                action_name=action.get_name(),
-                action_index=index,
-                keys=response_keys
-            )
-            keys_list.append_element(_new_element)
+            for key in response_keys:
+                #self._node.get_logger().error(f"Found compatible response key in action '{action.get_name()}' for field type '{field_type}': {key}")
+
+                _new_element = RefKeyListElement(
+                    action_name=action.get_name(),
+                    action_index=index,
+                    key=key
+                )
+                keys_list.append_element(_new_element)  # append **inside the loop**
 
         return keys_list
     
@@ -90,4 +96,8 @@ class ActionParameterValueManager():
         _set = self.parameter_values_set_generator.value_sets.get_set_for_set_name(set_header)
         return _set
     
+    def get_action_at_index(self, index:int)->ActionBaseClass|None:
+        if index < 0 or index >= len(self._sequence_list):
+            return None
+        return self._sequence_list[index]
     

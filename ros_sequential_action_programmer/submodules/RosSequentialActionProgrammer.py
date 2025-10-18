@@ -47,9 +47,12 @@ class RosSequentialActionProgrammer:
         self.current_action_index = 0
         self.current_action = None
 
-        self.rsap_file_manager = RsapFileManager(self.action_list, self.node)
         self.action_parameter_value_manager = ActionParameterValueManager(self.action_list, 
                                                                           self.node)
+        
+        self.rsap_file_manager = RsapFileManager(self.action_list, 
+                                                 self.node,
+                                                 self.action_parameter_value_manager.seq_parameter_manager)
         
         self.list_of_active_services = None
         self.list_of_active_clients = None
@@ -65,7 +68,6 @@ class RosSequentialActionProgrammer:
         self._init_signals()
         self._stop_execution = False
         self._interupt_execution = False
-
 
     def get_interrupt_execution(self)->bool:
         return self._interupt_execution
