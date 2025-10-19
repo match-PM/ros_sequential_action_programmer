@@ -1,9 +1,12 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QLabel, QVBoxLayout, QPushButton, QMainWindow, QWidget
+from PyQt6.QtWidgets import QApplication, QLabel, QVBoxLayout, QPushButton, QMainWindow, QWidget, QMenu
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPainter, QColor, QFont
+from PyQt6.QtGui import QPainter, QColor, QFont, QAction
+from PyQt6.QtCore import pyqtSignal
 
 class StatusIndicator(QWidget):
+    reset_clicked = pyqtSignal()  # Emits when reset is triggered
+
     def __init__(self, initial_color="green", size=50, text=""):
         super().__init__()
         self.color = initial_color  # Default color of the circle
@@ -11,6 +14,18 @@ class StatusIndicator(QWidget):
         self.text = text            # Text inside the circle
         self.setFixedSize(size, size)
         self.set_state_idle()
+
+
+    # --- Right-click handler ---
+    def contextMenuEvent(self, event):
+        """Triggered on right-click."""
+        menu = QMenu(self)
+
+        reset_action = QAction("Reset Indicator", self)
+        reset_action.triggered.connect(self.reset_indicator)
+
+        menu.addAction(reset_action)
+        menu.exec(event.globalPos())
 
     def set_color(self, color: str):
         """Set the color of the status indicator."""
@@ -57,3 +72,8 @@ class StatusIndicator(QWidget):
     def set_state_success(self):
         self.set_color("green")
         self.set_text("Done")
+
+    def reset_indicator(self):
+        """Reset to idle state (or whatever reset means for your app)."""
+        self.set_state_idle()
+        self.reset_clicked.emit()

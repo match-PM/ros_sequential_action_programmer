@@ -11,8 +11,13 @@ import json
 import os
 from datetime import datetime
 from rclpy.node import Node
+from ament_index_python.packages import get_package_share_directory
+import yaml
 
 class RsapFileManager():
+
+    RSAP_FILE_ENDING = ".rsap.json"
+
     def __init__(self, 
                  sequence_list: list[ActionBaseClass],
                  node:Node,
@@ -39,7 +44,7 @@ class RsapFileManager():
 
     def get_folder_path(self)->str:
         return self._folder_path
-    
+        
     def load_from_JSON(self, file_path) -> bool:
         """
         Sets the action list from a given json-file path.
@@ -84,6 +89,8 @@ class RsapFileManager():
                 _description = action_dict["description"]
                 _name = action_dict["name"]
                 _type = action_dict['action_type']
+                _is_active = action_dict.get('is_active', True)
+                _has_breakpoint = action_dict.get('has_breakpoint', False)
                 _param_references_dict = action_dict.get('parameter_references', None)
                 _param_references = ActionParameterReferences()
 
@@ -152,9 +159,10 @@ class RsapFileManager():
                     continue
 
                 action_from_item.set_references(_param_references)
+                action_from_item.set_active(_is_active)
+                action_from_item.set_breakpoint(_has_breakpoint)
                 self.sequence_list.append(action_from_item)
 
-                
             except (ActionInitializationError,SetActionRequestError) as e:
                 self.node.get_logger().error(f"{e}. Skipping loading this action")
             
@@ -168,7 +176,8 @@ class RsapFileManager():
         """
 
         if (self._folder_path is not None) and (self._sequence_name is not None):
-            self._sequence_file_path = f"{self._folder_path}/{self._sequence_name}.json"
+            self._sequence_file_path = os.path.join(self._folder_path, f"{self._sequence_name}{self.RSAP_FILE_ENDING}")
+
             process_dict = {}
             process_dict["name"] = self._sequence_name
             process_dict["saved_at"] = str(datetime.now())  # Add a timestamp
@@ -181,7 +190,6 @@ class RsapFileManager():
                                 
                 action_dict["name"] = action.get_name()
                 action_dict["description"] = action.get_description()
-                self.node.get_logger().error(f'desc{action_dict["description"]}')
 
                 action_dict["action_type"] = action.get_type_indicator()
                 action_dict["action_position"] = index
@@ -215,7 +223,7 @@ class RsapFileManager():
 
             process_dict["action_list"] = action_list
             try:
-                with open(f"{self._folder_path}/{self._sequence_name}.json", "w") as json_file:
+                with open(f"{self._sequence_file_path}", "w") as json_file:
                     json.dump(process_dict, json_file,indent=4)
                 self.node.get_logger().info("Saved!")
 
@@ -268,3 +276,20 @@ class RsapFileManager():
     
     def reset_sequence_parameter_manager(self) -> None:
         self.seq_parameter_manager = SeqParameterManager()
+
+    def set_recent_file(self):
+        """
+        Saves the last opened file to the yaml file.
+        """
+        recent_file_dict = {}
+        recent_file_dict['recent_file'] = self.get_action_sequence_file_path()
+        path = get_package_share_directory('ros_sequential_action_programmer')
+        # Specify the path to your YAML file
+        yaml_file_path = f"{path}/recent_file.yaml"
+        with open(yaml_file_path, 'w') as file:
+            yaml.dump(recent_file_dict, file, default_flow_style=False)
+
+            
+
+
+    

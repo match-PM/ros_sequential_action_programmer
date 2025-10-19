@@ -171,6 +171,6 @@ class UserInteractionAction(ActionBaseClass):
                                              name=f"{self.name}_copy", 
                                              action_text=self.request.interaction_text)
         new_instance.set_name(f"{self.get_name()}_copy")
-
+        new_instance.set_references(copy.deepcopy(self.get_references()))
         return new_instance
     

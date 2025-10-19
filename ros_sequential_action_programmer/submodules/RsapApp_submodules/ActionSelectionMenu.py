@@ -5,7 +5,11 @@ from functools import partial
 from copy import copy
 from PyQt6.QtGui import QCursor
 
-class ActionSelectionMenu():
+from ros_sequential_action_programmer.submodules.saving_loading_functions import RosSequentialActionProgrammer
+from rosidl_runtime_py.get_interfaces import get_service_interfaces
+
+
+class SelectionMenu():
     def __init__(self, mainwindow:QMainWindow):
         self.menu_dictionary = {}
         self.mainwindow = mainwindow
@@ -89,6 +93,46 @@ class ActionSelectionMenu():
                     # Handle other types or raise an exception if needed
                     pass
         return dict1
+
+class ActionSelectionMenu(SelectionMenu):
+    def __init__(self, mainwindow, rsap:RosSequentialActionProgrammer):
+        super().__init__(mainwindow)
+        self.rsap = rsap
+
+    def show_action_menu(self):
+        self.rsap.initialize_service_list()
+        self.rsap.save_all_service_req_res_to_JSON()
+        self.menu_dictionary= {
+            'Services': {
+                'Empty':  ['New'],
+                'Active Clients blk':  self.rsap.list_of_clients_to_dict(self.rsap.get_active_client_blklist()),
+                'Active Clients':  self.rsap.list_of_clients_to_dict(self.rsap.list_of_active_clients),
+                'Active Clients wht':  self.rsap.list_of_clients_to_dict(self.rsap.get_active_client_whtlist()),
+                'Memorised Clients blk':  self.rsap.list_of_clients_to_dict(self.rsap.get_memorized_client_blklist()),
+                'Memorised Clients ':  self.rsap.list_of_clients_to_dict(self.rsap.get_list_memorized_service_clients()),
+                'Memorised Clients wht':  self.rsap.list_of_clients_to_dict(self.rsap.get_memorized_client_whitelist()),
+                'Available Service Types':  get_service_interfaces(),
+            },
+            'Actions':{
+                'Empty':  ['New'],
+                'Active Clients blk':  ['New'],
+                'Active Clients':  self.rsap.list_of_clients_to_dict(self.rsap.list_of_active_ros_action_clients),
+                'Active Clients wht':  ['New'],
+                'Memorised Clients blk':  ['New'],
+                'Memorised Clients ':  ['New'],
+                'Memorised Clients wht':  ['New'],
+                'Available Service Types':  ['New'],
+            },
+            'Skills': ['TBD1','TBD2','TBD3'],
+            'Other': {
+                'Conditions': {
+                    'Options': ['Option7', 'Option8', 'Option9']
+                },
+                'Operation': ['User Interaction']
+            }
+        }
+        self.init_action_menu()
+        self.showMenu()
     
 
 if __name__ == '__main__':

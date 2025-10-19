@@ -21,6 +21,7 @@ import rclpy.action
 from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass
 from rclpy.action import ActionClient
 from typing import Tuple, Any
+from action_msgs.msg import GoalStatus
 
 from rosidl_parser.definition import BasicType, Array, AbstractNestedType, NamespacedType
 from collections import OrderedDict
@@ -104,65 +105,97 @@ class RosActionAction(ActionBaseClass):
     def get_type_indicator(self)->str:
         return "RosActionAction"
 
-    def execute(self, get_interupt_method:Any = None) -> bool:
-        self.node.get_logger().error(f"Test 1")
+    def execute(self, get_interupt_method: Any = None) -> bool:
+        self.node.get_logger().error("Test 1")
 
         try:
             new_request_dict = self.evaluate_references()
             self.set_request_from_dict(new_request_dict)
-            
         except EvaluateActionReferenceError as e:
-            self.node.get_logger().error(f"Error occured evaluating action references for service action '{self.get_name()}'! {str(e)}")
+            self.node.get_logger().error(
+                f"Error occurred evaluating action references for service action '{self.get_name()}': {e}"
+            )
             return False
-    
-        if self.request and self.metaclass and self.action_type:
-            # update srv request from dictionary
-            self.node.get_logger().error(f"Test 2")
 
-            execute_success = False
+        if not (self.request and self.metaclass and self.action_type):
+            self.node.get_logger().error("Invalid request or metaclass/action_type not set.")
+            return False
 
-            _client = ActionClient(self.node, self.metaclass, self.client)
-            
-            srv_start_time = datetime.now()
-            
-            if not _client.wait_for_server(timeout_sec=2.0):
-                self.node.get_logger().error(f"Client {self.client} not available, aborting...")
-                self.response_dict = collections.OrderedDict([("Error", "Client not available")])
-                execute_success = False
-                srv_end_time = datetime.now()
-                self.update_log_entry(execute_success, srv_start_time, srv_end_time,additional_text='Client not available! Exited with error!')
-                return execute_success
+        self.node.get_logger().error("Test 2")
 
-            self.node.get_logger().info(f"Executing '{self.name}'...")
+        execute_success = False
+        _client = ActionClient(self.node, self.metaclass, self.client)
+        srv_start_time = datetime.now()
 
-            srv_start_time = datetime.now()
-            # Call the service
+        # Wait for server
+        if not _client.wait_for_server(timeout_sec=2.0):
+            self.node.get_logger().error(f"Client {self.client} not available, aborting...")
+            self.response_dict = collections.OrderedDict([("Error", "Client not available")])
+            self.update_log_entry(False, srv_start_time, datetime.now(), additional_text="Client not available!")
+            return False
 
-            self.node.get_logger().warn(f"Request {self.request}")
-            self.node.get_logger().warn(f"Request dict {self.request_dict}")
+        self.node.get_logger().info(f"Executing '{self.name}'...")
+        self.node.get_logger().warn(f"Request {self.request}")
+        self.node.get_logger().warn(f"Request dict {self.request_dict}")
 
-            future = _client.send_goal(self.request)
-            
-            self.node.get_logger().info(f"{future.status}")
-            self.node.get_logger().info(f"{future}")
-            
-            self.response = future.result
-            status = future.status
+        # Send goal asynchronously
+        goal_future = _client.send_goal_async(self.request)
+        rclpy.spin_until_future_complete(self.node, goal_future)
+        goal_handle = goal_future.result()
 
-            # update srv response dict
-            self.response_dict = message_to_ordereddict(self.response)
-            
-            if status == STATUS_SUCCEEDED:
-                execute_success = True
-            else:
-                execute_success = False
-            srv_end_time = datetime.now()
-
+        if not goal_handle.accepted:
+            self.node.get_logger().error("Goal was rejected by the action server.")
+            self.update_log_entry(False, srv_start_time, datetime.now(), additional_text="Goal rejected.")
             _client.destroy()
+            return False
 
-            self.update_log_entry(execute_success, srv_start_time, srv_end_time)
-            #self.node.get_logger().info(f"Service return: {self.response_dict}")
-            return execute_success
+        self.node.get_logger().info("Goal accepted. Waiting for result...")
+
+        # Get result future
+        result_future = goal_handle.get_result_async()
+
+        # Monitor loop for cancellation
+        while not result_future.done():
+            if get_interupt_method and get_interupt_method():
+                self.node.get_logger().warn("Interrupt detected! Cancelling goal...")
+                cancel_future = goal_handle.cancel_goal_async()
+                rclpy.spin_until_future_complete(self.node, cancel_future)
+                self.node.get_logger().info("Goal cancel request sent.")
+                break
+
+            # Small sleep so we don’t block the executor
+            rclpy.spin_once(self.node, timeout_sec=0.1)
+
+        # If canceled before completion, skip waiting for result
+        if not result_future.done():
+            self.node.get_logger().warn("Goal was canceled before completion.")
+            self.response_dict = collections.OrderedDict([("Status", "Canceled")])
+            self.update_log_entry(False, srv_start_time, datetime.now(), additional_text="Goal canceled by user.")
+            _client.destroy()
+            return False
+
+        result_info = result_future.result()
+        result = result_info.result
+        status = result_info.status
+
+        self.response = result
+        self.response_dict = message_to_ordereddict(self.response)
+
+        if status == GoalStatus.STATUS_SUCCEEDED:
+            execute_success = True
+            self.node.get_logger().info("✅ Action completed successfully.")
+        elif status == GoalStatus.STATUS_CANCELED:
+            execute_success = False
+            self.node.get_logger().warn("⚠️ Action was canceled before completion.")
+        else:
+            execute_success = False
+            self.node.get_logger().error(f"❌ Action failed or aborted (status={status}).")
+
+        srv_end_time = datetime.now()
+        _client.destroy()
+        self.update_log_entry(execute_success, srv_start_time, srv_end_time)
+
+        return execute_success
         
     def update_log_entry(self, success: bool, start_time: datetime, end_time: datetime, additional_text:str = ""):
         self.log_entry["ros_action_client"] = self.client
@@ -189,6 +222,7 @@ class RosActionAction(ActionBaseClass):
         new_instance.response = copy.deepcopy(self.response)
         new_instance.request = copy.deepcopy(self.request)
         new_instance.response_dict = copy.deepcopy(self.response_dict)
+        new_instance.set_references(copy.deepcopy(self.get_references()))
         new_instance.log_entry = copy.deepcopy(self.log_entry)
         new_instance.set_name(f"{self.get_name()}_copy")
 

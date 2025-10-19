@@ -29,8 +29,25 @@ class NoWheelSpinBox(QSpinBox):
 class NoWheelDoubleSpinBox(QDoubleSpinBox):
     def wheelEvent(self, event):
         event.ignore()
-        
-class ActionParameterLayout(QWidget):
+
+class ActionParameterMainLayout(QVBoxLayout):
+    def __init__(self):
+        super().__init__()
+
+    def clear_action_parameter_layout(self):
+        """
+        This method clears the action parameter layout.
+        """
+        while self.count():
+            item = self.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+            else:
+                self.clear_action_parameter_layout(item.layout())
+
+
+class ActionParameterWidget(QWidget):
     actionChanged = pyqtSignal(object)
 
     def __init__(self, 

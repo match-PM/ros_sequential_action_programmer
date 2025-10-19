@@ -12,17 +12,16 @@ import sys
 from collections import OrderedDict
 from rclpy.node import Node
 from datetime import datetime
-from ros_sequential_action_programmer.submodules.RosSequentialActionProgrammer import RosSequentialActionProgrammer, SET_IMPLICIT_SRV_DICT
+from ros_sequential_action_programmer.submodules.RosSequentialActionProgrammer import RosSequentialActionProgrammer
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.PopupRecWindow import PopupRecWindow
-from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionSelectionMenu import ActionSelectionMenu
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionSelectionMenu import ActionSelectionMenu, SelectionMenu
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AddServiceDialog import AddServiceDialog
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.AddUserInteractionDialog import AddUserInteractionDialog
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.StatusIndicator import StatusIndicator
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.UserDialog import UserDialog
-
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.GuiParameterFileActions import GuiParameterFileActions
 from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
 from ros_sequential_action_programmer.submodules.action_classes.RosActionAction import RosActionAction
-from rosidl_runtime_py.get_interfaces import get_service_interfaces
 import ast
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.UserInteractionActionDialog import UserInteractionActionDialog
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.app_worker import RsapExecutionWorker, RsapExecutionRunWorker
@@ -31,8 +30,8 @@ from ros_sequential_action_programmer.submodules.RsapApp_submodules.ConfigWindow
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.NoScrollComboBox import NoScrollComboBox
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_widget_adv import ActionSequenceListWidget
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_widgets import ActionListWidget, ActionListItem
-from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionParameterLayout import ActionParameterLayout
-from ros_sequential_action_programmer.submodules.rsap_modules.SeqParamterManager import SeqParameterManager
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionParameterWidget import ActionParameterWidget, ActionParameterMainLayout
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.SequenceInfoWidget import SequenceInfoWidget
 try:
     from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import PmDashboardApp
     from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import append_jog_panel_to_menu
@@ -59,7 +58,7 @@ class RsapApp(QMainWindow):
         self.action_sequence_builder = RosSequentialActionProgrammer(service_node)
         self.thread_pool = QThreadPool()
         # load the recent file (last opened file)
-        self.load_recent_file()
+        self.action_sequence_builder.load_recent_file()
         self._init_signal()
         self.initUI()
         #self.init_actions_list()
@@ -79,53 +78,54 @@ class RsapApp(QMainWindow):
 
     def initUI(self):
         # Create the class for the action selection menu
-        self.action_menu = ActionSelectionMenu(self)
+        self.action_menu = ActionSelectionMenu(self, rsap=self.action_sequence_builder)
         # Overriting the callbackfunction for the menu
         self.action_menu.action_menu_clb = self.append_selected_action_from_menu
         
         self.setWindowTitle("Ros Sequential Action Programmer - RSAP")
         
-        self.ros_run_menu = ActionSelectionMenu(self)
+        self.ros_run_menu = SelectionMenu(self)
         self.ros_run_menu.action_menu_clb = self.run_ros_executable
 
-        self.ros_launch_menu = ActionSelectionMenu(self)
+        self.ros_launch_menu = SelectionMenu(self)
         self.ros_launch_menu.action_menu_clb = self.run_ros_executable_launch
-                    
+
+        self.text_output = AppTextOutput()
+
+        self.action_list_widget = ActionSequenceListWidget(self.action_sequence_builder, 
+                                                    text_output=self.text_output)
+        self.action_list_widget.populate_list()
+        self.action_list_widget.itemClicked.connect(self.action_selected)
+
         # Create main container widget
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
 
         # Create layout for the main container widget
         layout = QGridLayout()
+        self.rsap_seq_info_widget = SequenceInfoWidget(self.action_sequence_builder)
 
-        self.action_sequence_name_widget = QLabel()
-        font = QFont()
-        font.setPointSize(14)
-        self.action_sequence_name_widget.setFont(font)
-        if self.action_sequence_builder.rsap_file_manager.get_sequence_name() is None:
-            self.set_widget_action_sequence_name('- No name given - ')
-        else:
-            self.set_widget_action_sequence_name(self.action_sequence_builder.rsap_file_manager.get_sequence_name())
-        layout.addWidget(self.action_sequence_name_widget,0,1,1,2)
+        layout.addWidget(self.rsap_seq_info_widget,0,1,1,2)
         
         status_layout = QVBoxLayout()
         #status_label = QLabel("Status")
         #status_label.setFont(font)
         #status_layout.addWidget(status_label,alignment=Qt.AlignmentFlag.AlignCenter)
         self.status_indicator = StatusIndicator()
+        self.status_indicator.reset_clicked.connect(self.reset_action_list_status)
         status_layout.addWidget(self.status_indicator,alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addLayout(status_layout,0,0,1,1,alignment=Qt.AlignmentFlag.AlignCenter)
 
         toolbar_layout = QVBoxLayout()
         self.open_action_menu_button = QPushButton('Add \n Action')
-        self.open_action_menu_button.clicked.connect(self.show_action_menu)
+        self.open_action_menu_button.clicked.connect(self.action_menu.show_action_menu)
         self.open_action_menu_button.setFixedSize =(20,20)
 
         toolbar_layout.addWidget(self.open_action_menu_button,alignment=Qt.AlignmentFlag.AlignTop)
 
         # add button for deleting selected vision function
         self.delete_button = QPushButton("Delete \n Selected")
-        self.delete_button.clicked.connect(self.delete_action_from_sequence)
+        self.delete_button.clicked.connect(self.action_list_widget.delete_actions_from_sequence)
         toolbar_layout.addWidget(self.delete_button,alignment=Qt.AlignmentFlag.AlignTop)
 
         self.copy_and_insert_button = QPushButton("Copy and \n Insert")
@@ -137,9 +137,7 @@ class RsapApp(QMainWindow):
         execute_layout = QHBoxLayout()
         stop_execution_layout = QHBoxLayout()
         # Add combobox for vision pipline building
-        self.action_list_widget = ActionSequenceListWidget(self.action_sequence_builder)
-        self.action_list_widget.populate_list()
-        self.action_list_widget.itemClicked.connect(self.action_selected)
+
         layout.addWidget(self.action_list_widget,1,1)
 
         self.execute_step_button = QPushButton("Step")
@@ -153,9 +151,8 @@ class RsapApp(QMainWindow):
         layout.addLayout(execute_layout,2,1)
         layout.addLayout(stop_execution_layout,3,1)
 
-
         stop_execution_button = QPushButton("Stop Execution")
-        stop_execution_button.clicked.connect(self.stop_execution)
+        stop_execution_button.clicked.connect(self.action_sequence_builder.set_stop_execution)
         stop_execution_layout.addWidget(stop_execution_button)
 
         interupt_execution_button = QPushButton("Interrupt Action")
@@ -163,7 +160,6 @@ class RsapApp(QMainWindow):
         stop_execution_layout.addWidget(interupt_execution_button)
 
         # add textbox for string output
-        self.text_output = AppTextOutput()
         layout.addWidget(self.text_output,4,1,1,3)
 
         self.last_saved_label = QLabel('File not saved yet!')
@@ -173,13 +169,8 @@ class RsapApp(QMainWindow):
         self.clear_text_output_button.clicked.connect(self.text_output.clear)
 
         layout.addWidget(self.clear_text_output_button,5,2,1,1)
-        # # create sub layout for the function parameter widgetd
-        self.action_parameter_layout = QVBoxLayout()
-
-        #add a textlabel to the sublayout
-        action_parameters_label = QLabel('Action parameters:')
-        action_parameters_label.setFont(font)
-        self.action_parameter_layout.addWidget(action_parameters_label)
+        # # create sub layout for the function parameter widgets
+        self.action_parameter_layout = ActionParameterMainLayout()
         
         # Create a menu bar
         menubar = self.menuBar()
@@ -188,7 +179,9 @@ class RsapApp(QMainWindow):
         app_config_menu = menubar.addMenu("Settings")
         seq_param_menu = menubar.addMenu("Sequence Parameters File")
 
-        pm_robot_tools_menu = menubar.addMenu("PM Robot Tools")
+        #pm_robot_tools_menu = menubar.addMenu("PM Robot Tools")
+        copilot_menu = menubar.addMenu("Co-Pilot")
+
         ros_menu = menubar.addMenu("ROS2 Functionalities")
         
         # Create "New" action
@@ -211,26 +204,35 @@ class RsapApp(QMainWindow):
         save_as_action.triggered.connect(self.save_process_as)
         file_menu.addAction(save_as_action)
         
-        try:
-            open_pm_robot_config = QAction("PM Robot Config", self)
-            open_pm_robot_config.triggered.connect(partial(self.open_sub_window, PmRobotConfigWidget))
-            pm_robot_tools_menu.addAction(open_pm_robot_config)
-        except:
-            pass
+        # try:
+        #     open_pm_robot_config = QAction("PM Robot Config", self)
+        #     open_pm_robot_config.triggered.connect(partial(self.open_sub_window, PmRobotConfigWidget))
+        #     #pm_robot_tools_menu.addAction(open_pm_robot_config)
+        # except:
+        #     pass
+
+        self.GuiParameterFileActions_instance = GuiParameterFileActions(self, 
+                                                                        self.service_node, 
+                                                                        self.action_sequence_builder,
+                                                                        self.rsap_seq_info_widget)
         
         load_actionable_seq_params = QAction("Load Sequence Parameters File", self)
-        load_actionable_seq_params.triggered.connect(self.load_sequence_parameters_file)
+        load_actionable_seq_params.triggered.connect(self.GuiParameterFileActions_instance.load_sequence_parameters_file)
+        load_actionable_seq_params.setToolTip("Load a .rsapp.json sequence parameters file to set parameters for the current action sequence.")
         new_actionable_seq_params = QAction("New Sequence Parameters File", self)
-        new_actionable_seq_params.triggered.connect(self.create_new_sequence_parameters_file)
-        reset_actionable_seq_params =QAction("Reset Sequence Parameter Manager", self)
-        reset_actionable_seq_params.triggered.connect(self.reset_sequence_parameter_manager)
-        save_actionable_seq_params = QAction("Save Sequence Parameter Manager", self)
-        save_actionable_seq_params.triggered.connect(self.save_sequence_parameter_manager)
+        new_actionable_seq_params.triggered.connect(self.GuiParameterFileActions_instance.create_new_sequence_parameters_file)
+        new_actionable_seq_params.setToolTip("Create a new .rsapp.json sequence parameters file.")
+        reset_actionable_seq_params = QAction("Reset Sequence Parameter Manager", self)
+        reset_actionable_seq_params.triggered.connect(self.GuiParameterFileActions_instance.reset_sequence_parameter_manager)
+        reset_actionable_seq_params.setToolTip("Reset the sequence parameter manager and clear all loaded sequence parameters.")
+        save_actionable_seq_params = QAction("Save Sequence Parameter File", self)
+        save_actionable_seq_params.triggered.connect(self.GuiParameterFileActions_instance.save_sequence_parameter_manager)
+        save_actionable_seq_params.setToolTip("Save the current sequence parameters to the .rsapp.json file.")
 
         seq_param_menu.addAction(load_actionable_seq_params)
         seq_param_menu.addAction(new_actionable_seq_params)
-        seq_param_menu.addAction(reset_actionable_seq_params)
         seq_param_menu.addAction(save_actionable_seq_params)
+        seq_param_menu.addAction(reset_actionable_seq_params)
 
         executable_menu = QAction("ROS2 Run", self)
         executable_menu.triggered.connect(self.show_ros_executable_menu)
@@ -252,28 +254,19 @@ class RsapApp(QMainWindow):
         
         # Add jog panel to the menu, this will only be added if the package is found
         
-        try:
-            append_jog_panel_to_menu(self, pm_robot_tools_menu, self.service_node)
-        except Exception as e:
-            self.service_node.get_logger().warn(f"Error adding jog panel to menu: {e}")
+        # try:
+        #     append_jog_panel_to_menu(self, pm_robot_tools_menu, self.service_node)
+        # except Exception as e:
+        #     self.service_node.get_logger().warn(f"Error adding jog panel to menu: {e}")
 
         try:
             open_pm_robot_co_pilot = QAction("PM Co-Pilot", self)
             open_pm_robot_co_pilot.triggered.connect(partial(self.open_sub_window, PmCoPilotApp))
-            pm_robot_tools_menu.addAction(open_pm_robot_co_pilot)
-        except ModuleNotFoundError as e:
-            self.service_node.get_logger().error(f"Error adding PM Co-Pilot to menu: {e}")
-        except NameError as e:
-            self.service_node.get_logger().error(f"Error adding PM Co-Pilot to menu: {e}")
+            copilot_menu.addAction(open_pm_robot_co_pilot)
 
-        try:
-            append_calbiration_panel_to_menu(self, pm_robot_tools_menu, self.service_node)
-        except ModuleNotFoundError as e:
-            self.service_node.get_logger().error(f"Error adding PM Robot Calibration Panel to menu: {e}")
-        except NameError as e:
-            self.service_node.get_logger().error(f"Error adding PM Robot Calibration Panel to menu: {e}")
-            
-                    
+        except (ModuleNotFoundError, NameError) as e:
+            self.service_node.get_logger().error(f"Error adding PM Co-Pilot to menu: {e}")
+              
         self.log_layout = QVBoxLayout()
         self.log_widget = QTreeWidget(self)
         self.log_widget.setHeaderLabel("Log Viewer")
@@ -291,41 +284,6 @@ class RsapApp(QMainWindow):
     def openCoPilot(self):
         self.co_pilot_window = PmCoPilotApp(self.service_node, self.action_sequence_builder)
         self.co_pilot_window.show()
-
-    def show_action_menu(self):
-        self.action_sequence_builder.initialize_service_list()
-        self.action_sequence_builder.save_all_service_req_res_to_JSON()
-        self.action_menu.menu_dictionary= {
-            'Services': {
-                'Empty':  ['New'],
-                'Active Clients blk':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.get_active_client_blklist()),
-                'Active Clients':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.list_of_active_clients),
-                'Active Clients wht':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.get_active_client_whtlist()),
-                'Memorised Clients blk':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.get_memorized_client_blklist()),
-                'Memorised Clients ':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.get_list_memorized_service_clients()),
-                'Memorised Clients wht':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.get_memorized_client_whitelist()),
-                'Available Service Types':  get_service_interfaces(),
-            },
-            'Actions':{
-                'Empty':  ['New'],
-                'Active Clients blk':  ['New'],
-                'Active Clients':  self.action_sequence_builder.list_of_clients_to_dict(self.action_sequence_builder.list_of_active_ros_action_clients),
-                'Active Clients wht':  ['New'],
-                'Memorised Clients blk':  ['New'],
-                'Memorised Clients ':  ['New'],
-                'Memorised Clients wht':  ['New'],
-                'Available Service Types':  ['New'],
-            },
-            'Skills': ['TBD1','TBD2','TBD3'],
-            'Other': {
-                'Conditions': {
-                    'Options': ['Option7', 'Option8', 'Option9']
-                },
-                'Operation': ['User Interaction']
-            }
-        }
-        self.action_menu.init_action_menu()
-        self.action_menu.showMenu()
 
     def show_ros_executable_menu(self):
         self.ros_run_menu.menu_dictionary = self.action_sequence_builder.get_ros2_executables()
@@ -351,7 +309,6 @@ class RsapApp(QMainWindow):
         
         self.service_node.get_logger().info(f"Started command: '{command}' in a new terminal window.")
                 
-
     def append_selected_action_from_menu(self, menu_output:list[str]):
         #print(menu_output)
         if menu_output[0] == 'Services':
@@ -468,19 +425,19 @@ class RsapApp(QMainWindow):
                 if set_state:
                     self.status_indicator.set_state_error()
 
-    def set_widget_action_sequence_name(self, text):
-        self.action_sequence_name_widget.setText("Process name: " + text)
-        self.action_sequence_name_widget.setToolTip(self.action_sequence_builder.rsap_file_manager.get_action_sequence_file_path())
+    def reset_action_list_status(self):
+        self.action_sequence_builder.clear_all_log_entries()
+        self.set_action_colors_from_execution_status(set_state=False)
 
     
     def action_selected(self, active=True):
         row = self.action_list_widget.currentRow()
-        self.clear_action_parameter_layout()
+        self.action_parameter_layout.clear_action_parameter_layout()
         self.clear_log_viewer()
 
         action = self.action_sequence_builder.get_action_at_index(row)
         
-        self.current_action_parameter_widget = ActionParameterLayout(action,
+        self.current_action_parameter_widget = ActionParameterWidget(action,
                                                                      self.action_sequence_builder.action_parameter_value_manager,
                                                                      logger=self.service_node.get_logger(),
                                                                      active=active)
@@ -492,42 +449,12 @@ class RsapApp(QMainWindow):
 
     def action_parameter_changed(self):
         row = self.action_list_widget.currentRow()
-        self.service_node.get_logger().warn("Action changed:")
+        #self.service_node.get_logger().warn("Action changed:")
         self.action_list_widget.populate_list()
         self.action_list_widget.setCurrentRow(row)
         self.action_selected()
-        
-
-
-    def get_recom_button_clicked(self, key, widget:QLineEdit):
-        """
-        This method is called when the user clicks the button to get recommendations for a specific parameter.
-        """
-        index = self.action_list_widget.currentRow()
-        data = self.action_sequence_builder.get_recom_for_action_at_index_for_key(index=index, key=key)
-        popup = PopupRecWindow(data)
-        result = popup.exec()
-
-        if result == QDialog.DialogCode.Accepted:
-            selected_value = popup.get_selected_value()
-            widget.setText(selected_value)
-            print(f"Selected value: {selected_value}")
-
-    def clear_action_parameter_layout(self):
-        """
-        This method clears the action parameter layout.
-        """
-        if self.action_parameter_layout is not None:
-            while self.action_parameter_layout.count():
-                item = self.action_parameter_layout.takeAt(0)
-                widget = item.widget()
-                if widget:
-                    widget.deleteLater()
-                else:
-                    self.clear_action_parameter_layout(item.layout())
+        self.set_action_colors_from_execution_status(set_state=False)
             
-
-                
     def add_ros_action_to_action_list(self, action_name: str, action_client:str, action_type:str = None) -> None:
 
         pos_to_insert = self.action_list_widget.currentRow() + 1
@@ -552,9 +479,6 @@ class RsapApp(QMainWindow):
         """
         This method opens a file dialog to select a process file to open.
         """
-
-        # if self.current_vision_pipeline.vision_pipeline_json_dir == None:
-        #     self.current_vision_pipeline.vision_pipeline_json_dir = self.default_process_libary_path
         
         file_filter = "JSON Files (*.json);;All Files (*)"
         file_path, _ = QFileDialog.getOpenFileName(self, "Open JSON File", 
@@ -564,15 +488,16 @@ class RsapApp(QMainWindow):
             self.text_output.clear()
             self.text_output.append(f"Opening: {file_path}")
             success = self.action_sequence_builder.rsap_file_manager.load_from_JSON(file_path)
-            self.set_recent_file()
+            self.action_sequence_builder.rsap_file_manager.set_recent_file()
             if success:
                 self.action_list_widget.populate_list()
-                self.set_widget_action_sequence_name(self.action_sequence_builder.rsap_file_manager.get_sequence_name())
+                self.rsap_seq_info_widget.init_values()
+
                 self.text_output.append("File loaded!")
             else:
                 self.text_output.append("Error Opening File!")
                 self.action_list_widget.populate_list()
-                self.clear_action_parameter_layout()
+                self.action_parameter_layout.clear_action_parameter_layout()
 
         # Set the first row as the current process
         self.action_list_widget.setCurrentRow(0)
@@ -622,13 +547,13 @@ class RsapApp(QMainWindow):
             success = self.action_sequence_builder.rsap_file_manager.save_to_JSON()
             self.text_output.append(f"Saved file: {success}")
             # set text in gui from action sequence name
-            self.set_widget_action_sequence_name(self.action_sequence_builder.rsap_file_manager.get_sequence_name())
+            self.rsap_seq_info_widget.init_values()
             # update the last saved timestamp
             self.update_last_saved()
-            self.set_recent_file()
-            
-        self.clear_action_parameter_layout()
-        self.save_as = False                
+            self.action_sequence_builder.rsap_file_manager.set_recent_file()
+
+        self.action_parameter_layout.clear_action_parameter_layout()
+        self.save_as = False
 
     def append_service_dialog(self, service_name: str = None, service_client:str= None, serivce_type:str = None)->None:
         add_service_dialog = AddServiceDialog(service_name, service_client, serivce_type)
@@ -655,109 +580,14 @@ class RsapApp(QMainWindow):
         else:
             pass
 
-    def load_recent_file(self):
-        """
-        Loads the last opened file from the yaml file.
-        """
-        path = get_package_share_directory('ros_sequential_action_programmer')
-
-        # Specify the path to your YAML file
-        yaml_file_path = f"{path}/recent_file.yaml"
-        try:
-            # Read the content of the YAML file
-            with open(yaml_file_path, 'r') as file:
-                yaml_content = yaml.safe_load(file)
-
-            process_file_path = yaml_content['recent_file'] 
-            self.action_sequence_builder.rsap_file_manager.load_from_JSON(process_file_path)
-        except Exception as e:
-            self.service_node.get_logger().error(f"Error loading recent file: {e}")
-            self.service_node.get_logger().warn("No recent file found! Skipping loading of recent file!")
-
-    def set_recent_file(self):
-        """
-        Saves the last opened file to the yaml file.
-        """
-        recent_file_dict = {}
-        recent_file_dict['recent_file'] = self.action_sequence_builder.rsap_file_manager.get_action_sequence_file_path()
-        path = get_package_share_directory('ros_sequential_action_programmer')
-        # Specify the path to your YAML file
-        yaml_file_path = f"{path}/recent_file.yaml"
-        with open(yaml_file_path, 'w') as file:
-            yaml.dump(recent_file_dict, file, default_flow_style=False)
-
-    def stop_execution(self) -> None:
-        self.action_sequence_builder._stop_execution = True
-
     def interrupt_action(self) -> None:
         interupt_dialog = UserDialog(request_text="Do you want to interrupt the current action? This will interrupt the execution of the current action. However if the current action is a ros2 service call, the call might finish in the background!")
         
         if interupt_dialog.exec():
-            # action_name, action_description, = add_user_interaction_dialog.get_values()
-            # self.add_user_interaction_to_action_list(action_name=action_name,
-            #                                          description=action_description)
-            #self.service_node._logger.warn("Interruption requested! Interrupting action!")
             self.text_output.append_red_text("Interruption requested! Interrupting action!")
             self.action_sequence_builder.set_interrupt_execution(True)
         else:
             pass
-            #self.service_node._logger.info("Interruption aborted!")
-
-    def load_sequence_parameters_file(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Open Sequence Parameters File",
-            "",
-            f"RSApp Parameter Files (*{SeqParameterManager.FILE_ENDING})"
-        )  
-        self.service_node.get_logger().info(f"Loading sequence parameters from: {file_path}")
-        self.action_sequence_builder.rsap_file_manager.seq_parameter_manager.load_file(file_path)
-
-    def create_new_sequence_parameters_file(self) -> None:
-        """
-        Opens a save file dialog to create a new .rsapp.json sequence parameters file.
-        Automatically appends the .rsapp.json extension and initializes it with metadata.
-        """
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Create New Sequence Parameters File",
-            "",
-            f"RSApp Parameter Files (*{SeqParameterManager.FILE_ENDING})"
-        )
-
-        if not file_path:
-            return  # user cancelled
-
-        # Ensure correct extension
-        if not file_path.endswith(SeqParameterManager.FILE_ENDING):
-            file_path += SeqParameterManager.FILE_ENDING
-
-        # Check if file already exists
-        if os.path.exists(file_path):
-            reply = QMessageBox.question(
-                self,
-                "Overwrite File?",
-                f"The file '{os.path.basename(file_path)}' already exists. Overwrite it?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if reply == QMessageBox.StandardButton.No:
-                return
-        
-        self.service_node.get_logger().info(f"Creating new sequence parameters file at: {file_path}")
-        self.action_sequence_builder.rsap_file_manager.reset_sequence_parameter_manager()
-        self.action_sequence_builder.rsap_file_manager.seq_parameter_manager.set_file_dir(os.path.dirname(file_path))
-        self.action_sequence_builder.rsap_file_manager.seq_parameter_manager.set_file_name(os.path.basename(file_path))
-        self.action_sequence_builder.rsap_file_manager.seq_parameter_manager.save_to_file()
-
-    def reset_sequence_parameter_manager(self) -> None:
-        self.action_sequence_builder.rsap_file_manager.reset_sequence_parameter_manager()
-
-    def save_sequence_parameter_manager(self) -> None:
-        if self.action_sequence_builder.rsap_file_manager.seq_parameter_manager.get_is_initialized():
-            self.action_sequence_builder.rsap_file_manager.seq_parameter_manager.save_to_file()
-        else:
-            self.create_new_sequence_parameters_file()
 
     def add_service_to_action_list(self, service_name: str, service_client:str, service_type:str = None) -> None:
         pos_to_insert = self.action_list_widget.currentRow() + 1
@@ -778,22 +608,6 @@ class RsapApp(QMainWindow):
             else:
                 self.text_output.append_red_text(f"Invalid input arguments")
                     
-    def delete_action_from_sequence(self):
-        selected_function = self.action_list_widget.currentItem()
-        current_row = self.action_list_widget.currentRow()
-        if selected_function:
-            # Remove the function from the action list and the list
-            del_success = self.action_sequence_builder.delete_action_at_index(current_row)
-
-            if del_success:
-                self.text_output.append(f"Deleted action '{selected_function.text()}'")
-                self.action_list_widget.populate_list()
-                self.action_list_widget.setCurrentRow(0)
-            else:
-                self.text_output.append(f"Error trying to delete action '{selected_function.text()}'")
-        else:
-            self.text_output.append("No action selected to delete!")
-
     def update_last_saved(self):
         self.last_saved_label.setText("Saved at: " + datetime.now().strftime("%H:%M:%S"))
 

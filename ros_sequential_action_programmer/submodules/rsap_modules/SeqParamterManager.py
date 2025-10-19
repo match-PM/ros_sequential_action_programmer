@@ -170,7 +170,8 @@ class SeqParameterManager:
         self._file_dir = os.path.dirname(file_path) or "."
         self._file_name = os.path.basename(file_path)
 
-    def set_file_name(self, file_name: str) -> None:
+    def set_file_name(self, 
+                      file_name: str) -> None:
         self._file_name = file_name
 
     def set_file_dir(self, file_path: str) -> None:
@@ -179,8 +180,17 @@ class SeqParameterManager:
     def clear_parameters(self) -> None:
         self._seq_parameter_list = []
 
-    def get_file_name(self) -> str:
-        return self._file_name
+    def get_file_name(self, strip_extension: bool = False) -> str:
+        if strip_extension:
+            # remove both .rsap.json or .json extensions safely
+            file_name = self._file_name
+            if file_name.endswith(self.FILE_ENDING):
+                return file_name[:-len(self.FILE_ENDING)]
+            elif file_name.endswith(".json"):
+                return file_name[:-len(".json")]
+            return file_name
+        else:
+            return self._file_name
 
     def get_file_dir(self) -> str:
         return self._file_dir
