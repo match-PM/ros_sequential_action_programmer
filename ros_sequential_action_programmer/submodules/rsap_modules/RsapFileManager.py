@@ -151,6 +151,7 @@ class RsapFileManager():
                                                     action_type = _ros_action_type,
                                                     name = _name)
                     
+                    action_from_item.set_success_identifier(action_dict["error_identifier"])
                     action_from_item.set_description(_description)
                     action_from_item.set_request_from_dict(_request)
 

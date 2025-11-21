@@ -202,18 +202,18 @@ class ActionParameterWidget(QWidget):
             label_error_handling_box = QLabel(f"Execution identifier: ")
             self.error_handling_box = NoScrollComboBox()
 
-            box_values = ['None'] #+ _action.get_bool_fields()
+            box_values = ['None'] + _action.get_res_bool_fields()
             self.error_handling_box.addItems(box_values)
             # Set the default value when creating the qcombobox
             currently_set_error_handler = None
-            #currently_set_error_handler = _action.get_success_identifier()
+            currently_set_error_handler = _action.get_success_identifier()
             if currently_set_error_handler is None:
                currently_set_error_handler = "None"
 
             self.error_handling_box.setCurrentIndex(box_values.index(currently_set_error_handler))
             self.parameter_layout.addWidget(label_error_handling_box)
             self.parameter_layout.addWidget(self.error_handling_box)
-        
+            
     def on_error_handling_changed(self,new_value):
         if new_value == "None":
             self.action.set_success_identifier(None)
