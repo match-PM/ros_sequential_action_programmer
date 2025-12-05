@@ -8,6 +8,7 @@ from ros_sequential_action_programmer.submodules.rsap_modules.errors import Acti
 from ros_sequential_action_programmer.submodules.action_classes.compatibility_mapping import COMPATIBLE_TYPES
 from ros_sequential_action_programmer.submodules.rsap_modules.SeqParamterManager import SeqParameterManager, SeqParameter, SeqParameterError, SeqParameterManagerError
 from rclpy.node import Node
+from ros_sequential_action_programmer.submodules.action_classes.ParameterReference import ActionResponseParameterReference, SeqParameterReference
 
 class RefKeyListElement():
     def __init__(self, 
@@ -101,3 +102,34 @@ class ActionParameterValueManager():
             return None
         return self._sequence_list[index]
     
+    def reinit_sequence_parameter_values(self):
+        """
+        Call this after the sequence parameter file has been changed externally.
+        """
+
+        for index, action in  enumerate(self._sequence_list):
+            references = action.get_references()
+            to_delete:list[SeqParameterReference] = []
+
+            for ref in references.get_reference_list():
+                if not isinstance(ref, SeqParameterReference):
+                    continue
+
+                else:
+                    param = ref.get_parameter()
+                    param_name = param.get_name()
+                    try:
+                        new_param = self.seq_parameter_manager.get_parameter_by_name(param_name)  # verify parameter exists
+                        ref.set_parameter(new_param)
+                        self._node.get_logger().info(f"Updated SeqParameterReference to parameter '{param_name}' with value: {new_param.get_value()}")
+                    except SeqParameterError as e:
+                        self._node.get_logger().warn(f"In '{action.get_name()}': Failed to update SeqParameterReference to parameter '{param_name}'. Loaded parameter file may be missing this parameter: {e}")
+                        # delete the reference since the parameter no longer exists
+                        to_delete.append(ref)
+
+                    # param.set_value(new_param.get_value())  # re-set to trigger any internal updates
+                    # self._node.get_logger().info(f"SeqParameterReference to parameter '{param_name}' with value: {new_param.get_value()}")
+
+            for ref in to_delete:
+                references.del_reference(ref.get_value_key())
+                self._node.get_logger().warn(f"In '{action.get_name()}' - Deleted SeqParameterReference with for key '{ref.get_value_key()}' due to missing parameter.")

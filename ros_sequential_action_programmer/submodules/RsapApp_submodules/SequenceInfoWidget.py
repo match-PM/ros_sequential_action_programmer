@@ -27,16 +27,16 @@ class SequenceInfoWidget(QWidget):
         self.name_value.setFont(QFont("Arial", 11))
         self.name_value.setStyleSheet("color: navy;")
 
-        self.file_value = QLabel()
-        self.file_value.setFont(QFont("Arial", 11))
-        self.file_value.setStyleSheet("color: darkgreen;")
+        self.parameter_file_value = QLabel()
+        self.parameter_file_value.setFont(QFont("Arial", 11))
+        self.parameter_file_value.setStyleSheet("color: darkgreen;")
 
         # --- Add to grid layout ---
         layout.addWidget(name_label, 0, 0)
         layout.addWidget(self.name_value, 0, 1)
 
         layout.addWidget(file_label, 1, 0)
-        layout.addWidget(self.file_value, 1, 1)
+        layout.addWidget(self.parameter_file_value, 1, 1)
 
         # Optional: make second column stretchable
         layout.setColumnStretch(1, 1)
@@ -52,15 +52,15 @@ class SequenceInfoWidget(QWidget):
             self.name_value.setToolTip(f"{self.rsap.rsap_file_manager.get_action_sequence_file_path()}")
 
         if self.rsap.rsap_file_manager.seq_parameter_manager.get_file_name() is None:
-            self.set_file_name('No file selected')
+            self.set_parameter_file_name('No file selected')
         else:
-            self.set_file_name(self.rsap.rsap_file_manager.seq_parameter_manager.get_file_name(True))
-            self.file_value.setToolTip(f"{self.rsap.rsap_file_manager.seq_parameter_manager.get_file_dir()}/{self.rsap.rsap_file_manager.seq_parameter_manager.get_file_name()}")
+            self.set_parameter_file_name(self.rsap.rsap_file_manager.seq_parameter_manager.get_file_name(True))
+            self.parameter_file_value.setToolTip(f"{self.rsap.rsap_file_manager.seq_parameter_manager.get_file_dir()}/{self.rsap.rsap_file_manager.seq_parameter_manager.get_file_name()}")
 
     def set_sequence_name(self, name: str):
         """Update the sequence name display."""
         self.name_value.setText(name)
-
-    def set_file_name(self, file_name: str):
+    
+    def set_parameter_file_name(self, file_name: str):
         """Update the process parameter file display."""
-        self.file_value.setText(file_name)
+        self.parameter_file_value.setText(file_name)

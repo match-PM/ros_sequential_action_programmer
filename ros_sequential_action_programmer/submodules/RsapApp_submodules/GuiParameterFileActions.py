@@ -29,6 +29,7 @@ class GuiParameterFileActions:
         self.service_node.get_logger().info(f"Loading sequence parameters from: {file_path}")
         self.action_sequence_builder.rsap_file_manager.seq_parameter_manager.load_file(file_path)
         self.sequence_info_widget.init_values()
+        self.action_sequence_builder.reinit_sequence_parameter_values()
 
     def create_new_sequence_parameters_file(self) -> None:
         """
@@ -67,12 +68,12 @@ class GuiParameterFileActions:
         self.action_sequence_builder.rsap_file_manager.seq_parameter_manager.set_file_name(os.path.basename(file_path))
         self.action_sequence_builder.rsap_file_manager.seq_parameter_manager.save_to_file()
         self.sequence_info_widget.init_values()
-
+        self.action_sequence_builder.reinit_sequence_parameter_values()
 
     def reset_sequence_parameter_manager(self) -> None:
         self.action_sequence_builder.rsap_file_manager.reset_sequence_parameter_manager()
         self.sequence_info_widget.init_values()
-
+        self.action_sequence_builder.reinit_sequence_parameter_values()
 
     def save_sequence_parameter_manager(self) -> None:
         if self.action_sequence_builder.rsap_file_manager.seq_parameter_manager.get_is_initialized():

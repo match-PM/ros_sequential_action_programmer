@@ -67,7 +67,7 @@ class SeqParameterManager:
     FILE_ENDING = ".rsapp.json"
 
     def __init__(self):
-        self._seq_parameter_list = []
+        self._seq_parameter_list:list[SeqParameter] = []
         self._file_name = None
         self._file_dir = None
         self._metadata = {}
@@ -147,7 +147,6 @@ class SeqParameterManager:
 
         # Reset current state
         self.clear_parameters()
-        self._metadata = {}
 
         # Iterate entries: first dicts that are metadata (do NOT contain name/type/value)
         # and then parameter dicts that do contain those keys.
@@ -178,7 +177,13 @@ class SeqParameterManager:
         self._file_dir = file_path
 
     def clear_parameters(self) -> None:
+        """
+        Clear all parameters and reset state.
+        """
         self._seq_parameter_list = []
+        self._file_name = None
+        self._file_dir = None
+        self._metadata = {}
 
     def get_file_name(self, strip_extension: bool = False) -> str:
         if strip_extension:

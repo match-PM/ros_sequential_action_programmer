@@ -271,7 +271,7 @@ class ActionBaseClass:
         """
 
         copy_request_dict = copy.deepcopy(self.get_request_as_ordered_dict())
-
+        
         for index, _reference in enumerate(self._parameter_references.get_reference_list()):
 
             if isinstance(_reference, ActionResponseParameterReference):

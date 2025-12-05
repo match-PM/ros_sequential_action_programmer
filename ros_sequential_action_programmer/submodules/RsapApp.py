@@ -32,6 +32,7 @@ from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_widgets import ActionListWidget, ActionListItem
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionParameterWidget import ActionParameterWidget, ActionParameterMainLayout
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.SequenceInfoWidget import SequenceInfoWidget
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.RecentFilesManager import RecentFilesManager
 try:
     from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import PmDashboardApp
     from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import append_jog_panel_to_menu
@@ -56,9 +57,10 @@ class RsapApp(QMainWindow):
         self.service_node = service_node
         
         self.action_sequence_builder = RosSequentialActionProgrammer(service_node)
+        self.recent_files_manager = RecentFilesManager(self.action_sequence_builder)
         self.thread_pool = QThreadPool()
         # load the recent file (last opened file)
-        self.action_sequence_builder.load_recent_file()
+        self.recent_files_manager.load_recent_file()
         self._init_signal()
         self.initUI()
         #self.init_actions_list()
@@ -176,6 +178,17 @@ class RsapApp(QMainWindow):
         menubar = self.menuBar()
         menubar.setStyleSheet("QMenuBar { font-size: 18px; }")
         file_menu = menubar.addMenu("File")
+
+        # Create "Save" action
+        save_action = QAction("Save", self)
+        save_action.triggered.connect(self.save_process)
+        file_menu.addAction(save_action)
+
+        # Create 'save as' action
+        save_as_action = QAction("Save process as", self)
+        save_as_action.triggered.connect(self.save_process_as)
+        file_menu.addAction(save_as_action)
+
         app_config_menu = menubar.addMenu("Settings")
         seq_param_menu = menubar.addMenu("Sequence Parameters File")
 
@@ -191,18 +204,14 @@ class RsapApp(QMainWindow):
 
         # Create "Open" action
         open_action = QAction("Open process", self)
-        open_action.triggered.connect(self.open_process_file)
+        open_action.triggered.connect(self.open_process_file_dia)
         file_menu.addAction(open_action)
-        
-        # Create "Save" action
-        save_action = QAction("Save", self)
-        save_action.triggered.connect(self.save_process)
-        file_menu.addAction(save_action)
 
-        # Create 'save as' action
-        save_as_action = QAction("Save process as", self)
-        save_as_action.triggered.connect(self.save_process_as)
-        file_menu.addAction(save_as_action)
+        # Recent files submenu
+        self.recent_files_menu = file_menu.addMenu("Open Recent Process")
+        self.update_recent_files_menu()  # Populate the submenu dynamically
+        
+
         
         # try:
         #     open_pm_robot_config = QAction("PM Robot Config", self)
@@ -308,7 +317,7 @@ class RsapApp(QMainWindow):
         command = self.action_sequence_builder.run_ros2_executable(package, executable, launch_mode=True)
         
         self.service_node.get_logger().info(f"Started command: '{command}' in a new terminal window.")
-                
+    
     def append_selected_action_from_menu(self, menu_output:list[str]):
         #print(menu_output)
         if menu_output[0] == 'Services':
@@ -475,7 +484,7 @@ class RsapApp(QMainWindow):
                 self.text_output.append_red_text(f"Invalid input arguments")
                 
                 
-    def open_process_file(self):
+    def open_process_file_dia(self):
         """
         This method opens a file dialog to select a process file to open.
         """
@@ -484,11 +493,19 @@ class RsapApp(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(self, "Open JSON File", 
                                                    "", 
                                                    file_filter)
+        self.open_process_file(file_path)
+
+
+    def open_process_file(self, file_path:str):
+        """
+        This method opens a file dialog to select a process file to open.
+        """
+        
         if file_path:
             self.text_output.clear()
             self.text_output.append(f"Opening: {file_path}")
             success = self.action_sequence_builder.rsap_file_manager.load_from_JSON(file_path)
-            self.action_sequence_builder.rsap_file_manager.set_recent_file()
+            self.recent_files_manager.set_recent_file()
             if success:
                 self.action_list_widget.populate_list()
                 self.rsap_seq_info_widget.init_values()
@@ -659,6 +676,27 @@ class RsapApp(QMainWindow):
             self.service_node.get_logger().error(f"Error opening sub window: {e}")
         except Exception as e:
             self.service_node.get_logger().error(f"Error opening sub window: {e}")
+
+    def update_recent_files_menu(self):
+        """
+        Clears and repopulates the 'Open Recent Process' submenu
+        using the last 10 recent files from RecentFilesManager.
+        """
+        self.recent_files_menu.clear()
+
+        recent_files = self.recent_files_manager.get_recent_files()  # List of last files
+        if not recent_files:
+            empty_action = QAction("No recent files", self)
+            empty_action.setEnabled(False)
+            self.recent_files_menu.addAction(empty_action)
+            return
+
+        for file_path in recent_files:
+            action = QAction(file_path, self)
+            # Directly call your open_process_file function
+            action.triggered.connect(lambda checked, f=file_path: self.open_process_file(f))
+            self.recent_files_menu.addAction(action)
+
 
     def print_ros_log(self, msg, level):
         # INFO

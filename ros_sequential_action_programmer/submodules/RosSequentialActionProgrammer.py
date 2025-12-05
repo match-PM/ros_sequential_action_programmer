@@ -217,7 +217,7 @@ class RosSequentialActionProgrammer:
                 return True
 
             except ActionInitializationError as e:
-                self.node.get_logger().error(f"Service client: '{service_client}' with srv_type '{service_type}' could not be appended! {e}")
+                self.node.get_logger().error(f"Service client: '{action_client}' with srv_type '{action_type}' could not be appended! {e}")
                 return False
             
     def append_user_interaction_to_action_list_at_index(
@@ -419,25 +419,24 @@ class RosSequentialActionProgrammer:
         else:
             return False, self.current_action_index
 
+    # def load_recent_file(self):
+    #     """
+    #     Loads the last opened file from the yaml file.
+    #     """
+    #     path = get_package_share_directory('ros_sequential_action_programmer')
 
-    def load_recent_file(self):
-        """
-        Loads the last opened file from the yaml file.
-        """
-        path = get_package_share_directory('ros_sequential_action_programmer')
+    #     # Specify the path to your YAML file
+    #     yaml_file_path = f"{path}/recent_file.yaml"
+    #     try:
+    #         # Read the content of the YAML file
+    #         with open(yaml_file_path, 'r') as file:
+    #             yaml_content = yaml.safe_load(file)
 
-        # Specify the path to your YAML file
-        yaml_file_path = f"{path}/recent_file.yaml"
-        try:
-            # Read the content of the YAML file
-            with open(yaml_file_path, 'r') as file:
-                yaml_content = yaml.safe_load(file)
-
-            process_file_path = yaml_content['recent_file'] 
-            self.rsap_file_manager.load_from_JSON(process_file_path)
-        except Exception as e:
-            self.node.get_logger().error(f"Error loading recent file: {e}")
-            self.node.get_logger().warn("No recent file found! Skipping loading of recent file!")
+    #         process_file_path = yaml_content['recent_file'] 
+    #         self.rsap_file_manager.load_from_JSON(process_file_path)
+    #     except Exception as e:
+    #         self.node.get_logger().error(f"Error loading recent file: {e}")
+    #         self.node.get_logger().warn("No recent file found! Skipping loading of recent file!")
 
     def has_current_action_breakpoint(self) -> bool:
         """
@@ -482,6 +481,12 @@ class RosSequentialActionProgrammer:
                 service_response_dict_list.append(dictionary)
 
         return service_response_dict_list
+
+    def reinit_sequence_parameter_values(self):
+        """
+        Call this after the sequence parameter file has been changed externally.
+        """
+        self.action_parameter_value_manager.reinit_sequence_parameter_values()
 
     def get_active_client_whtlist(self)-> list:
         """

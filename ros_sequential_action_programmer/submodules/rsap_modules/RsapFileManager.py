@@ -79,6 +79,9 @@ class RsapFileManager():
                 self.node.get_logger().error(f"Error loading sequence parameters from '{_sequence_file_path}': {e}")
                 self.node.get_logger().error(f"No sequence parameters loaded!")
 
+        else:
+            self.seq_parameter_manager.clear_parameters()
+            self.node.get_logger().info("No sequence parameters file specified. Cleared existing sequence parameters.")
 
         for index, action_dict in enumerate(file_data["action_list"]):
             try:
@@ -158,11 +161,12 @@ class RsapFileManager():
                 else:
                     self.node.get_logger().error(f"Action type '{_type}' not supported!")
                     continue
-
+                
                 action_from_item.set_references(_param_references)
                 action_from_item.set_active(_is_active)
                 action_from_item.set_breakpoint(_has_breakpoint)
                 self.sequence_list.append(action_from_item)
+                self.node.get_logger().info(f"{index} - Loaded action '{_name}'!")
 
             except (ActionInitializationError,SetActionRequestError) as e:
                 self.node.get_logger().error(f"{e}. Skipping loading this action")
@@ -276,19 +280,9 @@ class RsapFileManager():
         return None
     
     def reset_sequence_parameter_manager(self) -> None:
-        self.seq_parameter_manager = SeqParameterManager()
+        #self.seq_parameter_manager = SeqParameterManager()
+        self.seq_parameter_manager.clear_parameters()
 
-    def set_recent_file(self):
-        """
-        Saves the last opened file to the yaml file.
-        """
-        recent_file_dict = {}
-        recent_file_dict['recent_file'] = self.get_action_sequence_file_path()
-        path = get_package_share_directory('ros_sequential_action_programmer')
-        # Specify the path to your YAML file
-        yaml_file_path = f"{path}/recent_file.yaml"
-        with open(yaml_file_path, 'w') as file:
-            yaml.dump(recent_file_dict, file, default_flow_style=False)
 
             
 

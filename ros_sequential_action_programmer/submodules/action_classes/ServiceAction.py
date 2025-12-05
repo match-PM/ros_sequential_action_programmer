@@ -218,21 +218,21 @@ class ServiceAction(ActionBaseClass):
                 full_key = f"{parent_key}.{key}" if parent_key else key
 
                 # Debug log: current key and info
-                self.node.get_logger().debug(f"Checking field: '{full_key}', info: {info}")
+                #self.node.get_logger().debug(f"Checking field: '{full_key}', info: {info}")
 
                 # Check if the field is boolean
                 if info.get('type') == 'boolean' or info.get('type') == 'bool':
-                    self.node.get_logger().info(f"Found boolean field: '{full_key}'")
+                    #self.node.get_logger().info(f"Found boolean field: '{full_key}'")
                     self.service_res_bool_messages.append(full_key)
 
                 # Recurse into nested fields
                 if 'fields' in info:
-                    self.node.get_logger().debug(f"Recursing into nested fields of '{full_key}'")
+                    #self.node.get_logger().debug(f"Recursing into nested fields of '{full_key}'")
                     recurse_fields(info['fields'], full_key)
 
                 # If it's an array of nested messages, recurse into fields
                 if info.get('is_array') and 'fields' in info:
-                    self.node.get_logger().debug(f"Recursing into array of nested messages for '{full_key}'")
+                    #self.node.get_logger().debug(f"Recursing into array of nested messages for '{full_key}'")
                     recurse_fields(info['fields'], full_key + '.*')  # optional: add '*' to indicate array
 
         # Get type dict of the response message
@@ -240,7 +240,7 @@ class ServiceAction(ActionBaseClass):
             type_dict = field_type_map_recursive_with_msg_type(self.service_metaclass.Response)
             self.node.get_logger().debug(f"Response type dict: {type_dict}")
             recurse_fields(type_dict)
-            self.node.get_logger().info(f"All boolean fields found: {self.service_res_bool_messages}")
+            #self.node.get_logger().info(f"All boolean fields found: {self.service_res_bool_messages}")
         else:
             self.node.get_logger().warn(
                 "Cannot initialize service response bool messages: Response type not available."

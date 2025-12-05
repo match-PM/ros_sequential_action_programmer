@@ -252,17 +252,17 @@ class RosActionAction(ActionBaseClass):
 
                 # Check if the field is boolean
                 if info.get('type') == 'boolean' or info.get('type') == 'bool':
-                    self.node.get_logger().info(f"Found boolean field: '{full_key}'")
+                    #self.node.get_logger().info(f"Found boolean field: '{full_key}'")
                     self.res_bool_messages.append(full_key)
 
                 # Recurse into nested fields
                 if 'fields' in info:
-                    self.node.get_logger().debug(f"Recursing into nested fields of '{full_key}'")
+                    #self.node.get_logger().debug(f"Recursing into nested fields of '{full_key}'")
                     recurse_fields(info['fields'], full_key)
 
                 # If it's an array of nested messages, recurse into fields
                 if info.get('is_array') and 'fields' in info:
-                    self.node.get_logger().debug(f"Recursing into array of nested messages for '{full_key}'")
+                    #self.node.get_logger().debug(f"Recursing into array of nested messages for '{full_key}'")
                     recurse_fields(info['fields'], full_key + '.*')  # optional: add '*' to indicate array
 
         # Get type dict of the response message
@@ -270,7 +270,7 @@ class RosActionAction(ActionBaseClass):
             type_dict = field_type_map_recursive_with_msg_type(self.empthy_result)
             #self.node.get_logger().debug(f"Response type dict: {type_dict}")
             recurse_fields(type_dict)
-            self.node.get_logger().info(f"All boolean fields found for action {self.get_name()}: {self.res_bool_messages}")
+            #self.node.get_logger().info(f"All boolean fields found for action {self.get_name()}: {self.res_bool_messages}")
 
         except Exception as e:
             self.node.get_logger().warn(
