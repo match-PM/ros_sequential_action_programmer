@@ -284,8 +284,8 @@ class ROS2DictEditor(QWidget):
     def __init__(self, 
                  types_dict, 
                  values_dict, 
-                 action: Union[ActionBaseClass, ServiceAction, UserInteractionAction, RosActionAction], 
-                 action_parameter_value_manager: ActionParameterValueManager,
+                 action: Union[ActionBaseClass, ServiceAction, UserInteractionAction, RosActionAction] = None, 
+                 action_parameter_value_manager: ActionParameterValueManager = None,
                  logger = None,
                 is_array_element: bool = False
                  ):
@@ -314,8 +314,9 @@ class ROS2DictEditor(QWidget):
     def build_layout(self, type_dict, value_dict, parent_layout, parent_path=""):
         self.disabled_keys = []
 
-        self.disabled_keys.extend(self._action.get_references().get_all_value_keys_with_reference())
-        self.disabled_keys.extend(["start.header.stamp", "start.pose.position.x", "tolerance"])
+        if self._action is not None:
+            self.disabled_keys.extend(self._action.get_references().get_all_value_keys_with_reference())
+            self.disabled_keys.extend(["start.header.stamp", "start.pose.position.x", "tolerance"])
 
         #self.logger.error(f"Disabled keys for action '{self._action.get_name()}': {self.disabled_keys}")
 
@@ -532,8 +533,8 @@ class ArrayEditDialog(QDialog):
                  parent, 
                  arr, 
                  val_type,
-                 action_parameter_value_manager: ActionParameterValueManager,
-                 current_action: ActionBaseClass,
+                 action_parameter_value_manager: ActionParameterValueManager = None,
+                 current_action: ActionBaseClass = None,
                  logger = None):
         
         super().__init__(parent)

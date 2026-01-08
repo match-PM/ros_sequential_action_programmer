@@ -111,16 +111,15 @@ class SeqParameterManager:
         self._metadata["file_timestamp"] = datatimestamp
 
         # Build list: metadata first, then parameters
-        data = []
-        # include metadata as a single dict (if any metadata keys exist)
-        if self._metadata:
-            data.append(self._metadata.copy())
+        parameter_data = []
 
         # then parameters
-        data.extend(param.get_as_dict() for param in self._seq_parameter_list)
+        parameter_data.extend(param.get_as_dict() for param in self._seq_parameter_list)
+
+        full_dict = {"metadata": self._metadata, "parameters": parameter_data}
 
         with open(file_path, "w") as f:
-            json.dump(data, f, indent=4)
+            json.dump(full_dict, f, indent=4)
 
     def load_file(self, file_path: str) -> None:
         """
@@ -128,46 +127,50 @@ class SeqParameterManager:
         Automatically sets _file_dir and _file_name based on the input path.
         Supports optional top-level metadata dict(s) before parameter entries.
         """
-        # Enforce extension
-        if not file_path.endswith(".rsapp.json"):
-            file_path += ".rsapp.json"
+        try:
+            # Enforce extension
+            if not file_path.endswith(".rsapp.json"):
+                file_path += ".rsapp.json"
 
-        if not os.path.exists(file_path):
-            raise SeqParameterManagerError(f"File '{file_path}' does not exist.")
+            if not os.path.exists(file_path):
+                raise SeqParameterManagerError(f"File '{file_path}' does not exist.")
 
-        # Read JSON
-        with open(file_path, "r") as f:
-            try:
-                data = json.load(f)
-            except json.JSONDecodeError as e:
-                raise SeqParameterManagerError(f"Failed to parse JSON: {e}")
+            # Read JSON
+            with open(file_path, "r") as f:
+                try:
+                    data = json.load(f)
+                except json.JSONDecodeError as e:
+                    raise SeqParameterManagerError(f"Failed to parse JSON: {e}")
 
-        if not isinstance(data, list):
-            raise SeqParameterManagerError(f"Invalid file format: expected top-level list, got {type(data).__name__}")
+            if not isinstance(data, dict):
+                raise SeqParameterManagerError(f"Invalid file format: expected top-level list, got {type(data).__name__}")
 
-        # Reset current state
-        self.clear_parameters()
+            # Reset current state
+            self.clear_parameters()
 
-        # Iterate entries: first dicts that are metadata (do NOT contain name/type/value)
-        # and then parameter dicts that do contain those keys.
-        for entry in data:
-            if not isinstance(entry, dict):
-                # ignore non-dict entries
-                continue
+            parameter_data = data.get("parameters", [])
+            # Iterate entries: first dicts that are metadata (do NOT contain name/type/value)
+            # and then parameter dicts that do contain those keys.
+            for entry in parameter_data:
+                if not isinstance(entry, dict):
+                    # ignore non-dict entries
+                    continue
 
-            # parameter entry check
-            if all(k in entry for k in ("name", "type", "value")):
-                param = SeqParameter(entry["name"], entry["type"], entry["value"])
-                self.add_parameter(param)
-            else:
-                # treat as metadata (merge)
-                # e.g. {"file_timestamp": "..."}
-                # merge keys into self._metadata (later metadata keys override earlier)
-                self._metadata.update(entry)
+                # parameter entry check
+                if all(k in entry for k in ("name", "type", "value")):
+                    param = SeqParameter(entry["name"], entry["type"], entry["value"])
+                    self.add_parameter(param)
+                else:
+                    # treat as metadata (merge)
+                    # e.g. {"file_timestamp": "..."}
+                    # merge keys into self._metadata (later metadata keys override earlier)
+                    self._metadata.update(entry)
 
-        # Update manager state (path & name)
-        self._file_dir = os.path.dirname(file_path) or "."
-        self._file_name = os.path.basename(file_path)
+            # Update manager state (path & name)
+            self._file_dir = os.path.dirname(file_path) or "."
+            self._file_name = os.path.basename(file_path)
+        except Exception as e:
+            raise SeqParameterManagerError(f"Error loading file '{file_path}': {e}")
 
     def set_file_name(self, 
                       file_name: str) -> None:

@@ -33,6 +33,7 @@ from ros_sequential_action_programmer.submodules.RsapApp_submodules.action_list_
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionParameterWidget import ActionParameterWidget, ActionParameterMainLayout
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.SequenceInfoWidget import SequenceInfoWidget
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.RecentFilesManager import RecentFilesManager
+from ros_sequential_action_programmer.submodules.RsapApp_submodules.SeqParameterWindow import SeqParameterManagerDialog
 try:
     from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import PmDashboardApp
     from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import append_jog_panel_to_menu
@@ -237,11 +238,15 @@ class RsapApp(QMainWindow):
         save_actionable_seq_params = QAction("Save Sequence Parameter File", self)
         save_actionable_seq_params.triggered.connect(self.GuiParameterFileActions_instance.save_sequence_parameter_manager)
         save_actionable_seq_params.setToolTip("Save the current sequence parameters to the .rsapp.json file.")
+        open_seq_param_widget = QAction("Open Parameter Manager", self)
+        open_seq_param_widget.triggered.connect(self.open_sequence_parameter_window)
+        open_seq_param_widget.setToolTip("Open the sequence parameter manager window.")
 
         seq_param_menu.addAction(load_actionable_seq_params)
         seq_param_menu.addAction(new_actionable_seq_params)
         seq_param_menu.addAction(save_actionable_seq_params)
         seq_param_menu.addAction(reset_actionable_seq_params)
+        seq_param_menu.addAction(open_seq_param_widget)
 
         executable_menu = QAction("ROS2 Run", self)
         executable_menu.triggered.connect(self.show_ros_executable_menu)
@@ -697,6 +702,13 @@ class RsapApp(QMainWindow):
             action.triggered.connect(lambda checked, f=file_path: self.open_process_file(f))
             self.recent_files_menu.addAction(action)
 
+    def open_sequence_parameter_window(self):
+        self.service_node.get_logger().warning(f"Test")
+
+        dialog = SeqParameterManagerDialog(self.action_sequence_builder.action_parameter_value_manager.seq_parameter_manager,
+                                           logger=self.service_node.get_logger(),
+                                           parent=self)
+        dialog.exec()
 
     def print_ros_log(self, msg, level):
         # INFO
