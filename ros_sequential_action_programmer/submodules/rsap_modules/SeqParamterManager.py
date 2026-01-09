@@ -2,6 +2,7 @@ import json
 import os
 from typing import Any
 import datetime
+from ros_sequential_action_programmer.submodules.action_classes.compatibility_mapping import COMPATIBLE_TYPES
 
 class SeqParameterError(Exception):
     def __init__(self, message):
@@ -88,7 +89,7 @@ class SeqParameterManager:
                 return param
         raise SeqParameterError(f"Parameter with name '{name}' not found.")
 
-    def get_parameter_list(self) -> list:
+    def get_parameter_list(self) -> list[SeqParameter]:
         return self._seq_parameter_list
 
     def save_to_file(self) -> None:
@@ -222,9 +223,16 @@ class SeqParameterManager:
         return len(self._seq_parameter_list)
 
     def get_parameters_for_type(self, val_type: str) -> list[SeqParameter]:
-        return [param for param in self._seq_parameter_list if param.get_type() == val_type]
-    
-    
+        params = []
+        compatible_types = COMPATIBLE_TYPES.get(val_type, [val_type])
+        for param in self._seq_parameter_list:
+            if param.get_type() in compatible_types:
+                params.append(param)
+        return params
+
+    def delete_parameter_by_name(self, name: str) -> None:
+        self._seq_parameter_list = [param for param in self._seq_parameter_list if param.get_name() != name]
+
 if __name__ == "__main__":
     path = "/home/mll"
     file_name = "test"  # You can use "test" or "test.rsapp.json"

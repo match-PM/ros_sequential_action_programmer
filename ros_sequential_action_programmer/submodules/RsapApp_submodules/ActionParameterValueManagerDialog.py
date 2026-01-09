@@ -168,6 +168,13 @@ class ActionParameterValueManagerDialog(QDialog):
             self.references_values_layout.addWidget(QLabel(f"Current Sequence Parameter File: {current_file_name}"))
 
             param_list = manager.get_parameters_for_type(self.current_type)
+            # DEBUG
+            self.current_action.node.get_logger().info(f"Found {len(param_list)} parameters for type '{self.current_type}'")
+            
+            for param in manager._seq_parameter_list:
+                param: SeqParameter
+                self.current_action.node.get_logger().info(f"Parameter: {param.get_name()} of type: {param.get_type()} with value: {param.get_value()}")
+                
             if not param_list:
                 self.references_values_layout.addWidget(QLabel("No parameters available for this type."))
                 return

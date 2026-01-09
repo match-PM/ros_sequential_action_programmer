@@ -242,11 +242,12 @@ class RsapApp(QMainWindow):
         open_seq_param_widget.triggered.connect(self.open_sequence_parameter_window)
         open_seq_param_widget.setToolTip("Open the sequence parameter manager window.")
 
+        seq_param_menu.addAction(open_seq_param_widget)
         seq_param_menu.addAction(load_actionable_seq_params)
         seq_param_menu.addAction(new_actionable_seq_params)
         seq_param_menu.addAction(save_actionable_seq_params)
         seq_param_menu.addAction(reset_actionable_seq_params)
-        seq_param_menu.addAction(open_seq_param_widget)
+        #seq_param_menu.addAction(open_seq_param_widget)
 
         executable_menu = QAction("ROS2 Run", self)
         executable_menu.triggered.connect(self.show_ros_executable_menu)
@@ -703,12 +704,16 @@ class RsapApp(QMainWindow):
             self.recent_files_menu.addAction(action)
 
     def open_sequence_parameter_window(self):
-        self.service_node.get_logger().warning(f"Test")
-
+        if not self.action_sequence_builder.action_parameter_value_manager.seq_parameter_manager.get_is_initialized():
+            self.text_output.append_red_text("No sequence parameter file loaded! Create or load a sequence parameter file first.")
+            return
+        
         dialog = SeqParameterManagerDialog(self.action_sequence_builder.action_parameter_value_manager.seq_parameter_manager,
                                            logger=self.service_node.get_logger(),
                                            parent=self)
         dialog.exec()
+
+        self.action_sequence_builder.action_parameter_value_manager.seq_parameter_manager.save_to_file()
 
     def print_ros_log(self, msg, level):
         # INFO

@@ -171,7 +171,7 @@ class RsapFileManager():
             except (ActionInitializationError,SetActionRequestError) as e:
                 self.node.get_logger().error(f"{e}. Skipping loading this action")
             
-        self.node.get_logger().error(f"SUCCEEESS!")
+        #self.node.get_logger().error(f"SUCCEEESS!")
         return True
 
     def save_to_JSON(self) -> bool:

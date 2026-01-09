@@ -220,7 +220,6 @@ class ParameterValueSetGenerator():
 
     def tf_static_callback(self, msg: TFMessage):
         frames_list = []
-        print("Test")
         for transform in msg.transforms:
             
             # Access transform information

@@ -96,7 +96,6 @@ class ActionParameterWidget(QWidget):
         self.scroll_area.setWidget(self.parameter_widget)
         main_layout.addWidget(self.scroll_area)
         
-        #self.logger.error ("Test")
 
         req_types = self.action.get_request_type()
         test_keys = self.action.get_request_keys_for_type("string")
@@ -314,6 +313,12 @@ class ROS2DictEditor(QWidget):
     def build_layout(self, type_dict, value_dict, parent_layout, parent_path=""):
         self.disabled_keys = []
 
+        # This is for disabling buttons globally if the action or parameter value manager is not given (needed for the seq parameter manager)
+        if self._action_parameter_value_manager is None or self._action is None:
+            global_button_disable = True
+        else:
+            global_button_disable = False
+            
         if self._action is not None:
             self.disabled_keys.extend(self._action.get_references().get_all_value_keys_with_reference())
             self.disabled_keys.extend(["start.header.stamp", "start.pose.position.x", "tolerance"])
@@ -389,7 +394,8 @@ class ROS2DictEditor(QWidget):
                 if btn_text in ("-", "×"):
                     btn.setStyleSheet("color: gray;")
 
-                header_layout.addWidget(btn)
+                if not global_button_disable:
+                    header_layout.addWidget(btn)
 
                 group = QGroupBox()
                 group.setLayout(QVBoxLayout())
@@ -457,7 +463,10 @@ class ROS2DictEditor(QWidget):
                     btn = ReferenceButton("+", val_type=typ)
                     btn.clicked.connect(partial(self.recom_clicked, full_path, typ))
 
-                hlayout.addWidget(btn)
+                # only add button if not globally disabled
+                if not global_button_disable:
+                    hlayout.addWidget(btn)
+                    
                 parent_layout.addLayout(hlayout)
     
     def show_disabled_field_dialog(self, field_path, field_type):
@@ -555,6 +564,11 @@ class ArrayEditDialog(QDialog):
         self._action_parameter_value_manager = action_parameter_value_manager
         self._action = current_action
         self.logger = logger
+        
+        if self._action_parameter_value_manager is None or self._action is None:
+            self.global_button_disable = True
+        else:
+            self.global_button_disable = False
 
         self.refresh_rows()
 
@@ -639,7 +653,9 @@ class ArrayEditDialog(QDialog):
 
         # --- Recommendation button ---
         btn = ReferenceButton('+', val_type=typ)
-        layout.addWidget(btn)
+        # only add button if not globally disabled
+        if not self.global_button_disable:
+            layout.addWidget(btn)
 
         # Connect to recommendation logic
         def on_recom_clicked():
@@ -655,8 +671,6 @@ class ArrayEditDialog(QDialog):
             )
             dlg.exec()
             # Apply recommended value back to array
-
-            #self.logger.error(f"Test {dlg.values_dict}")
 
             if dlg.values_dict.get(str(i)) is not None:
                 self.arr[i] = dlg.values_dict[str(i)]

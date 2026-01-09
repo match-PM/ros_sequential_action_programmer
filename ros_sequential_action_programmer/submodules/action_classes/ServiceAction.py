@@ -315,7 +315,14 @@ class ServiceAction(ActionBaseClass):
     def set_request_from_dict(self,request_dictionary:Union[dict,OrderedDict]) -> bool:
         """Update the ros service message from the dict"""
         try:
+            #self.logger.warn(f"New Dict {str(request_dictionary)}")
+
             set_message_fields(self.request, request_dictionary)
+            self.request_dict = message_to_ordereddict(self.request)
+            
+            #self.logger.warn(f"Result {str(self.request)}")
+            #self.logger.warn(f"Request Dict {str(self.request_dict)}")
+
         except Exception as e:
             raise SetActionRequestError(f"Could not set request from dictionary for {self.name}!")
     

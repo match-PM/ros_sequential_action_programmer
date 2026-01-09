@@ -287,14 +287,22 @@ class ActionBaseClass:
                 value_key = _reference.get_value_key()
                 seq_parameter = _reference.get_parameter()
                 value_to_set = seq_parameter.get_value()
-                set_obj_value_from_key(copy_request_dict, path_key=value_key, new_value=value_to_set)
+                
+                if isinstance(value_to_set, dict):
+                    # if dict has only a single key called data
+                    if len(value_to_set) == 1 and "data" in value_to_set:
+                        set_obj_value_from_key(copy_request_dict, path_key=value_key, new_value=value_to_set["data"])
+                    else:
+                        set_obj_value_from_key(copy_request_dict, path_key=value_key, new_value=value_to_set)
 
                 #raise EvaluateActionReferenceError(f"Failed to set sequence parameter reference value for key '{value_key}' from parameter '{seq_parameter.get_name()}'")
 
-                self.node.get_logger().warn(f"Evaluating sequence parameter reference for key '{_reference.get_value_key()}'")
-    
+                self.node.get_logger().warn(f"Evaluating sequence parameter reference for key '{_reference.get_value_key()}' to {value_to_set}")
+
             else:
                 continue
+            
+            #self.node.get_logger().warn(f"{copy_request_dict}")
 
         return copy_request_dict
         

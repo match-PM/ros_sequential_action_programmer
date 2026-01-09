@@ -108,7 +108,6 @@ class RosActionAction(ActionBaseClass):
         return "RosActionAction"
 
     def execute(self, get_interupt_method: Any = None) -> bool:
-        self.node.get_logger().error("Test 1")
         self.watchdog_triggered = False
         try:
             new_request_dict = self.evaluate_references()
@@ -122,8 +121,6 @@ class RosActionAction(ActionBaseClass):
         if not (self.request and self.metaclass and self.action_type):
             self.node.get_logger().error("Invalid request or metaclass/action_type not set.")
             return False
-
-        self.node.get_logger().error("Test 2")
 
         execute_success = False
         _client = ActionClient(self.node, self.metaclass, self.client)
@@ -325,6 +322,8 @@ class RosActionAction(ActionBaseClass):
         """Update the ros service message from the dict"""
         try:
             set_message_fields(self.request, request_dictionary)
+            self.request_dict = message_to_ordereddict(self.request)
+
         except Exception as e:
             raise SetActionRequestError(f"Could not set request from dictionary for {self.name}!")
         
