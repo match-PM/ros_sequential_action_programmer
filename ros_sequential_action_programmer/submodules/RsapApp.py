@@ -72,7 +72,6 @@ class RsapApp(QMainWindow):
         self.sub_window_list = []
         
 
-
     def _init_signal(self):
         self.user_interaction_signals_list = [] # used to store the signals for the user interaction
         self.action_sequence_builder.signal_incoming_log.signal.connect(self.print_ros_log)
@@ -286,6 +285,16 @@ class RsapApp(QMainWindow):
         self.log_widget = QTreeWidget(self)
         self.log_widget.setHeaderLabel("Log Viewer")
         self.log_layout.addWidget(self.log_widget)
+
+        self.export_log_button = QPushButton("Export Log")
+        self.export_log_button.clicked.connect(self.export_log)
+        
+        self.clear_log_button = QPushButton("Clear Action Logs")
+        self.clear_log_button.clicked.connect(self.clear_action_logs)
+        
+        self.log_layout.addWidget(self.export_log_button)
+        self.log_layout.addWidget(self.clear_log_button)
+
 
         #add sublayout to app layout
         layout.addLayout(self.action_parameter_layout,1,2,Qt.AlignmentFlag.AlignTop)
@@ -757,6 +766,19 @@ class RsapApp(QMainWindow):
         else:
             pass
     
+    def export_log(self):
+        self.action_sequence_builder.save_action_sequence_log()
+        self.text_output.append_green_text("Exported action log to file!")
+
+    def clear_action_logs(self):
+        # dialog to confirm clearing logs
+        confirm_dialog = UserDialog(request_text="Are you sure you want to clear all action logs? This action cannot be undone.")
+        if not confirm_dialog.exec():
+            return
+        self.action_sequence_builder.clear_all_log_entries()
+        self.clear_log_viewer()
+        self.text_output.append_green_text("Cleared all action logs!")
+        
     @pyqtSlot(str, object)   
     def show_user_interaction_dialog(self, message: str, result_holder: dict):
         # Create and show the user interaction dialog

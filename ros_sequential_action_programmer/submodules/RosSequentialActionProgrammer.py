@@ -340,6 +340,9 @@ class RosSequentialActionProgrammer:
 
             if log_mode == ExecutionLog.LOG_ALWAYS:
                 self.save_action_sequence_log()
+
+            if log_mode == ExecutionLog.LOG_AT_END and (self.get_current_action_index() == len(self.action_list) - 1):
+                self.save_action_sequence_log()
             
             if success_exec:
                 self.node.get_logger().info(
@@ -791,11 +794,11 @@ class RosSequentialActionProgrammer:
         """
         Saves the action sequence log to the folder.
         """
-        if (self._folder_path is not None) and (self.rsap_file_manager.get_sequence_name() is not None):
+        if (self.rsap_file_manager.get_folder_path() is not None) and (self.rsap_file_manager.get_sequence_name() is not None):
             self._update_action_sequence_log()
             export_time = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
             try:
-                file_path = f"{self._folder_path}/logs/"
+                file_path = f"{self.rsap_file_manager.get_folder_path()}/logs/"
                 if not os.path.exists(file_path):
                     os.makedirs(file_path)
                 with open(
