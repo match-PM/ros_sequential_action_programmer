@@ -89,7 +89,7 @@ class RsapFileManager():
                 _request = action_dict.get("request",{})
                 if _request == {}:
                     _request = action_dict.get("service_request",{})
-                _description = action_dict["description"]
+                _description = action_dict.get('description', '')
                 _name = action_dict["name"]
                 _type = action_dict['action_type']
                 _is_active = action_dict.get('is_active', True)

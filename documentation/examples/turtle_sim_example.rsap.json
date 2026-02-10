@@ -1,15 +1,17 @@
 {
     "name": "turtle_sim_example",
-    "saved_at": "2025-03-09 21:47:28.959740",
+    "saved_at": "2026-02-10 17:40:21.251561",
+    "seq_parameters_file": null,
     "action_list": [
         {
-            "action_position": 0,
-            "action_type": "ServiceAction",
             "name": "Teleport left bottom corner",
+            "description": "Teleports the turtle bot to the bottom left corner.",
+            "action_type": "ServiceAction",
+            "action_position": 0,
+            "parameter_references": [],
             "service_client": "/turtle1/teleport_absolute",
             "service_type": "turtlesim/srv/TeleportAbsolute",
             "error_identifier": null,
-            "description": "Teleports the turtle bot to the bottom left corner.",
             "request": {
                 "x": 1.0,
                 "y": 1.0,
@@ -19,13 +21,14 @@
             "is_active": true
         },
         {
-            "action_position": 1,
-            "action_type": "ServiceAction",
             "name": "Teleport right bottom corner",
+            "description": "Teleports the turtle bot to the bottom right corner.",
+            "action_type": "ServiceAction",
+            "action_position": 1,
+            "parameter_references": [],
             "service_client": "/turtle1/teleport_absolute",
             "service_type": "turtlesim/srv/TeleportAbsolute",
             "error_identifier": null,
-            "description": "Teleports the turtle bot to the bottom right corner.",
             "request": {
                 "x": 8.0,
                 "y": 1.0,
@@ -35,13 +38,14 @@
             "is_active": true
         },
         {
-            "action_position": 2,
-            "action_type": "ServiceAction",
             "name": "Teleport right top corner",
+            "description": "Teleports the turtle bot to the top right corner.",
+            "action_type": "ServiceAction",
+            "action_position": 2,
+            "parameter_references": [],
             "service_client": "/turtle1/teleport_absolute",
             "service_type": "turtlesim/srv/TeleportAbsolute",
             "error_identifier": null,
-            "description": "Teleports the turtle bot to the top right corner.",
             "request": {
                 "x": 8.0,
                 "y": 8.0,
@@ -51,13 +55,14 @@
             "is_active": true
         },
         {
-            "action_position": 3,
-            "action_type": "ServiceAction",
             "name": "Teleport left top corner",
+            "description": "Teleports the turtle bot to the top left corner.",
+            "action_type": "ServiceAction",
+            "action_position": 3,
+            "parameter_references": [],
             "service_client": "/turtle1/teleport_absolute",
             "service_type": "turtlesim/srv/TeleportAbsolute",
             "error_identifier": null,
-            "description": "Teleports the turtle bot to the top left corner.",
             "request": {
                 "x": 1.0,
                 "y": 8.0,
@@ -67,22 +72,28 @@
             "is_active": true
         },
         {
-            "action_position": 4,
-            "action_type": "UserInteractionAction",
             "name": "Set pen color interaction",
+            "description": "",
+            "action_type": "UserInteractionAction",
+            "action_position": 4,
+            "parameter_references": [],
             "action_text": "Do you want to set the pen color? Click okay to proceed. Click Cancel to aboard.",
             "interaction_mode": 2,
+            "request": {
+                "interaction_text": "Do you want to set the pen color? Click okay to proceed. Click Cancel to aboard."
+            },
             "has_breakpoint": false,
             "is_active": false
         },
         {
-            "action_position": 5,
-            "action_type": "ServiceAction",
             "name": "Set pen red",
+            "description": "Set the pen color to red",
+            "action_type": "ServiceAction",
+            "action_position": 5,
+            "parameter_references": [],
             "service_client": "/turtle1/set_pen",
             "service_type": "turtlesim/srv/SetPen",
             "error_identifier": null,
-            "description": "Set the pen color to red",
             "request": {
                 "r": 255,
                 "g": 0,
