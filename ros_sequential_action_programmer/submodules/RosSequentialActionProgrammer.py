@@ -323,7 +323,7 @@ class RosSequentialActionProgrammer:
 
             if not current_action.is_active():
                 self.node.get_logger().info(f"Action {self.get_current_action_name()} is not active!")
-                if shift_action:
+                if self.config.step_execution_behavior.get_value():
                     self.shift_to_next_action()
                 return True
             
@@ -351,7 +351,7 @@ class RosSequentialActionProgrammer:
             else:
                 raise Exception("Error executing action!")
 
-            if shift_action:
+            if self.config.step_execution_behavior.get_value():
                 self.shift_to_next_action()
                 
             return success_exec

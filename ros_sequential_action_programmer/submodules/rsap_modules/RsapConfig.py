@@ -10,6 +10,7 @@ class RsapConfig:
         self.ros_log_levels = RosLogLevels()
         self.execution_log = ExecutionLog()
         self.execution_behavior = ExecutionBehavior()
+        self.step_execution_behavior = StepExecutionBehavior()
         self._package_name = package_name
         self.config_file_path = get_package_share_directory('ros_sequential_action_programmer')
         self.file_path = self.config_file_path + '/rsap_config.yaml'
@@ -20,13 +21,15 @@ class RsapConfig:
         return {
             'ros_log_levels': self.ros_log_levels._get_as_dict(),
             'execution_logging': self.execution_log._get_as_dict(),
-            'execution_behavior': self.execution_behavior._get_as_dict()
+            'execution_behavior': self.execution_behavior._get_as_dict(),
+            'step_execution_behavior': self.step_execution_behavior._get_as_dict()
         }
         
     def set_from_dict(self, config_dict: dict, save_to_file: bool = True):
         self.ros_log_levels._set_from_dict(config_dict.get('ros_log_levels', {}))
         self.execution_log._set_from_dict(config_dict.get('execution_logging', {}))
         self.execution_behavior._set_from_dict(config_dict.get('execution_behavior', {}))
+        self.step_execution_behavior._set_from_dict(config_dict.get('step_execution_behavior', {}))
         if save_to_file:
             self.save_config_to_file()
     
@@ -138,6 +141,21 @@ class ExecutionBehavior:
 
     def get_value(self) -> bool:
         return self._loop_sequence
+
+class StepExecutionBehavior:
+    def __init__(self) -> None:
+        self._step = True
+
+    def _get_as_dict(self) -> dict:
+        return {
+            'step': self._step
+        }
+    
+    def _set_from_dict(self, log_dict: dict):
+        self._step = log_dict.get('step', True)
+
+    def get_value(self) -> bool:
+        return self._step
 
 class RosLogLevels:
     def __init__(self) -> None:

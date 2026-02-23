@@ -13,6 +13,8 @@ from datetime import datetime
 from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
 import yaml
+from PyQt5.QtWidgets import QFileDialog, QApplication
+import sys
 
 class RsapFileManager():
 
@@ -76,8 +78,28 @@ class RsapFileManager():
                 self.seq_parameter_manager.load_file(_sequence_file_path)
                 self.node.get_logger().info(f"Success loading sequence parameters from '{_sequence_file_path}'!")
             except SeqParameterManagerError as e:
-                self.node.get_logger().error(f"Error loading sequence parameters from '{_sequence_file_path}': {e}")
-                self.node.get_logger().error(f"No sequence parameters loaded!")
+                self.node.get_logger().warn(f"Error loading sequence parameters from '{_sequence_file_path}': {e}")
+
+                app = QApplication.instance()
+                if app is None:
+                    app = QApplication(sys.argv)
+                
+                file_path, _ = QFileDialog.getOpenFileName(
+                    None,
+                    "Please specify Sequence Parameters File",
+                    "",
+                    f"RSApp Parameter Files (*{SeqParameterManager.FILE_ENDING})"
+                )
+                if file_path:
+                    try:
+                        self.seq_parameter_manager.load_file(file_path)
+                        self.node.get_logger().info(f"Success loading sequence parameters from '{file_path}'!")
+                    except SeqParameterManagerError as e:
+                        self.node.get_logger().error(f"Error loading sequence parameters from '{file_path}': {e}")
+                        self.seq_parameter_manager.clear_parameters()
+                else:
+                    self.node.get_logger().warning("No sequence parameters file selected. Sequence will be cleared from references!")
+                    self.seq_parameter_manager.clear_parameters()
 
         else:
             self.seq_parameter_manager.clear_parameters()

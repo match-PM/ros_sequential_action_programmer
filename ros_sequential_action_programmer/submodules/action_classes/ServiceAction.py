@@ -158,15 +158,15 @@ class ServiceAction(ActionBaseClass):
 
             srv_end_time = datetime.now()
 
-            self.node.get_logger().info(f"Test1..")
+            #self.node.get_logger().info(f"Test1..")
 
             client.destroy()
             if timer is not None:
                 timer.destroy()
             
-            self.node.get_logger().info(f"Test2..")
+            #self.node.get_logger().info(f"Test2..")
             self.update_log_entry(srv_call_success, srv_start_time, srv_end_time)
-            self.node.get_logger().info(f"Test3..")
+            #self.node.get_logger().info(f"Test3..")
             #self.node.get_logger().info(f"Service return: {self.response_dict}")
             
             return srv_call_success
@@ -262,7 +262,7 @@ class ServiceAction(ActionBaseClass):
 
         self.log_entry["srv_request"] = json.loads(json.dumps(self.get_request_as_ordered_dict()))
 
-        if success:
+        if self.response is not None:
             self.log_entry["srv_response"] = json.loads(json.dumps(self.get_response_as_ordered_dict()))
 
         if not additional_text == '':

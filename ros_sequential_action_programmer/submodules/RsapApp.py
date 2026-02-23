@@ -66,7 +66,6 @@ class RsapApp(QMainWindow):
         self.initUI()
         #self.init_actions_list()
         self.action_list_widget.populate_list()
-        self.save_as = False 
         #self.initialize_active_service_list()
         self.execution_running = False
         self.sub_window_list = []
@@ -537,8 +536,7 @@ class RsapApp(QMainWindow):
         self.update_last_saved()
 
     def save_process_as(self):
-        self.save_as = True
-        self.create_new_file()
+        self.create_new_file(save_as=True)
 
     def save_process(self):
         """
@@ -551,7 +549,7 @@ class RsapApp(QMainWindow):
             self.text_output.append(f"Saved file: {success}")
             self.update_last_saved()
             
-    def create_new_file(self):
+    def create_new_file(self, save_as=False):
         """
         This method creates a new file and saves the current process to it.
         """
@@ -568,7 +566,7 @@ class RsapApp(QMainWindow):
         # set action sequence file path
         self.action_sequence_builder.rsap_file_manager.set_folder_path(os.path.dirname(file_name))
 
-        if not self.save_as and self.action_sequence_builder.rsap_file_manager.get_sequence_name() is not None:
+        if not save_as and self.action_sequence_builder.rsap_file_manager.get_sequence_name() is not None:
             self.action_sequence_builder.action_list.clear()
             #self.init_actions_list()
             self.action_list_widget.populate_list()
@@ -582,10 +580,9 @@ class RsapApp(QMainWindow):
             self.rsap_seq_info_widget.init_values()
             # update the last saved timestamp
             self.update_last_saved()
-            self.action_sequence_builder.rsap_file_manager.set_recent_file()
+            self.recent_files_manager.set_recent_file()
 
         self.action_parameter_layout.clear_action_parameter_layout()
-        self.save_as = False
 
     def append_service_dialog(self, service_name: str = None, service_client:str= None, serivce_type:str = None)->None:
         add_service_dialog = AddServiceDialog(service_name, service_client, serivce_type)

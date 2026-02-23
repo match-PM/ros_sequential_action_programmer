@@ -284,8 +284,10 @@ class RosActionAction(ActionBaseClass):
         self.log_entry["end_time"] = str(end_time.strftime("%Y-%m-%d_%H:%M:%S.%f"))
         self.log_entry["execution_time"] = str(end_time - start_time)
         self.log_entry["request"] = json.loads(json.dumps(self.get_request_as_ordered_dict()))
-        if success: 
+
+        if self.response is not None: 
             self.log_entry["response"] = json.loads(json.dumps(self.get_response_as_ordered_dict()))
+            
         if not additional_text == '':
             self.log_entry["message"] = str(additional_text)
         self.log_entry["success"] = success
