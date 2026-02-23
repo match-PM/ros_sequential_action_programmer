@@ -26,11 +26,23 @@ class ActionParameterReferences():
                 return True
         return False
 
-    def get_reference_key_for_field_key(self, field_key)->bool:
+    def get_ref_id_for_field_key(self, field_key)->str:
         for index, ref in enumerate(self.reference_list):
-            if field_key == ref.get_value_key():
-                return True
-        return False
+            if not field_key == ref.get_value_key():
+                continue
+
+            if isinstance(ref, ActionResponseParameterReference):
+                ref: ActionResponseParameterReference 
+                action = ref.get_reference_action()
+                output = f"{action.get_name()}.response.{ref.get_reference_key()}"
+                return output
+            
+            if isinstance(ref, SeqParameterReference):
+                ref: SeqParameterReference 
+                output = f"Param: {ref.get_parameter_name()}"
+                return output
+                
+        return None
     
     def get_reference_action_for_field_key(self, field_key)->any:
         for index, ref in enumerate(self.reference_list):

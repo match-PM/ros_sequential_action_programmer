@@ -36,3 +36,5 @@ class SeqParameterReference():
     def set_parameter(self, param:SeqParameter):
         self._parameter = param
 
+    def get_parameter_name(self):
+        return self._parameter.get_name()

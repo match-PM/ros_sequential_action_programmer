@@ -321,7 +321,11 @@ class ROS2DictEditor(QWidget):
             
         if self._action is not None:
             self.disabled_keys.extend(self._action.get_references().get_all_value_keys_with_reference())
-            self.disabled_keys.extend(["start.header.stamp", "start.pose.position.x", "tolerance"])
+            
+            # for key in self.disabled_keys:
+            #     _t = self._action.get_references().get_ref_id_for_field_key(key)
+            #     self.logger.warn(f"Disabled key '{key}' has reference key '{_t}'")
+            #self.disabled_keys.extend(["start.header.stamp", "start.pose.position.x", "tolerance"])
 
         #self.logger.error(f"Disabled keys for action '{self._action.get_name()}': {self.disabled_keys}")
 
@@ -444,6 +448,15 @@ class ROS2DictEditor(QWidget):
                 if is_disabled or has_parent_disabled:
                     widget.setStyleSheet("color: gray; background-color: #f2f2f2;")
                     widget.setDisabled(True)
+                    ref_tooltip = self._action.get_references().get_ref_id_for_field_key(full_path)
+                    
+                    if ref_tooltip is None:
+                        ref_tooltip = "Unknown reference"
+
+                    self.logger.warn(f"Disabled key '{full_path}' has reference key '{ref_tooltip}'")
+                    widget.setToolTip(f"Reference - {ref_tooltip}")
+                    #self.logger.warn(f"Field '{full_path}' is disabled (exact: {is_disabled}, parent disabled: {has_parent_disabled})")
+                    self.logger.warn(f"Disabled keys: {self.disabled_keys}")
 
                 hlayout.addWidget(widget)
 
