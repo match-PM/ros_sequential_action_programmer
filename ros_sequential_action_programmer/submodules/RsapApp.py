@@ -34,14 +34,6 @@ from ros_sequential_action_programmer.submodules.RsapApp_submodules.ActionParame
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.SequenceInfoWidget import SequenceInfoWidget
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.RecentFilesManager import RecentFilesManager
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.SeqParameterWindow import SeqParameterManagerDialog
-try:
-    from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import PmDashboardApp
-    from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_dashboard import append_jog_panel_to_menu
-    from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_calibration import append_calbiration_panel_to_menu
-    from ros_sequential_action_programmer.submodules.pm_robot_modules.widget_pm_robot_config import PmRobotConfigWidget
-
-except Exception as e:
-    print(f"Error importing append_jog_panel_to_menu: {e}")
 
 # Change this later to be cleaner
 try:
@@ -50,7 +42,6 @@ except ModuleNotFoundError as e:
     print(f"Error importing PmCoPilotApp: {e}")
 
 from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI
-
 
 class RsapApp(QMainWindow):
     def __init__(self, service_node:Node):
