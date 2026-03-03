@@ -3,6 +3,11 @@ clients_by_name:
  - '/pm_moveit_server/move'
  - '/assembly_manager/'
  - '/pm_vision_manager/'
+ - '/pm_skills/'
+ - '/pm_sensor_controller/'
+ - '/pm_robot_primitive_skills/'
+ - '/pm_pneumatic_controller/'
+ - '/pm_nozzle_controller/'
 
 clients_by_type:
   # - 'rcl_interfaces/srv/GetParameters'

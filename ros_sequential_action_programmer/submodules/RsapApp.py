@@ -37,9 +37,10 @@ from ros_sequential_action_programmer.submodules.RsapApp_submodules.SeqParameter
 
 # Change this later to be cleaner
 try:
-    from ros_sequential_action_programmer.submodules.co_pilot.PmCoPilotApp import PmCoPilotApp
+    # Import pm_co_pilot_programming
+    pass
 except ModuleNotFoundError as e:
-    print(f"Error importing PmCoPilotApp: {e}")
+    print(f"Error importing PmCoPilotAppProgramming: {e}")
 
 from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI
 
@@ -184,6 +185,11 @@ class RsapApp(QMainWindow):
 
         #pm_robot_tools_menu = menubar.addMenu("PM Robot Tools")
         copilot_menu = menubar.addMenu("Co-Pilot")
+        
+        # Add Co-Pilot action
+        open_copilot_action = QAction("Open Co-Pilot Assistant", self)
+        open_copilot_action.triggered.connect(self.openCoPilot)
+        copilot_menu.addAction(open_copilot_action)
 
         ros_menu = menubar.addMenu("ROS2 Functionalities")
         
@@ -264,10 +270,10 @@ class RsapApp(QMainWindow):
         #     self.service_node.get_logger().warn(f"Error adding jog panel to menu: {e}")
 
         try:
-            open_pm_robot_co_pilot = QAction("PM Co-Pilot", self)
-            open_pm_robot_co_pilot.triggered.connect(partial(self.open_sub_window, PmCoPilotApp))
-            copilot_menu.addAction(open_pm_robot_co_pilot)
-
+            # open_pm_robot_co_pilot = QAction("PM Co-PilotProgramming", self)
+            # open_pm_robot_co_pilot.triggered.connect(partial(self.open_sub_window, PmCoPilotAppProgramming))
+            # copilot_menu.addAction(open_pm_robot_co_pilot)
+            pass
         except (ModuleNotFoundError, NameError) as e:
             self.service_node.get_logger().error(f"Error adding PM Co-Pilot to menu: {e}")
               
@@ -296,9 +302,26 @@ class RsapApp(QMainWindow):
         self.execute_step_button.setEnabled(True)
 
     def openCoPilot(self):
-        self.co_pilot_window = PmCoPilotApp(self.service_node, self.action_sequence_builder)
-        self.co_pilot_window.show()
-
+        try:
+            from pm_co_pilot_programming.submodules.PmCoPilotProgrammingApp import PmCoPilotProgrammingApp
+            self.co_pilot_window = PmCoPilotProgrammingApp(self.service_node, rsap_instance=self.action_sequence_builder)
+            # Connect signal to refresh GUI when sequence is modified
+            self.co_pilot_window.sequence_modified.connect(self.refresh_action_list_from_copilot)
+            self.co_pilot_window.show()
+            self.service_node.get_logger().info("Co-Pilot Assistant opened with shared RSAP instance")
+        except ModuleNotFoundError as e:
+            self.service_node.get_logger().error(f"Failed to open Co-Pilot: {e}")
+            QMessageBox.warning(self, "Module Not Found", "Co-Pilot module not found. Please ensure pm_co_pilot_programming is installed.")
+    
+    def refresh_action_list_from_copilot(self):
+        """Refresh the action list display when Co-Pilot modifies the sequence"""
+        current_row = self.action_list_widget.currentRow()
+        self.action_list_widget.populate_list()
+        # Try to maintain selection if possible
+        if current_row >= 0 and current_row < len(self.action_sequence_builder.action_list):
+            self.action_list_widget.setCurrentRow(current_row)
+        self.service_node.get_logger().debug("Action list refreshed after Co-Pilot modification")
+    
     def show_ros_executable_menu(self):
         self.ros_run_menu.menu_dictionary = self.action_sequence_builder.get_ros2_executables()
         self.ros_run_menu.init_action_menu()
