@@ -87,7 +87,7 @@ class RsapFileManager():
                 file_path, _ = QFileDialog.getOpenFileName(
                     None,
                     "Please specify Sequence Parameters File",
-                    "",
+                    self._folder_path,
                     f"RSApp Parameter Files (*{SeqParameterManager.FILE_ENDING})"
                 )
                 if file_path:
