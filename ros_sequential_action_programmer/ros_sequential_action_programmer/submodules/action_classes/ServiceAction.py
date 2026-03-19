@@ -303,13 +303,19 @@ class ServiceAction(ActionBaseClass):
 
         return new_instance
     
-    def get_request_type(self):
+    def get_request_type(self)-> dict:
+        """
+        Returns a dict with the type information of the request message. The dict is generated recursively and contains the full key to each field, the type of the field and if it is an array or not.
+        """
 
         type_dict = field_type_map_recursive_with_msg_type(self.service_metaclass.Request)
         
         return type_dict
     
-    def get_response_type(self):
+    def get_response_type(self)-> dict:
+        """
+        Returns a dict with the type information of the response message. The dict is generated recursively and contains the full key to each field, the type of the field and if it is an array or not.
+        """
         type_dict = field_type_map_recursive_with_msg_type(self.service_metaclass.Response)        
         return type_dict
         

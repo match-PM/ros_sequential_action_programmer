@@ -445,7 +445,7 @@ class RosSequentialActionProgrammer:
     #     except Exception as e:
     #         self.node.get_logger().error(f"Error loading recent file: {e}")
     #         self.node.get_logger().warn("No recent file found! Skipping loading of recent file!")
-
+    
     def _send_tick(self, action: ActionBaseClass, 
                    is_start = True, 
                    success = None):
@@ -453,7 +453,16 @@ class RosSequentialActionProgrammer:
         tick_msg.is_start_not_stop_sig = is_start
         tick_msg.action_name = action.get_name()
         tick_msg.action_uuid = action.get_uuid()
+        tick_msg.description = action.get_description()
         tick_msg.action_type = str(type(action).__name__)
+        
+        if isinstance(action, ServiceAction):
+            tick_msg.action_type_comment = action.service_type
+        elif isinstance(action, RosActionAction):
+            tick_msg.action_type_comment = action.action_type
+        else:   
+            pass
+        
         tick_msg.stamp = self.node.get_clock().now().to_msg()
         if success is not None:
             tick_msg.success = success
