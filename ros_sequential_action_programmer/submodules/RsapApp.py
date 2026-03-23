@@ -316,7 +316,7 @@ class RsapApp(QMainWindow):
         except ModuleNotFoundError as e:
             self.service_node.get_logger().error(f"Failed to open Co-Pilot: {e}")
             QMessageBox.warning(self, "Module Not Found", "Co-Pilot module not found. Please ensure pm_co_pilot_programming is installed.")
-
+    
     def openCoPilotPlanning(self):
         try:
             from pm_co_pilot_planning.submodules.PmCoPilotPlanningApp import PmCoPilotPlanningApp
