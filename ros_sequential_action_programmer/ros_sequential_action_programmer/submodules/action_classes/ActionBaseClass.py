@@ -98,7 +98,7 @@ class ActionBaseClass:
 
         self._has_breakpoint = False
         self._is_active = True
-        self._success_key = None
+        self._success_key = "success"
         self._parameter_references = ActionParameterReferences()
     
     def get_references(self) -> ActionParameterReferences:
