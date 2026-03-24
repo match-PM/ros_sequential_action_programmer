@@ -98,7 +98,7 @@ class ActionBaseClass:
 
         self._has_breakpoint = False
         self._is_active = True
-        self._success_key = "success"
+        self._success_key = None
         self._parameter_references = ActionParameterReferences()
     
     def get_references(self) -> ActionParameterReferences:
@@ -125,7 +125,10 @@ class ActionBaseClass:
             self.node.get_logger().error(str(e))
             return False
 
-    
+    def _set_default_identifier(self):
+        if "success" in self.get_res_bool_fields():
+            self.set_success_identifier("success")
+
     def toggle_active(self):
         self.node.get_logger().warn(f"State: {self._is_active}")
         self._is_active = not self._is_active
@@ -161,7 +164,7 @@ class ActionBaseClass:
     def get_success_identifier(self)-> str:
         return self._success_key
     
-    def get_res_bool_fields(self):
+    def get_res_bool_fields(self)-> list[str]:
         """
         Returns a list of strings containing the full keys to all bool messages of the service response
         """

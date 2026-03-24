@@ -68,7 +68,7 @@ class UserInteractionAction(ActionBaseClass):
         
         self.open_user_interaction_signal = OpenUserInteractionSignal()
         self.result_ready_signal = ResultReadySignal()
-
+        self._set_default_identifier()
 
     def execute(self, get_interupt_method = None) -> bool:
         exec_success = False

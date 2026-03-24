@@ -59,6 +59,7 @@ class ServiceAction(ActionBaseClass):
         
         self.init_service()
         self.init_service_res_bool_messages()
+        self._set_default_identifier()
 
     
     def get_type_indicator(self)->str:

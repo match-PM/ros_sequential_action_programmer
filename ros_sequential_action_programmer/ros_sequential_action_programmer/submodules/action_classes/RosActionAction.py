@@ -70,6 +70,8 @@ class RosActionAction(ActionBaseClass):
 
         self.init_action()  
         self.init_res_bool_messages()
+        self._set_default_identifier()
+
 
     def init_action(self):
         try:
