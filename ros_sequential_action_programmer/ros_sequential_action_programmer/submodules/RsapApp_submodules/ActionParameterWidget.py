@@ -159,7 +159,7 @@ class ActionParameterWidget(QWidget):
             
             # Set info for service type
             label_action_service_desc = QLabel(f"Service Type: ")
-            label_action_service_type = QLineEdit(f"{_action.get_type_indicator()}")
+            label_action_service_type = QLineEdit(f"{_action.service_type}")
             label_action_service_type.setReadOnly(True)
             self.parameter_layout.addWidget(label_action_service_desc)
             self.parameter_layout.addWidget(label_action_service_type)
@@ -180,7 +180,7 @@ class ActionParameterWidget(QWidget):
             self.parameter_layout.addWidget(label_error_handling_box)
             self.parameter_layout.addWidget(self.error_handling_box)
             
-            
+        
         if isinstance(self.action, RosActionAction):
             _action:RosActionAction = self.action 
             # Set info for service client
