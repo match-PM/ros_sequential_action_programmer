@@ -9,6 +9,7 @@ from rqt_py_common import message_helpers
 import collections
 import copy
 import json
+import time
 import array
 import numpy as np
 from functools import partial
@@ -18,6 +19,7 @@ from typing import Union
 import re
 from typing import Tuple, Any
 import rclpy.action
+from rclpy.callback_groups import ReentrantCallbackGroup
 from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass
 from rclpy.action import ActionClient
 from typing import Tuple, Any
@@ -131,7 +133,12 @@ class RosActionAction(ActionBaseClass):
             return False
 
         execute_success = False
-        _client = ActionClient(self.node, self.metaclass, self.client)
+        # Dedicated reentrant callback group so the background MultiThreadedExecutor can deliver
+        # the goal/result responses (and fire the watchdog timer) on a free thread, independent of
+        # the node's default mutually-exclusive group (which a busy subscription could otherwise
+        # monopolize, starving the passive waits below).
+        cb_group = ReentrantCallbackGroup()
+        _client = ActionClient(self.node, self.metaclass, self.client, callback_group=cb_group)
         srv_start_time = datetime.now()
 
         # Wait for server
@@ -146,8 +153,12 @@ class RosActionAction(ActionBaseClass):
         self.node.get_logger().warn(f"Request dict {self.request_dict}")
 
         # Send goal asynchronously
+        # The node is already spun by the background MultiThreadedExecutor; spinning it here as
+        # well races inside the C-level subscription deserialization and causes a SIGSEGV. Just
+        # wait passively for the futures, which the background executor completes.
         goal_future = _client.send_goal_async(self.request)
-        rclpy.spin_until_future_complete(self.node, goal_future)
+        while not goal_future.done():
+            time.sleep(0.01)
         goal_handle = goal_future.result()
 
         if not goal_handle.accepted:
@@ -168,7 +179,8 @@ class RosActionAction(ActionBaseClass):
         if node_name is not None:
             timer = self.node.create_timer(
                 timer_period_sec=1,
-                callback=partial(self.client_executer_watchdog, node_name)
+                callback=partial(self.client_executer_watchdog, node_name),
+                callback_group=cb_group
             )
         else:
             self.node.get_logger().warn(f"Action execution watchdog for '{self.get_name()}' not available. Action client name does not adhere to the naming convention starting with the node name.")
@@ -180,10 +192,12 @@ class RosActionAction(ActionBaseClass):
             if get_interupt_method and get_interupt_method():
                 self.node.get_logger().warn("Interrupt detected! Cancelling goal...")
                 cancel_future = goal_handle.cancel_goal_async()
-                rclpy.spin_until_future_complete(self.node, cancel_future)
+                cancel_deadline = time.time() + 2.0
+                while not cancel_future.done() and time.time() < cancel_deadline:
+                    time.sleep(0.01)
                 return False   # return immediately
 
-            rclpy.spin_once(self.node, timeout_sec=0.1)
+            time.sleep(0.1)
 
         # If canceled before completion, skip waiting for result
         if not result_future.done():

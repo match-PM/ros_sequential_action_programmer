@@ -13,7 +13,7 @@ from datetime import datetime
 from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
 import yaml
-from PyQt5.QtWidgets import QFileDialog, QApplication
+from PyQt6.QtWidgets import QFileDialog, QApplication
 import sys
 
 class RsapFileManager():

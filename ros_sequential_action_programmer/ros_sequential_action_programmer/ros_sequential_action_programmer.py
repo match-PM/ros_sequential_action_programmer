@@ -1,3 +1,9 @@
+import faulthandler
+faulthandler.enable()
+
+import os
+os.environ.setdefault("LANGSMITH_DISABLE_RUN_COMPRESSION", "true")
+
 import rclpy
 from rclpy.node import Node
 from PyQt6.QtWidgets import QApplication

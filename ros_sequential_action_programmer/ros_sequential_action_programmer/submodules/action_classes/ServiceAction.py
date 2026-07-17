@@ -1,5 +1,6 @@
 import rclpy
 from rclpy.node import Node
+from rclpy.callback_groups import ReentrantCallbackGroup
 from rosidl_runtime_py.convert import message_to_ordereddict, get_message_slot_types
 from rosidl_runtime_py.set_message import set_message_fields
 from rosidl_runtime_py.utilities import get_message, get_service, get_interface
@@ -8,6 +9,7 @@ from rqt_py_common import message_helpers
 import collections
 import copy
 import json
+import time
 from datetime import datetime
 import array
 import numpy as np
@@ -117,8 +119,14 @@ class ServiceAction(ActionBaseClass):
         if self.request and self.service_metaclass and self.service_type:
             # update srv request from dictionary
 
-            client = self.node.create_client(self.service_metaclass, self.client)
-            
+            # Dedicated reentrant callback group so the background MultiThreadedExecutor can
+            # deliver the service response (and fire the watchdog timer) on a free thread,
+            # independent of the node's default mutually-exclusive group. Without this, a busy
+            # subscription on the same node (e.g. the co-pilot's /assembly_manager/scene) can
+            # starve the response and the passive wait below never completes.
+            cb_group = ReentrantCallbackGroup()
+            client = self.node.create_client(self.service_metaclass, self.client, callback_group=cb_group)
+
             srv_start_time = datetime.now()
             
             if not client.wait_for_service(timeout_sec=2.0):
@@ -137,15 +145,20 @@ class ServiceAction(ActionBaseClass):
             node_name = self.get_node_name_from_client(client.srv_name)
             timer = None
             if node_name is not None:
-                timer = self.node.create_timer(timer_period_sec=1,callback=partial(self.client_executer_watchdog, 
-                                                                                   node_name, 
+                timer = self.node.create_timer(timer_period_sec=1,callback=partial(self.client_executer_watchdog,
+                                                                                   node_name,
                                                                                    self.future,
-                                                                                   get_interupt_method))
+                                                                                   get_interupt_method),
+                                               callback_group=cb_group)
             else:
                 self.node.get_logger().warn(f"Service execution watchdog for '{client.srv_name}' not available. Service client name does not adhere to the naming convention starting with the node name.")
 
+            # The node is already spun by the background MultiThreadedExecutor; do NOT spin it
+            # here as well. Spinning the same node from two threads races inside the C-level
+            # subscription deserialization and causes a SIGSEGV. Just wait for the future, which
+            # the background executor (and the watchdog timer) completes/cancels.
             while not self.future.done() and not self.future.cancelled():
-                rclpy.spin_once(self.node)
+                time.sleep(0.01)
 
             success_val_from_srv_res = None
 
