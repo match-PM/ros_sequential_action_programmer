@@ -185,17 +185,24 @@ class RosActionAction(ActionBaseClass):
         else:
             self.node.get_logger().warn(f"Action execution watchdog for '{self.get_name()}' not available. Action client name does not adhere to the naming convention starting with the node name.")
 
+        cancel_requested = False
+
         # Monitor loop for cancellation
         while not result_future.done() and self.watchdog_triggered == False:
 
             # Check for user abort
-            if get_interupt_method and get_interupt_method():
+            if get_interupt_method and get_interupt_method() and not cancel_requested:
                 self.node.get_logger().warn("Interrupt detected! Cancelling goal...")
                 cancel_future = goal_handle.cancel_goal_async()
+                # Wait passively for the cancel to be acknowledged. Do NOT spin self.node here:
+                # it is already spun by the background MultiThreadedExecutor, and double-spinning
+                # races inside the C-level subscription deserialization and causes a SIGSEGV.
                 cancel_deadline = time.time() + 2.0
                 while not cancel_future.done() and time.time() < cancel_deadline:
                     time.sleep(0.01)
-                return False   # return immediately
+                cancel_requested = True  # don't spam cancel requests
+                # Don't return here; keep looping so we wait for the result and report the
+                # correct final status (canceled or aborted).
 
             time.sleep(0.1)
 
@@ -216,13 +223,13 @@ class RosActionAction(ActionBaseClass):
 
         if status == GoalStatus.STATUS_SUCCEEDED:
             execute_success = True
-            self.node.get_logger().info("✅ Action completed successfully.")
+            self.node.get_logger().info("Action completed successfully.")
         elif status == GoalStatus.STATUS_CANCELED:
             execute_success = False
-            self.node.get_logger().warn("⚠️ Action was canceled before completion.")
+            self.node.get_logger().warn("Action was canceled before completion.")
         else:
             execute_success = False
-            self.node.get_logger().error(f"❌ Action failed or aborted (status={status}).")
+            self.node.get_logger().error(f"Action failed or aborted (status={status}).")
 
 
         if execute_success:

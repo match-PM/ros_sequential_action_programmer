@@ -1,7 +1,7 @@
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread, pyqtSlot, QRunnable, QObject, QThreadPool
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread, pyqtSlot, QRunnable, QObject, QThreadPool, QMimeData
 
-from PyQt6.QtWidgets import QScrollArea, QMessageBox, QDialog, QHBoxLayout, QDialog, QInputDialog, QTreeWidget, QTreeWidgetItem, QApplication, QGridLayout, QFrame, QMainWindow, QListWidget, QListWidgetItem, QDoubleSpinBox, QWidget, QVBoxLayout, QPushButton, QCheckBox, QLineEdit, QComboBox, QTextEdit,QLabel,QSlider, QSpinBox, QFontDialog, QFileDialog
-from PyQt6.QtGui import QColor, QTextCursor, QFont, QAction
+from PyQt6.QtWidgets import QScrollArea, QMessageBox, QDialog, QHBoxLayout, QDialog, QInputDialog, QTreeWidget, QTreeWidgetItem, QApplication, QGridLayout, QFrame, QMainWindow, QListWidget, QListWidgetItem, QDoubleSpinBox, QWidget, QVBoxLayout, QPushButton, QCheckBox, QLineEdit, QComboBox, QTextEdit,QLabel,QSlider, QSpinBox, QFontDialog, QFileDialog, QMenu
+from PyQt6.QtGui import QColor, QTextCursor, QFont, QAction, QClipboard
 import os
 from ament_index_python.packages import get_package_share_directory, PackageNotFoundError
 from PyQt6 import QtCore
@@ -284,6 +284,8 @@ class RsapApp(QMainWindow):
         self.log_layout = QVBoxLayout()
         self.log_widget = QTreeWidget(self)
         self.log_widget.setHeaderLabel("Log Viewer")
+        self.log_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.log_widget.customContextMenuRequested.connect(self.show_log_context_menu)
         self.log_layout.addWidget(self.log_widget)
 
         self.export_log_button = QPushButton("Export Log")
@@ -682,17 +684,42 @@ class RsapApp(QMainWindow):
         if isinstance(data, dict):
             for key, value in data.items():
                 item = QTreeWidgetItem(parent, [str(key)])
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsSelectable)
                 self.populate_log_widget(value, item)
         elif isinstance(data, list):
             for index, item_data in enumerate(data):
                 item = QTreeWidgetItem(parent, [f"[{index}]"])
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsSelectable)
                 self.populate_log_widget(item_data, item)
         else:
-
-            item = QTreeWidgetItem(parent, [str(data)])   
+            item = QTreeWidgetItem(parent, [str(data)])
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsSelectable)   
 
     def clear_log_viewer(self):
         self.log_widget.clear()
+
+    def show_log_context_menu(self, position):
+        """Display a context menu for the log widget with copy option"""
+        item = self.log_widget.itemAt(position)
+        if item is None:
+            return
+        
+        context_menu = QMenu(self)
+        copy_action = QAction("Copy", self)
+        copy_action.triggered.connect(lambda: self.copy_log_item(item))
+        context_menu.addAction(copy_action)
+        
+        context_menu.exec(self.log_widget.mapToGlobal(position))
+
+    def copy_log_item(self, item):
+        """Copy the text of a log item to clipboard"""
+        if item is None:
+            return
+        
+        text = item.text(0)
+        clipboard = QApplication.clipboard()
+        clipboard.setText(text)
+        self.text_output.append_green_text(f"Copied: {text}")
 
     def copy_and_insert_actions(self):
 
