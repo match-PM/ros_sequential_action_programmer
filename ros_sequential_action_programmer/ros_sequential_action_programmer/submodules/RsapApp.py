@@ -1,7 +1,8 @@
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread, pyqtSlot, QRunnable, QObject, QThreadPool, QMimeData
 
 from PyQt6.QtWidgets import QScrollArea, QMessageBox, QDialog, QHBoxLayout, QDialog, QInputDialog, QTreeWidget, QTreeWidgetItem, QApplication, QGridLayout, QFrame, QMainWindow, QListWidget, QListWidgetItem, QDoubleSpinBox, QWidget, QVBoxLayout, QPushButton, QCheckBox, QLineEdit, QComboBox, QTextEdit,QLabel,QSlider, QSpinBox, QFontDialog, QFileDialog, QMenu
-from PyQt6.QtGui import QColor, QTextCursor, QFont, QAction, QClipboard
+from PyQt6.QtGui import QColor, QTextCursor, QFont, QAction, QClipboard, QPalette
+
 import os
 from ament_index_python.packages import get_package_share_directory, PackageNotFoundError
 from PyQt6 import QtCore
@@ -466,11 +467,16 @@ class RsapApp(QMainWindow):
     def set_action_colors_from_execution_status(self, set_state=False):
         if set_state:
             self.status_indicator.set_state_success()
-                
+            
+        default_bg = self.action_list_widget.palette().brush(
+            QPalette.ColorRole.Base
+        )
         for index, action in enumerate(self.action_sequence_builder.action_list):
             success = action.log_entry.get('success', None)
             if success == None:
-                self.action_list_widget.item(index).setBackground(QColor("white"))
+                #self.action_list_widget.item(index).setBackground(QColor("white"))
+                self.action_list_widget.item(index).setBackground(default_bg)
+
             elif success:
                 light_green = QColor(144, 238, 144)
                 self.action_list_widget.item(index).setBackground(light_green)
