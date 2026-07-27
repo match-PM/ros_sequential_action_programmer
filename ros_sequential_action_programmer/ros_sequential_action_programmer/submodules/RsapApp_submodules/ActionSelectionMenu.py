@@ -98,9 +98,11 @@ class ActionSelectionMenu(SelectionMenu):
     def __init__(self, mainwindow, rsap:RosSequentialActionProgrammer):
         super().__init__(mainwindow)
         self.rsap = rsap
-
+    
     def show_action_menu(self):
         self.rsap.initialize_service_list()
+        self.rsap.initialize_ros_action_list()
+
         self.rsap.save_all_service_req_res_to_JSON()
         self.menu_dictionary= {
             'Services': {
