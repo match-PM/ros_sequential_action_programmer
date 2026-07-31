@@ -64,8 +64,9 @@ class RosSequentialActionProgrammer:
         self.action_sequence_log = {}
         self.action_log = []
         self.config = RsapConfig('ros_sequential_action_programmer', self.node.get_logger())
-        self.log_subscription = self.node.create_subscription(Log, "/rosout", self.log_callback, 10, callback_group=self.callback_group_reentrant)
         self._init_signals()
+        self.log_subscription = None
+        self.update_ros_log_subscription()
         self._stop_execution = False
         self._interupt_execution = False
         self._tick_publisher = self.node.create_publisher(RsapTick, f"{self.node.get_name()}/rsap_tick", 10)
@@ -89,10 +90,29 @@ class RosSequentialActionProgrammer:
         self.signal_execution_status= ExecutionStatusSignal()
         self.signal_current_action = CurrentActionSignal()
 
+    def update_ros_log_subscription(self):
+        subscribe_to_ros_logs = self.config.ros_log_levels.get_subscribe_to_ros_logs()
+
+        if subscribe_to_ros_logs and self.log_subscription is None:
+            self.log_subscription = self.node.create_subscription(
+                Log,
+                "/rosout",
+                self.log_callback,
+                10,
+                callback_group=self.callback_group_reentrant
+            )
+            return
+
+        if not subscribe_to_ros_logs and self.log_subscription is not None:
+            self.node.destroy_subscription(self.log_subscription)
+            self.log_subscription = None
+
     def log_callback(self, msg: Log):
         """
         Callback for log messages.
         """
+        if not self.config.ros_log_levels.get_subscribe_to_ros_logs():
+            return
         
         app_log = f"[{msg.name}]: {msg.msg}"
     

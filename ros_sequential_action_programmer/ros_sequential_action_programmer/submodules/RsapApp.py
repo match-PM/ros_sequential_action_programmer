@@ -867,6 +867,7 @@ class RsapApp(QMainWindow):
         if result == QDialog.DialogCode.Accepted:
             result_config = config_editor.dictionary
             self.action_sequence_builder.config.set_from_dict(result_config)
+            self.action_sequence_builder.update_ros_log_subscription()
             #self.apply_config_changes(result_config)
             self.text_output.append_green_text("Configuration updated!")
 

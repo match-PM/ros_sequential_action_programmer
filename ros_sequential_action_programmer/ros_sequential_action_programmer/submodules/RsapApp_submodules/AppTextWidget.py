@@ -2,9 +2,12 @@ from PyQt6.QtWidgets import QTextEdit
 from PyQt6.QtGui import QColor
 
 class AppTextOutput(QTextEdit):
+    MAX_LINE_COUNT = 1000
+
     def __init__(self):
         super().__init__()
         self.setReadOnly(True)
+        self.document().setMaximumBlockCount(self.MAX_LINE_COUNT)
 
     def append_red_text(self, text:str) -> None:
         self.setTextColor(QColor("red"))
