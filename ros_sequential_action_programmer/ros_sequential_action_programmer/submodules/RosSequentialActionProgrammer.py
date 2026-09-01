@@ -336,6 +336,12 @@ class RosSequentialActionProgrammer:
             # Set values from earlier service respones to this service request, might fail, if earlier call has not been executed
             
             current_action = self.get_action_at_index(self.current_action_index)
+
+            # The directory that contains the currently loaded RSAP process
+            # file, if any. It is set on the action itself so that execute()
+            # can auto-populate any request field named 'rsap_path'. The
+            # value is the folder path, not the full file path.
+            current_action.rsap_path = self.rsap_file_manager.get_rsap_path()
             
             #if isinstance(current_action, ServiceAction):
                 # set_success = self.process_action_dict_at_index(self.current_action_index, SET_SRV_DICT)
