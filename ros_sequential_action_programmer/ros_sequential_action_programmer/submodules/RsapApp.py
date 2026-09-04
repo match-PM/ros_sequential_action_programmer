@@ -48,6 +48,7 @@ from ros_sequential_action_programmer.submodules.action_classes.UserInteractionA
 class RsapApp(QMainWindow):
     def __init__(self, service_node:Node):
         super().__init__()
+        self._has_unsaved_changes = False
         self.service_node = service_node
         
         self.action_sequence_builder = RosSequentialActionProgrammer(service_node)
@@ -76,7 +77,7 @@ class RsapApp(QMainWindow):
         # Overriting the callbackfunction for the menu
         self.action_menu.action_menu_clb = self.append_selected_action_from_menu
         
-        self.setWindowTitle("Ros Sequential Action Programmer - RSAP")
+        self.setWindowTitle("Ros Sequential Action Programmer - RSAP[*]")
         
         self.ros_run_menu = SelectionMenu(self)
         self.ros_run_menu.action_menu_clb = self.run_ros_executable
@@ -90,6 +91,7 @@ class RsapApp(QMainWindow):
                                                     text_output=self.text_output)
         self.action_list_widget.populate_list()
         self.action_list_widget.itemClicked.connect(self.action_selected)
+        self.action_list_widget.sequenceChanged.connect(self.mark_sequence_modified)
 
         # Create main container widget
         central_widget = QWidget(self)
@@ -333,6 +335,7 @@ class RsapApp(QMainWindow):
     
     def refresh_action_list_from_copilot(self):
         """Refresh the action list display when Co-Pilot modifies the sequence"""
+        self.mark_sequence_modified()
         current_row = self.action_list_widget.currentRow()
         self.action_list_widget.populate_list()
         # Try to maintain selection if possible
@@ -415,6 +418,7 @@ class RsapApp(QMainWindow):
                                                                                                 interaction_mode=GUI)
         # Get the name of the service from the currently acive action, which is the newly added one
         if success:
+            self.mark_sequence_modified()
             service_name =  self.action_sequence_builder.get_current_action_name()
             self.action_list_widget.populate_list()
             self.text_output.append(f"Inserted action: {service_name}")
@@ -508,6 +512,7 @@ class RsapApp(QMainWindow):
         self.show_service_log(action.log_entry)
 
     def action_parameter_changed(self):
+        self.mark_sequence_modified()
         row = self.action_list_widget.currentRow()
         #self.service_node.get_logger().warn("Action changed:")
         self.action_list_widget.populate_list()
@@ -526,6 +531,7 @@ class RsapApp(QMainWindow):
                                                                                     action_name = action_name)
             # Get the name of the service from the currently acive action, which is the newly added one
             if success:
+                self.mark_sequence_modified()
                 action_name =  self.action_sequence_builder.get_current_action_name()
                 self.action_list_widget.populate_list()
                 self.action_list_widget.setCurrentRow(pos_to_insert)
@@ -562,6 +568,7 @@ class RsapApp(QMainWindow):
                 self.rsap_seq_info_widget.init_values()
 
                 self.text_output.append("File loaded!")
+                self.mark_sequence_saved()
             else:
                 self.text_output.append("Error Opening File!")
                 self.action_list_widget.populate_list()
@@ -569,22 +576,26 @@ class RsapApp(QMainWindow):
 
         # Set the first row as the current process
         self.action_list_widget.setCurrentRow(0)
-        # Set the last saved timestap
-        self.update_last_saved()
+        # Set the last saved timestamp only after a successful load.
+        if file_path and success:
+            self.update_last_saved()
 
     def save_process_as(self):
-        self.create_new_file(save_as=True)
+        return self.create_new_file(save_as=True)
 
     def save_process(self):
         """
         This method saves the current process to a file.
         """
         if self.action_sequence_builder.rsap_file_manager.get_sequence_name() is None:
-            self.create_new_file()
+            return self.create_new_file()
         else:
             success = self.action_sequence_builder.rsap_file_manager.save_to_JSON()
             self.text_output.append(f"Saved file: {success}")
-            self.update_last_saved()
+            if success:
+                self.update_last_saved()
+                self.mark_sequence_saved()
+            return success
             
     def create_new_file(self, save_as=False):
         """
@@ -597,6 +608,9 @@ class RsapApp(QMainWindow):
         file_filter = "JSON Files (*.json)"
         file_name, _ = QFileDialog.getSaveFileName(self, "Save JSON File", "", file_filter)
 
+        if not file_name:
+            return False
+
         # this is for the case the user entered .json to his filename 
         file_name = os.path.splitext(file_name)[0]
 
@@ -605,6 +619,7 @@ class RsapApp(QMainWindow):
 
         if not save_as and self.action_sequence_builder.rsap_file_manager.get_sequence_name() is not None:
             self.action_sequence_builder.action_list.clear()
+            self.mark_sequence_modified()
             #self.init_actions_list()
             self.action_list_widget.populate_list()
 
@@ -613,13 +628,16 @@ class RsapApp(QMainWindow):
             self.action_sequence_builder.rsap_file_manager.set_sequence_name(os.path.basename(os.path.splitext(file_name)[0]))
             success = self.action_sequence_builder.rsap_file_manager.save_to_JSON()
             self.text_output.append(f"Saved file: {success}")
-            # set text in gui from action sequence name
-            self.rsap_seq_info_widget.init_values()
-            # update the last saved timestamp
-            self.update_last_saved()
-            self.recent_files_manager.set_recent_file()
+            if success:
+                # set text in gui from action sequence name
+                self.rsap_seq_info_widget.init_values()
+                # update the last saved timestamp
+                self.update_last_saved()
+                self.mark_sequence_saved()
+                self.recent_files_manager.set_recent_file()
 
         self.action_parameter_layout.clear_action_parameter_layout()
+        return success
 
     def append_service_dialog(self, service_name: str = None, service_client:str= None, serivce_type:str = None)->None:
         add_service_dialog = AddServiceDialog(service_name, service_client, serivce_type)
@@ -665,6 +683,7 @@ class RsapApp(QMainWindow):
                                                                                     service_name = service_name)
             # Get the name of the service from the currently acive action, which is the newly added one
             if success:
+                self.mark_sequence_modified()
                 service_name =  self.action_sequence_builder.get_current_action_name()
                 
                 self.action_list_widget.populate_list()
@@ -676,6 +695,42 @@ class RsapApp(QMainWindow):
                     
     def update_last_saved(self):
         self.last_saved_label.setText("Saved at: " + datetime.now().strftime("%H:%M:%S"))
+
+    def mark_sequence_modified(self):
+        """Record that the in-memory sequence differs from the saved file."""
+        self._has_unsaved_changes = True
+        self.setWindowModified(True)
+
+    def mark_sequence_saved(self):
+        """Record that the current sequence has been saved successfully."""
+        self._has_unsaved_changes = False
+        self.setWindowModified(False)
+
+    def closeEvent(self, event):
+        """Offer to save sequence edits before closing the application."""
+        if not self._has_unsaved_changes:
+            event.accept()
+            return
+
+        reply = QMessageBox.warning(
+            self,
+            "Unsaved Changes",
+            "The action sequence has unsaved changes. Do you want to save them before closing?",
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save,
+        )
+
+        if reply == QMessageBox.StandardButton.Save:
+            if self.save_process():
+                event.accept()
+            else:
+                event.ignore()
+        elif reply == QMessageBox.StandardButton.Discard:
+            event.accept()
+        else:
+            event.ignore()
 
     def show_service_log(self, dictionary):
         if not dictionary:
@@ -731,7 +786,12 @@ class RsapApp(QMainWindow):
 
         selected_indexes = self.action_list_widget.selectedIndexes()
         selected_rows_indexes = [index.row() for index in selected_indexes]
-        self.action_sequence_builder.copy_actions_from_index_list_and_insert(selected_rows_indexes)
+        if not selected_rows_indexes:
+            return
+        success = self.action_sequence_builder.copy_actions_from_index_list_and_insert(selected_rows_indexes)
+        if not success:
+            return
+        self.mark_sequence_modified()
         #self.action_sequence_builder.copy_action_at_index_and_insert(index)
         #self.init_actions_list()
         self.action_list_widget.populate_list()

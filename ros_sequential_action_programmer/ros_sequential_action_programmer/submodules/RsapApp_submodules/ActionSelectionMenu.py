@@ -1,5 +1,18 @@
 import sys
-from PyQt6.QtWidgets import  QMainWindow, QMenu
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QAbstractItemView,
+    QApplication,
+    QDialog,
+    QDialogButtonBox,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMenu,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+)
 from PyQt6.QtGui import QAction
 from functools import partial
 from copy import copy
@@ -7,6 +20,119 @@ from PyQt6.QtGui import QCursor
 
 from ros_sequential_action_programmer.submodules.saving_loading_functions import RosSequentialActionProgrammer
 from rosidl_runtime_py.get_interfaces import get_service_interfaces
+
+
+class SearchableSelectionDialog(QDialog):
+    """Scrollable tree picker for large nested action/service collections."""
+
+    PATH_ROLE = Qt.ItemDataRole.UserRole
+    SEARCH_ROLE = int(Qt.ItemDataRole.UserRole) + 1
+
+    def __init__(self, menu_dictionary, parent=None):
+        super().__init__(parent)
+        self.selected_path = None
+        self.setWindowTitle("Add Action")
+        screen = parent.screen() if parent is not None else QApplication.primaryScreen()
+        if screen is not None:
+            available_size = screen.availableGeometry().size()
+            self.resize(
+                min(750, int(available_size.width() * 0.85)),
+                min(700, int(available_size.height() * 0.85)),
+            )
+        else:
+            self.resize(750, 700)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Select a service or action:"))
+
+        self.search_input = QLineEdit(self)
+        self.search_input.setPlaceholderText("Search by name, type, or namespace...")
+        self.search_input.setClearButtonEnabled(True)
+        layout.addWidget(self.search_input)
+
+        self.tree = QTreeWidget(self)
+        self.tree.setHeaderHidden(True)
+        self.tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.tree.setUniformRowHeights(True)
+        layout.addWidget(self.tree)
+
+        self.buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Add")
+        self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)
+        layout.addWidget(self.buttons)
+
+        self._populate_tree(menu_dictionary)
+        self.search_input.textChanged.connect(self._filter_tree)
+        self.tree.currentItemChanged.connect(self._update_add_button)
+        self.tree.itemDoubleClicked.connect(self._accept_item)
+        self.buttons.button(QDialogButtonBox.StandardButton.Ok).clicked.connect(
+            self._accept_current_item
+        )
+        self.buttons.rejected.connect(self.reject)
+        self.search_input.setFocus()
+
+    def _populate_tree(self, menu_dictionary):
+        self._add_dictionary_items(self.tree.invisibleRootItem(), menu_dictionary, [])
+
+    def _add_dictionary_items(self, parent_item, menu_dictionary, parents):
+        for title, content in menu_dictionary.items():
+            category_item = QTreeWidgetItem(parent_item, [str(title)])
+            category_path = parents + [str(title)]
+            category_item.setData(
+                0, self.SEARCH_ROLE, " ".join(category_path).lower()
+            )
+
+            if isinstance(content, dict):
+                self._add_dictionary_items(category_item, content, category_path)
+            elif isinstance(content, list):
+                for option in content:
+                    option_path = category_path + [str(option)]
+                    option_item = QTreeWidgetItem(category_item, [str(option)])
+                    option_item.setData(0, self.PATH_ROLE, option_path)
+                    option_item.setData(
+                        0, self.SEARCH_ROLE, " ".join(option_path).lower()
+                    )
+
+    def _filter_tree(self, text):
+        search_text = text.strip().lower()
+
+        def update_visibility(item, ancestor_matches=False):
+            item_matches = search_text in item.data(0, self.SEARCH_ROLE)
+            show_descendants = ancestor_matches or item_matches
+            child_visible = False
+            for index in range(item.childCount()):
+                child_visible |= update_visibility(
+                    item.child(index), show_descendants
+                )
+
+            visible = not search_text or show_descendants or child_visible
+            item.setHidden(not visible)
+            if search_text and child_visible:
+                item.setExpanded(True)
+            return visible
+
+        root = self.tree.invisibleRootItem()
+        for index in range(root.childCount()):
+            update_visibility(root.child(index))
+
+    def _update_add_button(self, current, previous=None):
+        can_add = current is not None and current.data(0, self.PATH_ROLE) is not None
+        self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(can_add)
+
+    def _accept_item(self, item, column=0):
+        path = item.data(0, self.PATH_ROLE)
+        if path is not None:
+            self.selected_path = path
+            self.accept()
+
+    def _accept_current_item(self):
+        current_item = self.tree.currentItem()
+        if current_item is not None:
+            self._accept_item(current_item)
 
 
 class SelectionMenu():
@@ -133,8 +259,9 @@ class ActionSelectionMenu(SelectionMenu):
                 'Operation': ['User Interaction']
             }
         }
-        self.init_action_menu()
-        self.showMenu()
+        dialog = SearchableSelectionDialog(self.menu_dictionary, self.mainwindow)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.action_menu_clb(dialog.selected_path)
     
 
 if __name__ == '__main__':

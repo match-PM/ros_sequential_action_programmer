@@ -1,5 +1,5 @@
 from PyQt6.QtGui import QFont, QPainter, QPen, QAction
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6 import QtCore
 
 from PyQt6.QtWidgets import (
@@ -14,6 +14,8 @@ from rclpy.node import Node
 import rclpy
 
 class NumberLabel(QLabel):
+    sequenceChanged = pyqtSignal()
+
     def __init__(self, number: int, action:ServiceAction):
         super().__init__(str(number))
         self.action = action
@@ -26,6 +28,7 @@ class NumberLabel(QLabel):
     def mousePressEvent(self, event):
         self.is_selected = not self.is_selected
         self.action.toggle_breakpoint()
+        self.sequenceChanged.emit()
         print(f"Action {self.number} selected: {self.action.has_breakpoint()}")
         self.update()
 
@@ -83,6 +86,8 @@ class ActionSequenceListItem(QWidget):
         
 
 class ActionSequenceListWidget(QListWidget):
+    sequenceChanged = pyqtSignal()
+
     def __init__(self, rsap_sequence: RosSequentialActionProgrammer, 
                  text_output: AppTextOutput):
         
@@ -138,6 +143,7 @@ class ActionSequenceListWidget(QListWidget):
             else:
                 action.set_active(True)
                 self.text_output.append(f"Activated '{action.get_name()}'")
+            self.sequenceChanged.emit()
             self.populate_list()
             self.setCurrentRow(row)
         except Exception as e:
@@ -154,6 +160,7 @@ class ActionSequenceListWidget(QListWidget):
             widget = ActionSequenceListItem(number = i + 1, 
                                             text = action.get_name(),
                                             action=action)
+            widget.number_label.sequenceChanged.connect(self.sequenceChanged.emit)
             
             # Set style for inactive actions
             if not action.is_active():
@@ -200,8 +207,16 @@ class ActionSequenceListWidget(QListWidget):
             self.verticalScrollBar().setValue(scroll_value)
     
     def on_action_drag_drop(self):
-        self.rsap_sequence.move_action_at_index_to_index(old_index=self.drag_source_position,
-                                                            new_index=self.currentRow())
+        new_index = self.currentRow()
+        if self.drag_source_position == new_index:
+            return
+
+        success = self.rsap_sequence.move_action_at_index_to_index(
+            old_index=self.drag_source_position,
+            new_index=new_index,
+        )
+        if success:
+            self.sequenceChanged.emit()
 
     def dragEnterEvent(self, event):
         self.drag_source_position = self.currentRow()  # Capture the source position
@@ -233,6 +248,7 @@ class ActionSequenceListWidget(QListWidget):
 
         if del_success:
             self.text_output.append(f"Actions deleted!")
+            self.sequenceChanged.emit()
             self.populate_list()
         else:
             self.text_output.append(f"Error trying to delete actions: {', '.join(item.text() for item in selected_items)}")
