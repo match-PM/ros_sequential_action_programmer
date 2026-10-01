@@ -41,6 +41,16 @@ class RsapFileManager():
     def get_action_sequence_file_path(self)->str:
         return self._sequence_file_path
 
+    def get_rsap_path(self)->str:
+        """Return the directory that contains the currently loaded RSAP
+        process file (i.e. the full file path with the ``.rsap.json`` suffix
+        stripped). This is the value injected into request fields named
+        ``rsap_path``. Returns ``None`` if no file is currently loaded.
+        """
+        if not self._sequence_file_path:
+            return None
+        return os.path.dirname(self._sequence_file_path)
+
     def set_folder_path(self, folder_path:str):
         self._folder_path = folder_path
 
@@ -192,6 +202,11 @@ class RsapFileManager():
                 action_from_item.set_references(_param_references)
                 action_from_item.set_active(_is_active)
                 action_from_item.set_breakpoint(_has_breakpoint)
+                # Make the directory of the just-loaded process file
+                # available to the action's execute() so that any request
+                # field named 'rsap_path' can be auto-populated with the
+                # folder path (not the full file path).
+                action_from_item.rsap_path = self.get_rsap_path()
                 self.sequence_list.append(action_from_item)
                 self.node.get_logger().info(f"{index} - Loaded action '{_name}'!")
 
@@ -259,6 +274,17 @@ class RsapFileManager():
                 with open(f"{self._sequence_file_path}", "w") as json_file:
                     json.dump(process_dict, json_file,indent=4)
                 self.node.get_logger().info("Saved!")
+
+                # Stamp the directory of the just-written file onto every
+                # action so that any 'rsap_path' request field is
+                # auto-populated with the folder path (not the full file
+                # path) on the very next execution - without requiring a
+                # save -> close -> reopen round-trip. Only do this after a
+                # successful write so a failed save never leaves the
+                # in-memory actions pointing at a non-existent file.
+                rsap_path = self.get_rsap_path()
+                for action in self.sequence_list:
+                    action.rsap_path = rsap_path
 
                 # save the seq parameters as well if available
                 if self.seq_parameter_manager and self.seq_parameter_manager.get_is_initialized():

@@ -26,6 +26,7 @@ class RsapConfig:
         }
         
     def set_from_dict(self, config_dict: dict, save_to_file: bool = True):
+        config_dict = config_dict or {}
         self.ros_log_levels._set_from_dict(config_dict.get('ros_log_levels', {}))
         self.execution_log._set_from_dict(config_dict.get('execution_logging', {}))
         self.execution_behavior._set_from_dict(config_dict.get('execution_behavior', {}))
@@ -159,10 +160,14 @@ class StepExecutionBehavior:
 
 class RosLogLevels:
     def __init__(self) -> None:
+        self._subscribe_to_ros_logs = True
         self._log_info = True
         self._log_warn = True
         self._log_error = True
         self._log_debug = True
+
+    def set_subscribe_to_ros_logs(self, value: bool):
+        self._subscribe_to_ros_logs = value
 
     def set_log_info(self, value: bool):
         self._log_info = value
@@ -187,9 +192,13 @@ class RosLogLevels:
     
     def get_log_debug(self) -> bool:
         return self._log_debug
+
+    def get_subscribe_to_ros_logs(self) -> bool:
+        return self._subscribe_to_ros_logs
     
     def _get_as_dict(self) -> dict:
         return {
+            'subscribe_to_ros_logs': self._subscribe_to_ros_logs,
             'log_info': self._log_info,
             'log_warn': self._log_warn,
             'log_error': self._log_error,
@@ -197,6 +206,7 @@ class RosLogLevels:
         }
     
     def _set_from_dict(self, log_dict: dict):
+        self._subscribe_to_ros_logs = log_dict.get('subscribe_to_ros_logs', True)
         self._log_info = log_dict.get('log_info', True)
         self._log_warn = log_dict.get('log_warn', True)
         self._log_error = log_dict.get('log_error', True)

@@ -28,6 +28,88 @@ from collections import OrderedDict
 
 # Compatibility mapping
 
+#: Name of the request field that, if present, must be auto-populated with the
+#: path of the currently loaded RSAP process file right before the action is
+#: executed. Fields with this name are also hidden from the parameter GUI.
+RSAP_PATH_FIELD_NAME = "rsap_path"
+
+#: Container/utility class for rsap_path detection/setting helpers shared by
+#: ServiceAction and RosActionAction.
+class RsapPathFieldHelper:
+    """Helpers for locating and setting ``RSAP_PATH_FIELD_NAME`` fields in a
+    ROS request type tree / dict / message instance.
+
+    The field may be nested arbitrarily deep inside the request structure (e.g.
+    ``my_request.inner.rsap_path``). The helpers walk the type tree and the
+    value dict in lock-step so that nested rsap_path fields are also handled.
+    """
+
+    @staticmethod
+    def find_rsap_path_keys(type_dict, parent_path=""):
+        """Recursively walk a type dict (as produced by
+        ``field_type_map_recursive_with_msg_type``) and return all full keys
+        pointing to string fields whose name is ``RSAP_PATH_FIELD_NAME``.
+
+        Returns:
+            list[str]: full dot-separated keys (e.g. ``"inner.rsap_path"``).
+        """
+        matches = []
+        if not type_dict:
+            return matches
+
+        for key, info in type_dict.items():
+            full_path = f"{parent_path}.{key}" if parent_path else key
+            field_type = info.get("type") if isinstance(info, dict) else None
+
+            # Match primitive string fields by exact field name.
+            if key == RSAP_PATH_FIELD_NAME and field_type in ("string", "str"):
+                matches.append(full_path)
+                # do not recurse further: a string field has no children
+                continue
+
+            # Recurse into nested messages / arrays of messages.
+            if isinstance(info, dict) and "fields" in info:
+                matches.extend(
+                    RsapPathFieldHelper.find_rsap_path_keys(
+                        info["fields"], parent_path=full_path
+                    )
+                )
+
+        return matches
+
+    @staticmethod
+    def has_rsap_path_field(type_dict):
+        """Convenience: ``True`` if the request type tree contains at least one
+        ``rsap_path`` string field.
+        """
+        return len(RsapPathFieldHelper.find_rsap_path_keys(type_dict)) > 0
+
+    @staticmethod
+    def set_rsap_path_in_dict(value_dict, type_dict, rsap_path, logger=None):
+        """Set every ``RSAP_PATH_FIELD_NAME`` field found in ``type_dict`` to
+        ``rsap_path`` in the matching ``value_dict``.
+
+        Returns the number of fields that were set.
+        """
+        if value_dict is None or type_dict is None or rsap_path is None:
+            return 0
+
+        count = 0
+        for key in RsapPathFieldHelper.find_rsap_path_keys(type_dict):
+            try:
+                set_obj_value_from_key(value_dict, path_key=key, new_value=rsap_path)
+                count += 1
+                if logger is not None:
+                    logger.debug(
+                        f"Auto-set rsap_path field '{key}' to '{rsap_path}'"
+                    )
+            except Exception as exc:
+                if logger is not None:
+                    logger.warn(
+                        f"Failed to auto-set rsap_path field '{key}': {exc}"
+                    )
+        return count
+
 def find_fields_by_type(type_dict, target_type, parent_path="", compatible_map=None):
     """
     Recursively find all fields whose type matches target_type (or compatible).
@@ -100,6 +182,13 @@ class ActionBaseClass:
         self._is_active = True
         self._success_key = None
         self._parameter_references = ActionParameterReferences()
+
+        # Path of the currently loaded RSAP process file. Populated by the
+        # caller (RsapFileManager / RosSequentialActionProgrammer) and read by
+        # the action's execute() right before sending the request, so that any
+        # request field named 'rsap_path' is auto-populated. ``None`` if no
+        # process file is currently loaded.
+        self.rsap_path: str = None
     
     def get_references(self) -> ActionParameterReferences:
         return self._parameter_references
@@ -217,6 +306,42 @@ class ActionBaseClass:
         key_list = find_fields_by_type(type_dict=type_dict, 
                                 target_type=field_type)
         return key_list
+
+    def get_rsap_path_keys(self) -> list[str]:
+        """Return the full dot-separated keys of every ``rsap_path`` string
+        field declared in this action's request type. Empty list if the action
+        has no such field.
+        """
+        try:
+            return RsapPathFieldHelper.find_rsap_path_keys(self.get_request_type())
+        except Exception:
+            return []
+
+    def has_rsap_path_field(self) -> bool:
+        """``True`` if this action's request type contains a ``rsap_path``
+        string field (i.e. the rsap_path auto-fill / hide behaviour applies).
+        """
+        return len(self.get_rsap_path_keys()) > 0
+
+    def inject_rsap_path_into_request_dict(self, request_dict, rsap_path) -> int:
+        """Walk this action's request type tree and set every ``rsap_path``
+        field in ``request_dict`` to ``rsap_path``. Returns the number of
+        fields set.
+
+        Subclasses call this right before sending the request so that callers
+        can use the field without configuring it manually.
+        """
+        if not rsap_path:
+            return 0
+        if request_dict is None:
+            return 0
+        try:
+            type_dict = self.get_request_type()
+        except Exception:
+            return 0
+        return RsapPathFieldHelper.set_rsap_path_in_dict(
+            request_dict, type_dict, rsap_path, logger=self.node.get_logger() if self.node else None
+        )
 
     
     def set_request_from_request(self, new_request:any) -> bool:

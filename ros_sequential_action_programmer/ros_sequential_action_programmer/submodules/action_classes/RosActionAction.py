@@ -121,6 +121,14 @@ class RosActionAction(ActionBaseClass):
         self.watchdog_triggered = False
         try:
             new_request_dict = self.evaluate_references()
+
+            # Auto-fill any 'rsap_path' field(s) declared in this action's
+            # goal type with the path of the currently loaded RSAP process
+            # file, if one has been set on this action (by RsapFileManager or
+            # by RosSequentialActionProgrammer.execute_current_action).
+            if self.rsap_path:
+                self.inject_rsap_path_into_request_dict(new_request_dict, self.rsap_path)
+
             self.set_request_from_dict(new_request_dict)
         except EvaluateActionReferenceError as e:
             self.node.get_logger().error(

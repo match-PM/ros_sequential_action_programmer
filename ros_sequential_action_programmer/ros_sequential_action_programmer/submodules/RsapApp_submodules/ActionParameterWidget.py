@@ -7,7 +7,7 @@ from ros_sequential_action_programmer.submodules.RsapApp_submodules.NoScrollComb
 from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
 from ros_sequential_action_programmer.submodules.action_classes.RosActionAction import RosActionAction
 from ros_sequential_action_programmer.submodules.action_classes.UserInteractionAction import UserInteractionAction, GUI, TERMINAL
-from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass
+from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass import ActionBaseClass, RSAP_PATH_FIELD_NAME
 from PyQt6.QtCore import pyqtSignal
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.RecomButton import RecomButton
 from ros_sequential_action_programmer.submodules.rsap_modules.errors import SetActionRequestError
@@ -313,6 +313,16 @@ class ROS2DictEditor(QWidget):
     def build_layout(self, type_dict, value_dict, parent_layout, parent_path=""):
         self.disabled_keys = []
 
+        # Hidden full-paths for fields that must not be displayed in the GUI
+        # at all (e.g. rsap_path: auto-filled at execution time from the
+        # currently loaded RSAP process file).
+        self.hidden_keys = []
+        if self._action is not None:
+            try:
+                self.hidden_keys = list(self._action.get_rsap_path_keys())
+            except Exception:
+                self.hidden_keys = []
+
         # This is for disabling buttons globally if the action or parameter value manager is not given (needed for the seq parameter manager)
         if self._action_parameter_value_manager is None or self._action is None:
             global_button_disable = True
@@ -338,6 +348,16 @@ class ROS2DictEditor(QWidget):
             full_path = f"{parent_path}.{key}" if parent_path else key
             is_disabled = self.check_disabled(full_path, self.disabled_keys)
             has_parent_disabled = self.has_disabled_parent(full_path, self.disabled_keys)
+            is_hidden = (key == RSAP_PATH_FIELD_NAME) or self.check_disabled(full_path, self.hidden_keys)
+
+            # ---------- HIDDEN FIELD (e.g. rsap_path) ----------
+            # Hidden fields are populated by the executor right before sending
+            # the request, so they must not be shown or edited in the GUI.
+            if is_hidden and not val_type.get('is_array', False) and 'fields' not in val_type:
+                # Ensure the dict has an entry so the request object remains valid.
+                if 'string' in (val_type.get('type'), 'str') or True:
+                    value_dict[key] = ""
+                continue
 
             # ---------- ARRAY HANDLING ----------
             if val_type.get('is_array', False):

@@ -108,6 +108,13 @@ class ServiceAction(ActionBaseClass):
             new_request_dict = self.evaluate_references()
             #self.node.get_logger().warn(f"Service Action '{self.get_name()}' evaluated request dict: {new_request_dict}")
 
+            # Auto-fill any 'rsap_path' field(s) declared in this service's
+            # request type with the path of the currently loaded RSAP process
+            # file, if one has been set on this action (by RsapFileManager or
+            # by RosSequentialActionProgrammer.execute_current_action).
+            if self.rsap_path:
+                self.inject_rsap_path_into_request_dict(new_request_dict, self.rsap_path)
+
             self.set_request_from_dict(new_request_dict)
             #self.node.get_logger().warn(f"Service Action '{self.get_name()}' evaluated request dict: {self.request}")
 
