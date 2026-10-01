@@ -310,25 +310,73 @@ class RsapApp(QMainWindow):
     def openCoPilot(self):
         try:
             from pm_co_pilot_programming.submodules.PmCoPilotProgrammingApp import PmCoPilotProgrammingApp
-            self.co_pilot_window = PmCoPilotProgrammingApp(self.service_node, rsap_instance=self.action_sequence_builder)
+
+            existing_window = getattr(self, "co_pilot_window", None)
+            if existing_window is not None:
+                try:
+                    existing_window.show()
+                    existing_window.raise_()
+                    existing_window.activateWindow()
+                    self.service_node.get_logger().info(
+                        "Existing Co-Pilot window activated"
+                    )
+                    return
+                except RuntimeError:
+                    # The C++ window has already been deleted; create a new one.
+                    self.co_pilot_window = None
+
+            # No WA_DeleteOnClose here: PmCoPilotProgrammingApp.closeEvent does not
+            # guard against still-running workers, so the window is kept alive and
+            # reused instead of being destroyed underneath them.
+            window = PmCoPilotProgrammingApp(self.service_node, rsap_instance=self.action_sequence_builder)
             # Connect signal to refresh GUI when sequence is modified
-            self.co_pilot_window.sequence_modified.connect(self.refresh_action_list_from_copilot)
-            self.co_pilot_window.show()
+            window.sequence_modified.connect(self.refresh_action_list_from_copilot)
+            window.destroyed.connect(self._on_copilot_destroyed)
+            self.co_pilot_window = window
+            window.show()
             self.service_node.get_logger().info("Co-Pilot Assistant opened with shared RSAP instance")
         except ModuleNotFoundError as e:
             self.service_node.get_logger().error(f"Failed to open Co-Pilot: {e}")
             QMessageBox.warning(self, "Module Not Found", "Co-Pilot module not found. Please ensure pm_co_pilot_programming is installed.")
 
+    def _on_copilot_destroyed(self):
+        self.co_pilot_window = None
+
     def openCoPilotPlanning(self):
         try:
             from pm_co_pilot_planning.submodules.PmCoPilotPlanningApp import PmCoPilotPlanningApp
-            self.co_pilot_planning_window = PmCoPilotPlanningApp(self.service_node, rsap_instance=self.action_sequence_builder)
-            self.co_pilot_planning_window.sequence_modified.connect(self.refresh_action_list_from_copilot)
-            self.co_pilot_planning_window.show()
+
+            existing_window = getattr(self, "co_pilot_planning_window", None)
+            if existing_window is not None:
+                try:
+                    existing_window.show()
+                    existing_window.raise_()
+                    existing_window.activateWindow()
+                    self.service_node.get_logger().info(
+                        "Existing Co-Pilot Planning window activated"
+                    )
+                    return
+                except RuntimeError:
+                    # The C++ window has already been deleted; create a new one.
+                    self.co_pilot_planning_window = None
+
+            window = PmCoPilotPlanningApp(
+                self.service_node,
+                rsap_instance=self.action_sequence_builder,
+                parent=self,
+            )
+            window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+            window.sequence_modified.connect(self.refresh_action_list_from_copilot)
+            window.destroyed.connect(self._on_copilot_planning_destroyed)
+            self.co_pilot_planning_window = window
+            window.show()
             self.service_node.get_logger().info("Co-Pilot Planning opened")
         except ModuleNotFoundError as e:
             self.service_node.get_logger().error(f"Failed to open Co-Pilot Planning: {e}")
             QMessageBox.warning(self, "Module Not Found", "Co-Pilot Planning module not found. Please ensure pm_co_pilot_planning is installed.")
+
+    def _on_copilot_planning_destroyed(self):
+        self.co_pilot_planning_window = None
     
     def refresh_action_list_from_copilot(self):
         """Refresh the action list display when Co-Pilot modifies the sequence"""
