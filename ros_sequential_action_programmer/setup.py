@@ -22,10 +22,7 @@ setup(
         ('share/' + package_name, ['config/path_definitions.yaml']),
         ('share/' + package_name, ['config/launch_files.yaml']),
         ('share/' + package_name, ['config/app_icon.png']),
-        ('share/' + package_name + '/launch', [
-            'launch/rsap_app.launch.py',
-            'launch/rsap_app_gdb.launch.py',
-        ]),
+        ('share/' + package_name + '/launch', ['launch/rsap_app.launch.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
