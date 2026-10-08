@@ -5,6 +5,8 @@ import yaml
 from ament_index_python import get_package_share_directory
 from ros_sequential_action_programmer.submodules import RosSequentialActionProgrammer
 from pathlib import Path
+import os
+import threading
 
 # class RecentFilesManager:    
 #     """
@@ -56,6 +58,7 @@ class RecentFilesManager:
     Keeps a list of the last 10 recent files in a YAML file.
     """
     MAX_RECENT_FILES = 10
+    FILE_ACCESS_TIMEOUT_S = 2.0
 
     def __init__(self, rasp: RosSequentialActionProgrammer):
         self.rasp = rasp
@@ -101,8 +104,33 @@ class RecentFilesManager:
 
         if self.recent_files:
             most_recent = self.recent_files[0]
+            if not self._is_file_reachable(most_recent):
+                self.logger.warn(f"Most recent file '{most_recent}' is not reachable (missing or network path unavailable). Starting with empty sequence.")
+                return
             self.rasp.rsap_file_manager.load_from_JSON(most_recent)
             self.logger.info(f"Automatically loaded most recent file: {most_recent}")
+
+    def _is_file_reachable(self, file_path: str, timeout: float = FILE_ACCESS_TIMEOUT_S) -> bool:
+        """
+        Checks if a file exists without blocking the app on unreachable network mounts.
+        The check runs in a daemon thread, so a hanging filesystem call is abandoned after the timeout.
+        """
+        result = {'exists': False}
+
+        def check():
+            try:
+                result['exists'] = os.path.isfile(file_path)
+            except Exception:
+                result['exists'] = False
+
+        thread = threading.Thread(target=check, daemon=True)
+        thread.start()
+        thread.join(timeout)
+
+        if thread.is_alive():
+            self.logger.warn(f"Timeout ({timeout}s) while accessing '{file_path}'.")
+            return False
+        return result['exists']
 
     def load_recent_file_by_index(self, index: int):
         """

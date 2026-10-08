@@ -34,5 +34,6 @@
         "/opt/ros/humble/lib/python3.10/site-packages",
         "/opt/ros/humble/local/lib/python3.10/dist-packages"
     ],
-    "ros.distro": "humble"
+    "ros.distro": "humble",
+    "cmake.sourceDirectory": "/home/match-pm/ros2_ws/src/ros_sequential_action_programmer/rsap_interfaces"
 }
