@@ -6,6 +6,7 @@ from rosidl_runtime_py.utilities import get_message, get_service, get_interface
 from ament_index_python.packages import get_package_share_directory
 from rqt_py_common import message_helpers
 from rcl_interfaces.msg import Log
+from rclpy.qos import QoSProfile, DurabilityPolicy
 
 from ros_sequential_action_programmer.submodules.action_classes.ServiceAction import ServiceAction
 from ros_sequential_action_programmer.submodules.action_classes.RosActionAction import RosActionAction
@@ -16,10 +17,11 @@ from ros_sequential_action_programmer.submodules.rsap_modules.RsapFileManager im
 from ros_sequential_action_programmer.submodules.rsap_modules.RsapConfig import RsapConfig
 from ros_sequential_action_programmer.submodules.RsapApp_submodules.rsap_signals import IncomingLogSignal, ExecutionStatusSignal, CurrentActionSignal
 from ros_sequential_action_programmer.submodules.rsap_modules.ActionParameterValueManager import ActionParameterValueManager
-from rsap_interfaces.msg import RsapTick
+from rsap_interfaces.msg import RsapTick, RsapActionLog, RsapLogs
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from ros_sequential_action_programmer.submodules.rsap_modules.RsapConfig import ExecutionLog
 import json
+from uuid import uuid4
 from datetime import datetime
 import os
 import copy
@@ -70,6 +72,12 @@ class RosSequentialActionProgrammer:
         self._stop_execution = False
         self._interupt_execution = False
         self._tick_publisher = self.node.create_publisher(RsapTick, f"{self.node.get_name()}/rsap_tick", 10)
+        self._action_logs_publisher = self.node.create_publisher(
+            RsapLogs,
+            f"{self.node.get_name()}/rsap_logs",
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL),
+        )
+        self.publish_action_logs()
 
     def get_interrupt_execution(self)->bool:
         return self._interupt_execution
@@ -332,6 +340,10 @@ class RosSequentialActionProgrammer:
         self.signal_execution_status.signal.emit(True)
         # set the interrupt flag to False
         self.set_interrupt_execution(False)
+        executed_index = self.current_action_index
+        attempted = False
+        success_exec = False
+        started = datetime.now()
         try:
             # Set values from earlier service respones to this service request, might fail, if earlier call has not been executed
             
@@ -354,26 +366,12 @@ class RosSequentialActionProgrammer:
                     self.shift_to_next_action()
                 return True
             
+            current_action.clear_log_entry()
+            attempted = True
             self._send_tick(current_action, is_start=True)
             success_exec = current_action.execute(self.get_interrupt_execution)    # pass interrupt method to check if interruption is demanded
             self._send_tick(current_action, is_start=False, success=success_exec)
 
-            # append action log to history
-            self.append_action_log(
-                index=self.current_action_index,
-                action_name=self.get_current_action_name(),
-                action_log=self.get_current_action_log(),
-            )
-
-            if (self.get_current_action_index() == len(self.action_list) - 1) and log_mode == ExecutionLog.LOG_AT_END:
-                self.save_action_sequence_log()
-
-            if log_mode == ExecutionLog.LOG_ALWAYS:
-                self.save_action_sequence_log()
-
-            if log_mode == ExecutionLog.LOG_AT_END and (self.get_current_action_index() == len(self.action_list) - 1):
-                self.save_action_sequence_log()
-            
             if success_exec:
                 self.node.get_logger().info(
                     f"Action {self.get_current_action_name()} executed successfully!"
@@ -391,7 +389,26 @@ class RosSequentialActionProgrammer:
             self.node.get_logger().error(f"Error executing {self.get_current_action_name()}!")
             return False
         finally:
+            if attempted:
+                log = copy.deepcopy(current_action.get_log_entry())
+                if not log:
+                    ended = datetime.now()
+                    log = {"start_time": str(started), "end_time": str(ended),
+                           "execution_time": str(ended - started)}
+                log["success"] = bool(success_exec)
+                log["uuid"] = current_action.get_uuid()
+                self.append_action_log(
+                    index=executed_index,
+                    action_name=current_action.get_name(), action_log=log)
+                if log_mode == ExecutionLog.LOG_ALWAYS or (
+                    log_mode == ExecutionLog.LOG_AT_END and (
+                        not success_exec or executed_index == len(self.action_list) - 1)):
+                    self.save_action_sequence_log()
+            elif (log_mode == ExecutionLog.LOG_AT_END and self.action_log
+                  and executed_index == len(self.action_list) - 1):
+                self.save_action_sequence_log()
             self.signal_execution_status.signal.emit(False)
+            self.publish_action_logs()
 
     def execute_action_list(self, index_start: int, log_mode:int =ExecutionLog.LOG_NEVER) -> Tuple[bool, int]:
         """
@@ -423,6 +440,8 @@ class RosSequentialActionProgrammer:
                 
                 if self.has_current_action_breakpoint() and not breakpoint_override:
                     self.node.get_logger().info(f"Breakpoint at {self.get_current_action_name()}!")
+                    if log_mode == ExecutionLog.LOG_AT_END and self.action_log:
+                        self.save_action_sequence_log()
                     return True, self.current_action_index
                 
                 success = self.execute_current_action(log_mode=log_mode)
@@ -431,6 +450,9 @@ class RosSequentialActionProgrammer:
                     return False, self.current_action_index
                 # check if stop_execution flag is set
                 if self._stop_execution:
+                    if (log_mode == ExecutionLog.LOG_AT_END and self.action_log
+                            and ind != len(self.action_list) - 1):
+                        self.save_action_sequence_log()
                     return True, self.current_action_index
                 
                 # reset breakpoint_override after first action
@@ -783,19 +805,37 @@ class RosSequentialActionProgrammer:
         return self.current_action_index
 
     # Log - Functions
+    def publish_action_logs(self) -> None:
+        """Publish the same ordered execution history used by file exports."""
+        message = RsapLogs()
+        message.stamp = self.node.get_clock().now().to_msg()
+        message.sequence_name = self.rsap_file_manager.get_sequence_name() or ""
+        for record in self.action_log:
+            key, log_entry = next(iter(record.items()))
+            index, name = key.split("_", 1)
+            message.logs.append(RsapActionLog(
+                action_index=int(index), action_name=name,
+                action_uuid=str(log_entry.get("uuid", "")),
+                success=bool(log_entry.get("success", False)),
+                log_json=json.dumps(log_entry),
+            ))
+        self._action_logs_publisher.publish(message)
+
     def append_action_log(self, index: int, action_name: str, action_log) -> None:
         """
         Appends the given action log to the actions log.
         """
         key = f"{index}_{action_name}"
-        self.action_log.append({key: action_log})
+        entry = copy.deepcopy(action_log)
+        entry["execution_id"] = str(uuid4())
+        self.action_log.append({key: entry})
 
     def _update_action_sequence_log(self):
         """
         Updates the action sequence log with the current action sequence log.
         """
         self.action_sequence_log["action_sequence_name"] = self.rsap_file_manager.get_sequence_name()
-        self.action_sequence_log["action_log"] = self.action_log
+        self.action_sequence_log["action_log"] = copy.deepcopy(self.action_log)
 
     def copy_action_at_index_and_insert(self, index: int = None) -> bool:
         """
@@ -847,11 +887,11 @@ class RosSequentialActionProgrammer:
 
     def save_action_sequence_log(self) -> bool:
         """
-        Saves the action sequence log to the folder.
+        Save an independent snapshot without consuming the execution history.
         """
         if (self.rsap_file_manager.get_folder_path() is not None) and (self.rsap_file_manager.get_sequence_name() is not None):
             self._update_action_sequence_log()
-            export_time = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+            export_time = datetime.now().strftime("%Y_%m_%d_%H_%M_%S_%f") + "_" + uuid4().hex
             try:
                 file_path = f"{self.rsap_file_manager.get_folder_path()}/logs/"
                 if not os.path.exists(file_path):
@@ -861,7 +901,6 @@ class RosSequentialActionProgrammer:
                 ) as json_file:
                     json.dump(self.action_sequence_log, json_file,indent=4)
                 self.node.get_logger().info("Action sequence log saved!")
-                self.action_log.clear()
                 return True
             except FileNotFoundError as e:
                 print(e)
@@ -906,8 +945,11 @@ class RosSequentialActionProgrammer:
         """
         This function clears the log entries.
         """
+        self.action_log.clear()
+        self.action_sequence_log.clear()
         for action in self.action_list:
             action.clear_log_entry()
+        self.publish_action_logs()
 
     
     @staticmethod

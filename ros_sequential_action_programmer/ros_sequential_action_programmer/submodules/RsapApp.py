@@ -934,8 +934,10 @@ class RsapApp(QMainWindow):
             pass
     
     def export_log(self):
-        self.action_sequence_builder.save_action_sequence_log()
-        self.text_output.append_green_text("Exported action log to file!")
+        if self.action_sequence_builder.save_action_sequence_log():
+            self.text_output.append_green_text("Exported action log to file!")
+        else:
+            self.text_output.append_red_text("Failed to export action log. Save the sequence first and check the log directory.")
 
     def clear_action_logs(self):
         # dialog to confirm clearing logs

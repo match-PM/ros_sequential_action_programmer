@@ -56,4 +56,94 @@ You can add new ROS service calls by clicking on `Add Action > Services > Active
 ### 3.2 - Using the API
 tbd
 
+### 3.3 - Live action logs
+
+RSAP publishes the execution history on `<node_name>/rsap_logs` using
+`rsap_interfaces/msg/RsapLogs`:
+
+```text
+builtin_interfaces/Time stamp
+string sequence_name
+RsapActionLog[] logs
+```
+
+Each `RsapActionLog` contains typed fields `action_index` (zero-based),
+`action_name`, `action_uuid`, and `success`. Its `log_json` string preserves the
+complete individual log, including action-specific request and response fields.
+For example, subscribers can read `msg.logs[0].success` directly and use
+`json.loads(msg.logs[0].log_json)` to access the full log in Python.
+
+Each message includes the complete execution history since the last clear or
+start of a sequence run, including repeated actions. Entries follow execution order.
+Each JSON log has a unique `execution_id`, shared by topic and file exports. `stamp` is the ROS publication time and
+`sequence_name` is empty when no sequence is loaded.
+It is published after each execution attempt, including failures and interruptions.
+Clearing the action logs publishes a message with an empty `logs` array.
+Saving logs to disk preserves the history. Repeating an action appends an independent
+entry. `LOG_ALWAYS` exports a cumulative snapshot after each attempt; `LOG_AT_END`
+exports at sequence completion, failure, stop, or breakpoint. Export filenames are
+unique, and manual export can save the same history again without erasing it.
+The publisher retains the latest message for subscribers using transient-local
+durability. To inspect the topic, replace `<node_name>` with the RSAP node name:
+
+```bash
+ros2 topic echo /<node_name>/rsap_logs rsap_interfaces/msg/RsapLogs --qos-durability transient_local
+```
+
+After updating from the String-based topic, rebuild both packages and source the
+workspace before restarting RSAP and its subscribers:
+
+```bash
+colcon build --packages-select rsap_interfaces ros_sequential_action_programmer
+source install/setup.bash
+```
+
+### 3.4 - Log analysis widget
+
+`RsapLogAnalysisWidget` is a reusable PyQt6 widget provided by `pm_robot_dashboard`. In the
+PM Robot Dashboard it is available under **Info Helpers → RSAP Log Analysis**.
+
+- **Log files:** select multiple JSON files, add a folder, or drag files/folders
+  onto the widget. Folders load their immediate JSON files. Repeated imports of
+  the same file are ignored; clear the files before reloading changed files.
+  Overlapping snapshots are deduplicated by `execution_id`; each execution is
+  attributed to the first loaded file containing it. Legacy logs without IDs
+  remain independent.
+- **Live topic:** find or enter an `rsap_interfaces/msg/RsapLogs` topic and connect.
+  Retained snapshots are supported by default. The latest message replaces the
+  previous snapshot; it does not accumulate repeated snapshots as separate runs.
+  Each snapshot contains execution history, including repeated actions.
+  File and topic selections are independent. Disconnect keeps the last snapshot.
+- Check individual entries or whole sources in the left panel to include them in
+  the assessment. Select all/none, invert, deselect failed, or select only successful
+  actions. Search only hides entries; it does not change the assessment selection.
+  Invalid/missing durations remain inspectable but are excluded from statistics.
+- Charts show mean durations with optional standard-deviation bars, duration
+  distributions, selected totals per source, or individual execution durations.
+  Configure grouping, sorting, minimum mean duration, units, axis maximum, and row
+  limit. Chart filtering and row limits do not change the statistics or exports.
+  Long chart labels are shortened; full names are available in the tree and table.
+- The statistics table contains count, mean, population standard deviation,
+  minimum, maximum, and total duration. Grouping by action name matches the
+  reference analysis script; grouping by index and name separates repeated names
+  at different sequence positions. Totals sum selected action durations, excluding
+  gaps between actions. All statistics and exported values are in seconds.
+- Export statistics and source totals as JSON or CSV from the Statistics tab.
+  Use the chart toolbar to zoom, pan, and save graphics. Double-click an entry to
+  inspect its full JSON log.
+
+To embed the widget in another PyQt6 application:
+
+```python
+from pm_robot_dashboard.log_analysis_widget import RsapLogAnalysisWidget
+
+widget = RsapLogAnalysisWidget(node=existing_ros_node, parent=parent_widget)
+tabs.addTab(widget, "RSAP Log Analysis")
+```
+
+The host must spin the supplied node and call `widget.shutdown()` before
+destroying it. ROS callbacks only store the latest pending message; a Qt timer
+updates the UI. `node=None` enables file-only use without importing ROS interfaces.
+The widget requires PyQt6 and Matplotlib (`python3-pyqt6`, `python3-matplotlib`).
+
 ## 4. To-Dos
