@@ -5,7 +5,6 @@ from ros_sequential_action_programmer.submodules.action_classes.ActionBaseClass 
 from ros_sequential_action_programmer.submodules.action_classes.ParameterValueSetGenerator import ParameterValueSetGenerator
 
 from ros_sequential_action_programmer.submodules.rsap_modules.errors import ActionInitializationError, SetActionRequestError
-from ros_sequential_action_programmer.submodules.action_classes.compatibility_mapping import COMPATIBLE_TYPES
 from ros_sequential_action_programmer.submodules.rsap_modules.SeqParamterManager import SeqParameterManager, SeqParameter, SeqParameterError, SeqParameterManagerError
 from rclpy.node import Node
 from ros_sequential_action_programmer.submodules.action_classes.ParameterReference import ActionResponseParameterReference, SeqParameterReference
@@ -50,22 +49,17 @@ class ActionParameterValueManager():
                             field_type:str)->RefKeyList:
         """
         Collect compatible response reference keys for a given field type,
-        using the REVERSED_COMPATIBLE_TYPES mapping.
+        considering only actions before the target action.
         """
         keys_list = RefKeyList()
         
-        # Determine compatible types for the requested field_type (who can assign to me)
-        compatible_types = COMPATIBLE_TYPES.get(field_type, [field_type])
-
         for index, action in enumerate(self._sequence_list):
             if action is target_action:
                 return keys_list  # stop at the target action
 
-            response_keys = []
-
-            for t in compatible_types:
-                keys_for_t = action.get_response_keys_for_type(t)
-                response_keys.extend(keys_for_t)
+            # get_response_keys_for_type already applies the compatibility map.
+            # Expanding it here again duplicates keys and widens compatibility.
+            response_keys = dict.fromkeys(action.get_response_keys_for_type(field_type))
 
             if not response_keys:
                 continue

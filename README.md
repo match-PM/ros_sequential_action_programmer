@@ -73,8 +73,10 @@ complete individual log, including action-specific request and response fields.
 For example, subscribers can read `msg.logs[0].success` directly and use
 `json.loads(msg.logs[0].log_json)` to access the full log in Python.
 
-Each message includes the complete execution history since the last clear or
-start of a sequence run, including repeated actions. Entries follow execution order.
+Each message includes the complete execution history since the last explicit clear,
+including repeated actions. Run preserves this history when continuing after a
+breakpoint, stop, or failure, and when starting another run. Use Clear action logs
+or the status reset to begin a fresh history. Entries follow execution order.
 Each JSON log has a unique `execution_id`, shared by topic and file exports. `stamp` is the ROS publication time and
 `sequence_name` is empty when no sequence is loaded.
 It is published after each execution attempt, including failures and interruptions.

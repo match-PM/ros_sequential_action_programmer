@@ -419,7 +419,8 @@ class RosSequentialActionProgrammer:
         :return: Tuple of bool and int. The bool value indicates success, the int value indicates the index of the action when the method terminates.
         """
         
-        self.clear_all_log_entries()
+        # Run also resumes after breakpoints, stops, and failed actions.
+        # Keep earlier attempts until the user explicitly clears the logs.
         self._stop_execution = False
         if index_start < len(self.action_list):
             ind = index_start

@@ -123,29 +123,25 @@ def find_fields_by_type(type_dict, target_type, parent_path="", compatible_map=N
     Returns:
         List[str]: List of full paths to matching fields.
 
-    Raises:
-        ValueError: If target_type is not in compatible_map.
+    Types absent from the compatibility map match themselves exactly.
     """
     compatible_map = compatible_map or COMPATIBLE_TYPES
 
-    # Strict check for supported types
-    if target_type not in compatible_map:
-        raise ValueError(f"Type '{target_type}' is not supported in the compatibility map.")
-
     matches = []
-    compatible_types = compatible_map[target_type]
+    compatible_types = compatible_map.get(target_type, [target_type])
 
     for key, val_type in type_dict.items():
         full_path = f"{parent_path}.{key}" if parent_path else key
         typ = val_type.get("type")
 
-        # Check primitive match
+        # This picker assigns scalar fields/messages. Arrays require an index
+        # and must not be offered as scalar values or as fabricated [] paths.
+        if val_type.get("is_array", False):
+            continue
+
+        # Check primitive or message match
         if typ in compatible_types:
             matches.append(full_path)
-
-        # If it's an array, mark with []
-        if val_type.get("is_array", False) and typ in compatible_types:
-            matches.append(f"{full_path}[]")
 
         # Recurse into nested fields
         if "fields" in val_type:
@@ -409,37 +405,49 @@ class ActionBaseClass:
 
         copy_request_dict = copy.deepcopy(self.get_request_as_ordered_dict())
         
-        for index, _reference in enumerate(self._parameter_references.get_reference_list()):
+        for reference in self._parameter_references.get_reference_list():
+            value_key = reference.get_value_key()
+            try:
+                if isinstance(reference, ActionResponseParameterReference):
+                    source = reference.get_reference_action()
+                    if source is None:
+                        raise ValueError("Referenced action is missing")
+                    response_key = reference.get_reference_key()
+                    value_to_set = get_obj_value_from_key(
+                        source.get_response_as_ordered_dict(), response_key
+                    )
+                    if value_to_set is None:
+                        raise ValueError(
+                            f"Response field '{response_key}' from action "
+                            f"'{source.get_name()}' is unavailable"
+                        )
+                elif isinstance(reference, SeqParameterReference):
+                    value_to_set = reference.get_parameter().get_value()
+                else:
+                    continue
 
-            if isinstance(_reference, ActionResponseParameterReference):
-                _reference: ActionResponseParameterReference
-                value_key = _reference.get_value_key()
-                response_reference_key = _reference.get_reference_key()
-                reference_action = _reference.get_reference_action()
+                target_value = get_obj_value_from_key(copy_request_dict, value_key)
+                # std_msgs wrappers and primitives are compatible in the picker.
+                # Preserve the destination message shape when assigning them.
+                source_is_wrapper = (
+                    isinstance(value_to_set, dict) and set(value_to_set) == {"data"}
+                )
+                target_is_wrapper = (
+                    isinstance(target_value, dict) and set(target_value) == {"data"}
+                )
+                if source_is_wrapper and not isinstance(target_value, dict):
+                    value_to_set = value_to_set["data"]
+                elif target_is_wrapper and not isinstance(value_to_set, dict):
+                    value_to_set = {"data": value_to_set}
 
-                self.node.get_logger().warn(f"Evaluating action response reference for key '{_reference.get_value_key()}' from action '{_reference.get_reference_action().get_name()}'")
-
-            elif isinstance(_reference, SeqParameterReference):
-                _reference: SeqParameterReference
-                value_key = _reference.get_value_key()
-                seq_parameter = _reference.get_parameter()
-                value_to_set = seq_parameter.get_value()
-                
-                if isinstance(value_to_set, dict):
-                    # if dict has only a single key called data
-                    if len(value_to_set) == 1 and "data" in value_to_set:
-                        set_obj_value_from_key(copy_request_dict, path_key=value_key, new_value=value_to_set["data"])
-                    else:
-                        set_obj_value_from_key(copy_request_dict, path_key=value_key, new_value=value_to_set)
-
-                #raise EvaluateActionReferenceError(f"Failed to set sequence parameter reference value for key '{value_key}' from parameter '{seq_parameter.get_name()}'")
-
-                self.node.get_logger().warn(f"Evaluating sequence parameter reference for key '{_reference.get_value_key()}' to {value_to_set}")
-
-            else:
-                continue
-            
-            #self.node.get_logger().warn(f"{copy_request_dict}")
+                set_obj_value_from_key(
+                    copy_request_dict, value_key, copy.deepcopy(value_to_set)
+                )
+            except Exception as exc:
+                raise EvaluateActionReferenceError(
+                    f"Could not evaluate reference for field '{value_key}' "
+                    f"in action '{self.get_name()}': {exc}"
+                ) from exc
 
         return copy_request_dict
         

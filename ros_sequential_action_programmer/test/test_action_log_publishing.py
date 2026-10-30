@@ -231,3 +231,59 @@ def test_reexecution_keeps_original_index_and_prior_results(programmer):
     records = latest_logs(programmer)
     assert [entry.action_index for entry in records] == [0, 0]
     assert [json.loads(entry.log_json)['execution_time'] for entry in records] == ['0:00:02', '0:00:04']
+
+
+@pytest.mark.parametrize('pause', ['breakpoint', 'stop', 'failure'])
+def test_resuming_run_preserves_history_in_topic_and_export(programmer, tmp_path, monkeypatch, pause):
+    from ros_sequential_action_programmer.submodules.rsap_modules.RsapConfig import ExecutionLog
+    monkeypatch.setattr('time.sleep', lambda _: None)
+    programmer.rsap_file_manager.get_folder_path.return_value = str(tmp_path)
+    actions = []
+    paused = False
+
+    for index in range(7):
+        log = {}
+        action = make_action(f'Action {index}', log)
+
+        def execute(_interrupt, index=index, log=log):
+            nonlocal paused
+            success = not (pause == 'failure' and index == 3 and not paused)
+            log.update(success=success, execution_time='0:00:01')
+            if index == 3 and pause in ('stop', 'failure') and not paused:
+                paused = True
+                if pause == 'stop':
+                    programmer.set_stop_execution()
+            return success
+
+        action.execute.side_effect = execute
+        actions.append(action)
+
+    configure_execution(programmer, actions[0])
+    programmer.action_list = actions
+    programmer.config.execution_behavior.get_value.return_value = False
+    programmer.signal_current_action = SimpleNamespace(signal=Mock())
+    programmer.has_current_action_breakpoint = lambda: (
+        pause == 'breakpoint' and programmer.current_action_index == 4)
+
+    success, _ = programmer.execute_action_list(0, log_mode=ExecutionLog.LOG_AT_END)
+    assert success is (pause != 'failure')
+    assert len(programmer.action_log) == 4
+    initial_ids = [json.loads(entry.log_json)['execution_id'] for entry in latest_logs(programmer)]
+
+    # Run again from the breakpoint, next action after stop, or failed action.
+    resume_index = 3 if pause == 'failure' else 4
+    success, _ = programmer.execute_action_list(resume_index, log_mode=ExecutionLog.LOG_AT_END)
+    assert success
+    expected_indices = [0, 1, 2, 3] + list(range(resume_index, 7))
+    logs = latest_logs(programmer)
+    assert [entry.action_index for entry in logs] == expected_indices
+    assert [json.loads(entry.log_json)['execution_id'] for entry in logs[:4]] == initial_ids
+    exports = [json.loads(path.read_text())['action_log'] for path in tmp_path.rglob('*.json')]
+    assert sorted(len(records) for records in exports) == [4, len(expected_indices)]
+    complete = max(exports, key=len)
+    assert [next(iter(record.values())) for record in complete] == [
+        json.loads(entry.log_json) for entry in logs]
+
+    programmer.clear_all_log_entries()
+    assert programmer.action_log == []
+    assert latest_logs(programmer) == []

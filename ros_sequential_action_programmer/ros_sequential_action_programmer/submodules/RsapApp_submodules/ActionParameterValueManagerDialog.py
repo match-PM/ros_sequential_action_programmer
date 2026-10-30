@@ -154,6 +154,7 @@ class ActionParameterValueManagerDialog(QDialog):
     def populate_references_tab(self):
         """Populate the References tab dynamically based on selected source."""
         self.clear_layout(self.references_values_layout)
+        self.reference_val_tree = None
         current_reference_type = self.reference_dropdown.currentText()
 
         # === Sequence Parameters ===
@@ -313,7 +314,7 @@ class ActionParameterValueManagerDialog(QDialog):
 
             # === Sequence Parameters ===
             if ref_type == self.RERFERENCE_TAB_SEQUENCE_PARAMETERS:
-                selected_items = self.reference_val_tree.selectedItems()
+                selected_items = self.reference_val_tree.selectedItems() if self.reference_val_tree is not None else []
                 if selected_items:
                     item = selected_items[0]
                     param: SeqParameter = item.data(0, Qt.ItemDataRole.UserRole)
@@ -324,7 +325,7 @@ class ActionParameterValueManagerDialog(QDialog):
 
             # === Action Responses ===
             elif ref_type == self.RERFERENCE_TAB_ACTION_RESPONSES:
-                selected_items = self.reference_val_tree.selectedItems()
+                selected_items = self.reference_val_tree.selectedItems() if self.reference_val_tree is not None else []
                 if selected_items:
                     item = selected_items[0]
                     # columns: Key, Action Index, Action Name
