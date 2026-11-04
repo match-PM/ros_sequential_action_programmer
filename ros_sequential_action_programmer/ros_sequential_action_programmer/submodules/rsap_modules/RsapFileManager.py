@@ -68,13 +68,22 @@ class RsapFileManager():
         try:
             with open(file_path, "r") as json_file:
                 file_data = json.load(json_file)
-            # clear action_list to be empty
-            self.sequence_list.clear()
-        except Exception as e:
-            self.node.get_logger().error(f"Error opening file '{file_path}'!")
-
-        if not file_data:
+        except (OSError, ValueError) as e:
+            self.node.get_logger().error(f"Error opening file '{file_path}': {e}")
             return False
+
+        # Validate before changing the current sequence or its file metadata.
+        if (not isinstance(file_data, dict)
+                or not isinstance(file_data.get("name"), str)
+                or not isinstance(file_data.get("action_list"), list)):
+            self.node.get_logger().error(
+                f"Invalid RSAP process file '{file_path}': expected a JSON object "
+                "with a string 'name' and an 'action_list' array. "
+                "Select a process file (*.rsap.json), not a sequence parameters file (*.rsapp.json)."
+            )
+            return False
+
+        self.sequence_list.clear()
         
         self._sequence_file_path = file_path
         self._folder_path = os.path.dirname(file_path)
@@ -336,9 +345,3 @@ class RsapFileManager():
     def reset_sequence_parameter_manager(self) -> None:
         #self.seq_parameter_manager = SeqParameterManager()
         self.seq_parameter_manager.clear_parameters()
-
-
-            
-
-
-    

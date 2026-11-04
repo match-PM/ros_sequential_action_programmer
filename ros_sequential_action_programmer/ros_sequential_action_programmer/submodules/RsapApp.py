@@ -594,7 +594,7 @@ class RsapApp(QMainWindow):
         This method opens a file dialog to select a process file to open.
         """
         
-        file_filter = "JSON Files (*.json);;All Files (*)"
+        file_filter = "RSAP Process Files (*.rsap.json);;JSON Files (*.json);;All Files (*)"
         file_path, _ = QFileDialog.getOpenFileName(self, "Open JSON File", 
                                                    "", 
                                                    file_filter)
@@ -610,8 +610,8 @@ class RsapApp(QMainWindow):
             self.text_output.clear()
             self.text_output.append(f"Opening: {file_path}")
             success = self.action_sequence_builder.rsap_file_manager.load_from_JSON(file_path)
-            self.recent_files_manager.set_recent_file()
             if success:
+                self.recent_files_manager.set_recent_file()
                 self.action_list_widget.populate_list()
                 self.rsap_seq_info_widget.init_values()
 
