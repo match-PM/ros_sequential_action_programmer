@@ -71,27 +71,29 @@ class UserInteractionAction(ActionBaseClass):
         self._set_default_identifier()
 
     def execute(self, get_interupt_method = None) -> bool:
+        self._execution_request_dict = None
         exec_success = False
 
         start_time = datetime.now()
 
         try:
             new_request_dict = self.evaluate_references()
-            self.set_request_from_dict(new_request_dict)
+            self._execution_request_dict = new_request_dict
+            interaction_text = new_request_dict['interaction_text']
             
         except EvaluateActionReferenceError as e:
             self.node.get_logger().error(f"Error occured evaluating action references for service action '{self.get_name()}'! {str(e)}")
             return False
     
         if self.interaction_mode == TERMINAL:
-            self.node.get_logger().info(self.request.interaction_text)
+            self.node.get_logger().info(interaction_text)
             self.node.get_logger().info("Enter y/n and press enter to proceed! Waiting for user interaction...")
             user_input = input("Enter something: ")
             if user_input == 'y':
                 exec_success = True
 
         elif self.interaction_mode == GUI:
-            result = self.request_user_interaction(self.request.interaction_text)
+            result = self.request_user_interaction(interaction_text)
             exec_success = result
             # self.node.get_logger().error("User interaction successful10000!")
             # user_dialog = UserInteractionActionDialog(self.action_text)
@@ -153,12 +155,12 @@ class UserInteractionAction(ActionBaseClass):
         
     def update_log_entry(self, success: bool, start_time: datetime, end_time: datetime, additional_text:str = ""):
         #self.log_entry={}
-        self.log_entry["description"] = self.request.interaction_text
+        self.log_entry["description"] = self.get_execution_request_as_ordered_dict()['interaction_text']
         self.log_entry["uuid"] = self.get_uuid()
         self.log_entry["start_time"] = str(start_time.strftime("%Y-%m-%d_%H:%M:%S.%f"))
         self.log_entry["end_time"] = str(end_time.strftime("%Y-%m-%d_%H:%M:%S.%f"))
         self.log_entry["execution_time"] = str(end_time - start_time)
-        self.log_entry["request"] = {"interaction_text": self.request.interaction_text}
+        self.log_entry["request"] = dict(self.get_execution_request_as_ordered_dict())
         self.log_entry["success"] = success
 
     def get_log_entry(self) -> dict:
@@ -175,4 +177,3 @@ class UserInteractionAction(ActionBaseClass):
         new_instance.set_name(f"{self.get_name()}_copy")
         new_instance.set_references(copy.deepcopy(self.get_references()))
         return new_instance
-    

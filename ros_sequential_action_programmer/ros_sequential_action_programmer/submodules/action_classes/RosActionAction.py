@@ -118,6 +118,7 @@ class RosActionAction(ActionBaseClass):
         return "RosActionAction"
 
     def execute(self, get_interupt_method: Any = None) -> bool:
+        self._execution_request_dict = None
         self.watchdog_triggered = False
         try:
             new_request_dict = self.evaluate_references()
@@ -129,7 +130,7 @@ class RosActionAction(ActionBaseClass):
             if self.rsap_path:
                 self.inject_rsap_path_into_request_dict(new_request_dict, self.rsap_path)
 
-            self.set_request_from_dict(new_request_dict)
+            execution_request = self.create_execution_request(new_request_dict)
         except EvaluateActionReferenceError as e:
             self.node.get_logger().error(
                 f"Error occurred evaluating action references for service action '{self.get_name()}': {e}"
@@ -157,14 +158,14 @@ class RosActionAction(ActionBaseClass):
             return False
 
         self.node.get_logger().info(f"Executing '{self.name}'...")
-        self.node.get_logger().warn(f"Request {self.request}")
-        self.node.get_logger().warn(f"Request dict {self.request_dict}")
+        self.node.get_logger().warn(f"Request {execution_request}")
+        self.node.get_logger().warn(f"Request dict {self._execution_request_dict}")
 
         # Send goal asynchronously
         # The node is already spun by the background MultiThreadedExecutor; spinning it here as
         # well races inside the C-level subscription deserialization and causes a SIGSEGV. Just
         # wait passively for the futures, which the background executor completes.
-        goal_future = _client.send_goal_async(self.request)
+        goal_future = _client.send_goal_async(execution_request)
         while not goal_future.done():
             time.sleep(0.01)
         goal_handle = goal_future.result()
@@ -321,7 +322,7 @@ class RosActionAction(ActionBaseClass):
         )
         self.log_entry["end_time"] = str(end_time.strftime("%Y-%m-%d_%H:%M:%S.%f"))
         self.log_entry["execution_time"] = str(end_time - start_time)
-        self.log_entry["request"] = json.loads(json.dumps(self.get_request_as_ordered_dict()))
+        self.log_entry["request"] = json.loads(json.dumps(self.get_execution_request_as_ordered_dict()))
 
         if self.response is not None: 
             self.log_entry["response"] = json.loads(json.dumps(self.get_response_as_ordered_dict()))

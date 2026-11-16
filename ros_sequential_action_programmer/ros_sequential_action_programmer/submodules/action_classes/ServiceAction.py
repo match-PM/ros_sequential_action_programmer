@@ -103,7 +103,8 @@ class ServiceAction(ActionBaseClass):
 
     def execute(self, get_interupt_method:Any = None) -> bool:
 
-        # evaluate references and update request dict
+        self._execution_request_dict = None
+        # Evaluate values into a separate request for this execution.
         try:
             new_request_dict = self.evaluate_references()
             #self.node.get_logger().warn(f"Service Action '{self.get_name()}' evaluated request dict: {new_request_dict}")
@@ -115,8 +116,7 @@ class ServiceAction(ActionBaseClass):
             if self.rsap_path:
                 self.inject_rsap_path_into_request_dict(new_request_dict, self.rsap_path)
 
-            self.set_request_from_dict(new_request_dict)
-            #self.node.get_logger().warn(f"Service Action '{self.get_name()}' evaluated request dict: {self.request}")
+            execution_request = self.create_execution_request(new_request_dict)
 
 
         except EvaluateActionReferenceError as e:
@@ -147,7 +147,7 @@ class ServiceAction(ActionBaseClass):
             self.node.get_logger().info(f"Executing '{self.name}'...")
             srv_start_time = datetime.now()
             # Call the service
-            self.future = client.call_async(self.request)
+            self.future = client.call_async(execution_request)
 
             node_name = self.get_node_name_from_client(client.srv_name)
             timer = None
@@ -288,7 +288,7 @@ class ServiceAction(ActionBaseClass):
         self.log_entry["srv_end_time"] = str(end_time.strftime("%Y-%m-%d_%H:%M:%S.%f"))
         self.log_entry["execution_time"] = str(end_time - start_time)
 
-        self.log_entry["srv_request"] = json.loads(json.dumps(self.get_request_as_ordered_dict()))
+        self.log_entry["srv_request"] = json.loads(json.dumps(self.get_execution_request_as_ordered_dict()))
 
         if self.response is not None:
             self.log_entry["srv_response"] = json.loads(json.dumps(self.get_response_as_ordered_dict()))

@@ -17,6 +17,8 @@ from collections import OrderedDict
 import copy
 import ast
 from functools import partial
+from rosidl_runtime_py.convert import message_to_ordereddict
+from rosidl_runtime_py.utilities import get_message
 
 from ros_sequential_action_programmer.submodules.action_classes.ros_messages_functions import resolve_ros_type
 from ros_sequential_action_programmer.submodules.rsap_modules.ActionParameterValueManager import ActionParameterValueManager
@@ -718,8 +720,8 @@ class ArrayEditDialog(QDialog):
     def add_element(self):
         def create_default_value(val_type):
             if 'fields' in val_type:
-                # Nested message → recursively create dict with defaults
-                return {k: create_default_value(v) for k, v in val_type['fields'].items()}
+                # Generated messages retain declared field defaults, including nested arrays.
+                return message_to_ordereddict(get_message(val_type['type'])())
             else:
                 t = val_type['type']
                 if t in INT_TYPE_BOUNDS or t in FLOAT_TYPE_BOUNDS:
@@ -752,4 +754,3 @@ class ReferenceButton(QPushButton):
         self.setFixedSize(width, height)  # small square button
         self.setToolTip("Click me!")      # optional default tooltip
         self.val_type = val_type
-        

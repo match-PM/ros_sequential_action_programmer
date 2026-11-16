@@ -8,6 +8,7 @@ from rqt_py_common import message_helpers
 import collections
 import copy
 import json
+import os
 from datetime import datetime
 import array
 import numpy as np
@@ -20,7 +21,7 @@ from ros_sequential_action_programmer.submodules.obj_dict_modules.obj_functions 
 from typing import Tuple, Any
 from ros_sequential_action_programmer.submodules.action_classes.ParameterReferences import ActionParameterReferences
 from ros_sequential_action_programmer.submodules.action_classes.ParameterReference import ActionResponseParameterReference, SeqParameterReference
-from ros_sequential_action_programmer.submodules.rsap_modules.errors import EvaluateActionReferenceError
+from ros_sequential_action_programmer.submodules.rsap_modules.errors import EvaluateActionReferenceError, SetActionRequestError
 import uuid as uuid_lib
 from ros_sequential_action_programmer.submodules.action_classes.compatibility_mapping import COMPATIBLE_TYPES
 from rosidl_parser.definition import BasicType, Array, AbstractNestedType
@@ -171,6 +172,7 @@ class ActionBaseClass:
         self.empty_response = None
         self.default_response_dict = None
         self.request_dict = None
+        self._execution_request_dict = None
         self.default_request = None
         self._uuid: uuid_lib.UUID = uuid_lib.uuid4() if uuid is None else uuid_lib.UUID(uuid)
 
@@ -275,6 +277,24 @@ class ActionBaseClass:
     
     def get_request_as_ordered_dict(self)->OrderedDict:
         raise NotImplementedError
+
+    def get_execution_request_as_ordered_dict(self)->OrderedDict:
+        """Return the evaluated request for logging, keeping configuration intact."""
+        if self._execution_request_dict is not None:
+            return self._execution_request_dict
+        return self.get_request_as_ordered_dict()
+
+    def create_execution_request(self, request_dictionary):
+        """Build a ROS request from evaluated values without changing saved values."""
+        try:
+            request = copy.deepcopy(self.request)
+            set_message_fields(request, request_dictionary)
+            self._execution_request_dict = message_to_ordereddict(request)
+            return request
+        except Exception as exc:
+            raise SetActionRequestError(
+                f"Could not set request from dictionary for {self.get_name()}!"
+            ) from exc
     
     def get_response_as_ordered_dict(self)->OrderedDict:
         raise NotImplementedError
@@ -400,7 +420,7 @@ class ActionBaseClass:
     
     def evaluate_references(self)->dict:
         """
-        Evaluate all parameter references and update the request dict accordingly.
+        Resolve references and expand HOME in a copy of the configured request.
         """
 
         copy_request_dict = copy.deepcopy(self.get_request_as_ordered_dict())
@@ -449,7 +469,26 @@ class ActionBaseClass:
                     f"in action '{self.get_name()}': {exc}"
                 ) from exc
 
-        return copy_request_dict
+        home = os.path.expanduser('~')
+
+        def expand_home(value):
+            if isinstance(value, str):
+                return re.sub(
+                    r'\$(?:HOME(?![A-Za-z0-9_])|\{HOME\})',
+                    lambda match: home,
+                    value,
+                )
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    value[key] = expand_home(item)
+            elif isinstance(value, list):
+                for index, item in enumerate(value):
+                    value[index] = expand_home(item)
+            elif isinstance(value, tuple):
+                return tuple(expand_home(item) for item in value)
+            return value
+
+        return expand_home(copy_request_dict)
         
     # def update_request_obj_from_dict(self):
     #     """Update the ros service message from the dict"""
