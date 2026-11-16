@@ -56,6 +56,12 @@ You can add new ROS service calls by clicking on `Add Action > Services > Active
 ### 3.2 - Using the API
 tbd
 
+String parameters in all action types support `$HOME` and `${HOME}`, for example
+`$HOME/data/output.json`. These expand to the current user's home directory only
+when the action is evaluated for execution. Saved sequences and the parameter
+editor retain the original placeholders, including after execution. Expansion
+also applies to nested messages, string arrays, and referenced parameter values.
+
 ### 3.3 - Live action logs
 
 RSAP publishes the execution history on `<node_name>/rsap_logs` using
